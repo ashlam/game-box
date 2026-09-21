@@ -11,7 +11,7 @@
 const fs = require('fs');
 const vm = require('vm');
 
-const HTML = process.argv[2] || '/opt/data/games/othello/index.html';
+const HTML = process.argv[2] || '/volume1/docker/hermes/files/bot_workspace/projects/games-box/web/othello/index.html';
 const ROUNDS = parseInt(process.argv[3] || '300', 10);
 const DEPTHS = [4, 6];
 

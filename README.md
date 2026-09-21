@@ -89,6 +89,26 @@ bash android/build_apk.sh --genkey     # 密钥丢失时先生成一把新的
 
 > 静态校验通过 ≠ 真机验收。最终仍需在设备上**飞行模式**启动，验证主页、两个游戏、触控、音效与进度保存。
 
+## tools/ 说明
+
+`tools/` 是开发/校验脚手架（关卡集下载、解验证、难度筛选、注入 HTML、黑白棋整局 fuzz 与虚拟时钟测试）。
+迁移时已把其中写死的旧绝对路径（`/opt/data/games-tools`、`/opt/data/games`）**统一改成本项目内的 `tools/` 与 `web/`**，
+所以在项目根下直接跑即可，例如：
+
+```bash
+python3 tools/verify_by_solution.py     # 重放官方解法，验证关卡集可解性
+node   tools/test_othello.js            # 黑白棋整局对局 + 计时断言
+node   tools/hunt_stall.js              # 卡死猎手
+```
+
+> 注意：这些脚本里引用到的 `classic_analysis.json` / `final_levels2.json` 等属于**中间产物**，库中本就没有，
+> 需先跑上游步骤生成。游戏本体（`web/`、`android/`）不依赖 `tools/`。
+
+## 手机直接下载安装包
+
+`web/小游戏盒子离线版.apk` 就是最新构建的离线包，手机浏览器打开
+`http://192.168.101.42:4321/小游戏盒子离线版.apk` 即可下载安装（需允许「安装未知来源应用」）。
+
 ## 备份提醒
 
 `private/gamebox-release.jks` 是签名身份，**丢了就无法再覆盖安装升级**（只能卸载重装）。它已被 gitignore，请单独备份该目录。

@@ -7,7 +7,7 @@
 const fs = require('fs');
 const vm = require('vm');
 
-const HTML = '/opt/data/games/othello/index.html';
+const HTML = '/volume1/docker/hermes/files/bot_workspace/projects/games-box/web/othello/index.html';
 const script = fs.readFileSync(HTML, 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
 
 /* ---------------- DOM 桩 ---------------- */

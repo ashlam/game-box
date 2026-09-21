@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """调试：打印某个经典关卡的原始文本窗口 + 解法字符串 + 重放逐帧轨迹。"""
 import sys
-sys.path.insert(0, "/opt/data/games-tools")
+sys.path.insert(0, "/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools")
 from verify_by_solution import parse_file, parse_state, DIRS, is_board
 
 path = sys.argv[1]

@@ -2,7 +2,7 @@
 """列出所有已验证的经典关卡：难度、尺寸、箱子数、出处。"""
 import json
 
-data = json.load(open("/opt/data/games-tools/classic_solutions.json"))
+data = json.load(open("/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools/classic_solutions.json"))
 rows = []
 for fname, recs in data.items():
     for r in recs:

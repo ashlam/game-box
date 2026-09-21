@@ -3,12 +3,12 @@
 import json
 import re
 
-html = open('/opt/data/games/sokoban/index.html', encoding='utf-8').read()
+html = open('/volume1/docker/hermes/files/bot_workspace/projects/games-box/web/sokoban/index.html', encoding='utf-8').read()
 m = re.search(r'  const LEVELS = \[(.*?)\n  \];', html, re.S)
 assert m, '没找到 LEVELS 数组'
 blocks = re.findall(r'\{name:.*?map: \[(.*?)\]\}', m.group(1), re.S)
 parsed = [[s for s in re.findall(r'"([^"]*)"', b)] for b in blocks]
-final = [lv['map'] for lv in json.load(open('/opt/data/games-tools/final_levels3.json'))]
+final = [lv['map'] for lv in json.load(open('/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools/final_levels3.json'))]
 
 print(f'网页关卡数 = {len(parsed)}，已验证关卡数 = {len(final)}')
 print('内容完全一致：', parsed == final)

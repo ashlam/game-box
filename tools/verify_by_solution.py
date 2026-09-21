@@ -134,10 +134,10 @@ def parse_file(path):
 
 def main():
     out = {}
-    for fname in sorted(os.listdir("/opt/data/games-tools/classic")):
+    for fname in sorted(os.listdir("/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools/classic")):
         if not fname.endswith(".sok"):
             continue
-        recs = parse_file(f"/opt/data/games-tools/classic/{fname}")
+        recs = parse_file(f"/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools/classic/{fname}")
         ok = [r for r in recs if r["solvable"]]
         ps = [r["sol"]["pushes"] for r in ok]
         print(f"{fname:32s} 关 {len(recs):>3d}  验证可解 {len(ok):>3d}  推动数 {sorted(ps)}")
@@ -145,7 +145,7 @@ def main():
             if not r["solvable"]:
                 print(f"    ⚠️ #{r['i']} {r['title']} -> {r['why']}（附带解法 {len(r['declared'])} 条）")
         out[fname] = recs
-    json.dump(out, open("/opt/data/games-tools/classic_solutions.json", "w"), ensure_ascii=False)
+    json.dump(out, open("/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools/classic_solutions.json", "w"), ensure_ascii=False)
     print("\n已写出 classic_solutions.json")
 
 

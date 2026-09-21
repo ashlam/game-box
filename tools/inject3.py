@@ -4,8 +4,8 @@ import json
 import re
 import sys
 
-SRC = "/opt/data/games-tools/final_levels3.json"
-HTML = "/opt/data/games/sokoban/index.html"
+SRC = "/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools/final_levels3.json"
+HTML = "/volume1/docker/hermes/files/bot_workspace/projects/games-box/web/sokoban/index.html"
 
 levels = json.load(open(SRC))
 rows = []

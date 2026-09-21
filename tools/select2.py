@@ -3,11 +3,11 @@
 import json
 import sys
 
-sys.path.insert(0, "/opt/data/games-tools")
+sys.path.insert(0, "/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools")
 from solver2 import parse
 
-ANALYSIS = "/opt/data/games-tools/classic_analysis.json"
-OUT = "/opt/data/games-tools/final_levels2.json"
+ANALYSIS = "/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools/classic_analysis.json"
+OUT = "/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools/final_levels2.json"
 
 # 手机可玩性上限
 MAX_W, MAX_H, MAX_BOXES = 15, 12, 6

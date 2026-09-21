@@ -7,7 +7,7 @@ import os
 import sys
 import time
 
-sys.path.insert(0, "/opt/data/games-tools")
+sys.path.insert(0, "/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools")
 from solver2 import min_pushes, parse
 
 BOARD_CHARS = set(" #.$*@+")
@@ -49,7 +49,7 @@ def plan_files():
         ("classic/boxoban_medium_000.txt", 60, 4),       # 机器生成，抽样
         ("classic/boxoban_hard_000.txt", 60, 6),
     ]:
-        for p in sorted(glob.glob("/opt/data/games-tools/" + pattern)):
+        for p in sorted(glob.glob("/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools/" + pattern)):
             out.append((p, cap, budget))
     return out
 
@@ -87,7 +87,7 @@ def main():
             ps = sorted(r["pushes"] for r in ok)
             print(f"    推动数 {ps[0]}~{ps[-1]} 中位 {ps[len(ps)//2]}", flush=True)
         results[name] = recs
-    json.dump(results, open("/opt/data/games-tools/classic_analysis.json", "w"), ensure_ascii=False)
+    json.dump(results, open("/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools/classic_analysis.json", "w"), ensure_ascii=False)
     print("\n已写出 classic_analysis.json")
 
 

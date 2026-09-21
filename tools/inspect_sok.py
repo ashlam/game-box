@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """看一眼 .sok 文件的真实结构：棋盘后面到底跟了什么。"""
-path = "/opt/data/games-tools/classic/IllustrativeLevels.sok"
+path = "/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools/classic/IllustrativeLevels.sok"
 lines = [l.rstrip("\r\n") for l in open(path, encoding="utf-8", errors="replace").read().splitlines()]
 BOARD = set(" #.$*@+")
 start = None

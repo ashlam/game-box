@@ -3,7 +3,7 @@
 import os
 import urllib.request
 
-DEST = "/opt/data/games-tools/classic"
+DEST = "/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools/classic"
 os.makedirs(DEST, exist_ok=True)
 
 FILES = [

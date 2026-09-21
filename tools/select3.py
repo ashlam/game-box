@@ -3,8 +3,8 @@
 import json
 import re
 
-SRC = "/opt/data/games-tools/classic_solutions.json"
-OUT = "/opt/data/games-tools/final_levels3.json"
+SRC = "/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools/classic_solutions.json"
+OUT = "/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools/final_levels3.json"
 
 SRC_LABEL = {
     "ExtremelyEasy": "极简",

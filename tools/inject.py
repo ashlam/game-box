@@ -2,8 +2,8 @@
 """把验证过的最终关卡表注入 sokoban/index.html 的 LEVELS 数组。"""
 import json, re, sys
 
-SRC = '/opt/data/games-tools/final_levels.json'
-HTML = '/opt/data/games/sokoban/index.html'
+SRC = '/volume1/docker/hermes/files/bot_workspace/projects/games-box/tools/final_levels.json'
+HTML = '/volume1/docker/hermes/files/bot_workspace/projects/games-box/web/sokoban/index.html'
 
 levels = json.load(open(SRC))
 rows = []
