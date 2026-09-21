@@ -68,6 +68,18 @@
     .top{margin-bottom:6px}
     .bar{margin-top:8px}
   }
+  /* 横屏（矮而宽）：信息区和按钮压扁，尽量把高度让给场地 */
+  @media (orientation: landscape) and (max-height: 600px){
+    .top{margin-bottom:4px}
+    .top h1{font-size:15px}
+    .top a{font-size:17px;padding:4px 8px}
+    .hud{margin-bottom:4px}
+    .hud div{padding:3px 4px;border-radius:9px}
+    .hud .k{font-size:9px}
+    .hud .v{font-size:13px}
+    .bar{margin-top:6px}
+    .bar button{padding:7px 6px;font-size:12px}
+  }
 </style>
 </head>
 <body>
@@ -107,10 +119,11 @@
   /* ================= 逻辑坐标系（跟屏幕无关，绘制时统一缩放） ================= */
   const W = 320;                 // 逻辑宽度固定
   let   H = 440;                 // 逻辑高度按屏幕比例动态算（见 layout），不然手机上画布上下会各空一大块
-  const H_MIN = 400, H_MAX = 620, H_REF = 440;   // H 的夹取范围；H_REF 用于把球速换算成「每屏多少」
-  const M = 10, GAP = 4, COLS = 8;
-  const BRICK_W = (W - 2 * M - (COLS - 1) * GAP) / COLS;   // 34
-  const BRICK_H = 13, BRICK_TOP = 26;
+  const H_MIN = 180, H_MAX = 800, H_REF = 440;   // 夹取范围放宽到「几乎任何比例都能填满」；
+                                                 // 下限若硬撑太高（如 400），横屏/矮屏时画布会被压得极小
+  const M = 12, GAP = 5, COLS = 6;               // 6 列而不是 8：砖块大一倍，手机上才看得清
+  const BRICK_W = (W - 2 * M - (COLS - 1) * GAP) / COLS;   // ≈45.2
+  const BRICK_H = 20, BRICK_TOP = 28;
   const MAX_LEVEL = 8;
 
   const cv = document.getElementById('cv');
@@ -186,12 +199,17 @@
     ball.vx = vx * k; ball.vy = vy * k;
   }
 
+  /* 场地太矮就少放几行，别让砖墙顶到挡板 */
+  function maxRows(){
+    return clamp(Math.floor((H - 140) / (BRICK_H + GAP)), 3, 7);
+  }
+
   function levelCfg(n){
     return {
-      rows:  Math.min(6, 3 + Math.floor((n - 1) / 2)),   // 3,3,4,4,5,5,6,6 —— 别一上来就 4 行 32 块（实测 128 秒/关，太磨人）
-      hard:  2, hardRows: n >= 4 ? 1 : 0,                // 第 4 关起最上面一行要打两下
-      speedBase: Math.min(460, 300 + (n - 1) * 24),      // 球速要够快，否则来回一趟太久
-      paddleW: Math.max(40, 56 - (n - 1) * 2)
+      rows:  Math.min(maxRows(), 4 + Math.floor((n - 1) / 2)),   // 4,4,5,5,6,6,7,7（受场地高度上限约束）
+      hard:  2, hardRows: n >= 4 ? 1 : 0,                        // 第 4 关起最上面一行要打两下
+      speedBase: Math.min(460, 300 + (n - 1) * 24),              // 球速要够快，否则来回一趟太久
+      paddleW: Math.max(44, 64 - (n - 1) * 2.5)
     };
   }
 
@@ -203,6 +221,11 @@
   /* 逻辑高度变了（旋转屏幕 / 换设备）⇒ 挡板位置和球的位置都得跟着挪，否则会卡在场地外 */
   function onFieldResize(){
     if(!paddle || !ball) return;
+    // 旋转/换屏后场地变矮，原有砖墙可能已经顶到挡板（球根本挤不进去）⇒ 按新高度重建本关，保留分数
+    if(bricks && bricks.length){
+      const bottom = Math.max.apply(null, bricks.map(b => b.y + b.h));
+      if(bottom > H - 90){ startLevel(level, true); return; }
+    }
     paddle.y = H - 22;
     ball.y = ball.stuck ? paddle.y - ball.r - 1 : clamp(ball.y, ball.r + 0.5, H - ball.r - 0.5);
   }
@@ -238,8 +261,8 @@
     if(!keepScore) score = 0;
     lives = 3;
     bricks = makeBricks(); alive = bricks.length;
-    paddle = {x: W / 2, y: H - 22, w: cfg.paddleW, h: 8, vx: 0, target: W / 2};
-    ball = {x: W / 2, y: 0, r: 4.5, vx: 0, vy: 0, stuck: true, trail: []};
+    paddle = {x: W / 2, y: H - 22, w: cfg.paddleW, h: 10, vx: 0, target: W / 2};
+    ball = {x: W / 2, y: 0, r: 5.5, vx: 0, vy: 0, stuck: true, trail: []};
     particles = []; shakeT = 0; flashT = 0;
     state = 'ready';                       // ready -> play -> pause -> lost/clear/over
     resetBall(true);
