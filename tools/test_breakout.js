@@ -134,6 +134,7 @@ const win = {
 
 const sandbox = {
   document, localStorage, performance,
+  location: { search: '' },                    // 游戏里的 ?debug=1 诊断行会读它
   setTimeout: setTimeout_, setInterval: setInterval_, clearTimeout: clearTimer, clearInterval: clearTimer,
   requestAnimationFrame: fn => setTimeout_(() => fn(vnow), 16),
   cancelAnimationFrame: clearTimer,

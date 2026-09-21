@@ -10,9 +10,8 @@
   :root{
     --bg:#0f1115; --card:#191d26; --card2:#202632; --line:#2b3242;
     --txt:#e8ecf3; --dim:#8b95a7; --acc:#5b8cff; --acc2:#38d39f;
-    --mw:480px;                      /* 内容列宽：平板上放宽 */
+    --mw:2400px;                     /* 内容列宽上限（手机上不生效，目的是把能用的宽度全吃掉） */
   }
-  @media (min-width:700px){ :root{ --mw:620px } }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
   html,body{margin:0}
   body{
@@ -20,24 +19,27 @@
     color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
     min-height:100vh;min-height:100dvh;              /* 整屏高度：信息区贴顶、操作区贴底 */
     display:flex;flex-direction:column;align-items:center;
-    padding:calc(env(safe-area-inset-top) + 10px) 14px calc(env(safe-area-inset-bottom) + 10px);
+    padding:calc(env(safe-area-inset-top) + 6px) 4px calc(env(safe-area-inset-bottom) + 6px);   /* 左右只留 4px：场地尽量占满屏 */
   }
-  .top{width:100%;max-width:var(--mw);display:flex;align-items:center;gap:8px;margin-bottom:10px;flex:0 0 auto}
-  .top a{color:var(--dim);text-decoration:none;font-size:20px;padding:6px 10px;border-radius:10px;background:var(--card);border:1px solid var(--line);line-height:1}
-  .top h1{font-size:18px;margin:0;flex:1;text-align:center;padding-right:38px}
-  .hud{width:100%;max-width:var(--mw);display:flex;gap:8px;margin-bottom:10px;flex:0 0 auto}
-  .hud div{flex:1;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 6px;text-align:center}
-  .hud .k{font-size:10.5px;color:var(--dim)}
-  .hud .v{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
-  .hud .v.low{color:#ff6b6b}
-  #lives{letter-spacing:2px}
+  /* 顶部只占一行（返回 + 标题 + 分数/关卡/球数），把高度尽量让给场地 */
+  .top{width:100%;max-width:var(--mw);display:flex;align-items:center;gap:8px;margin-bottom:6px;flex:0 0 auto}
+  .top a{color:var(--dim);text-decoration:none;font-size:18px;padding:4px 9px;border-radius:9px;
+         background:var(--card);border:1px solid var(--line);line-height:1.2;flex:0 0 auto}
+  .top h1{font-size:15px;margin:0;flex:0 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dim)}
+  .hud{display:flex;align-items:center;gap:9px;margin-left:auto;flex:0 0 auto;white-space:nowrap;
+       font-size:11.5px;color:var(--dim);background:var(--card);border:1px solid var(--line);
+       border-radius:11px;padding:5px 10px}
+  .hud b{color:var(--txt);font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+  #lives{letter-spacing:2px;font-size:13px;color:var(--txt)}
+  #lives.low{color:#ff6b6b}
+  #hLevel{font-size:14px}
 
   #stage{width:100%;max-width:var(--mw);flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;touch-action:none}
   canvas{display:block;border-radius:14px;background:#12151c;border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.45);touch-action:none}
 
-  .bar{width:100%;max-width:var(--mw);display:flex;gap:8px;margin-top:12px;flex:0 0 auto}
+  .bar{width:100%;max-width:var(--mw);display:flex;gap:8px;margin-top:8px;flex:0 0 auto}
   .bar button{
-    flex:1;font-size:13.5px;padding:12px 6px;border-radius:12px;border:1px solid var(--line);
+    flex:1;font-size:13px;padding:9px 6px;border-radius:11px;border:1px solid var(--line);
     background:var(--card);color:var(--txt);font-family:inherit
   }
   .bar button:active{transform:scale(.97)}
@@ -49,6 +51,12 @@
     opacity:0;pointer-events:none;transition:.2s;max-width:88vw;text-align:center;z-index:7
   }
   #toast.on{opacity:1;transform:translate(-50%,0)}
+
+  /* 只有在地址栏带 ?debug=1 时才显示：一行诊断（视口/画布/逻辑尺寸/缩放/砖块实际像素） */
+  #dbg{position:fixed;left:6px;bottom:6px;z-index:60;display:none;font-size:10px;line-height:1.4;
+       color:#8b95a7;background:rgba(0,0,0,.72);border:1px solid var(--line);border-radius:7px;
+       padding:3px 7px;max-width:96vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+  #dbg.on{display:block}
 
   #over{position:fixed;inset:0;background:rgba(8,10,14,.84);backdrop-filter:blur(3px);display:none;
         align-items:center;justify-content:center;padding:22px;z-index:9}
@@ -62,23 +70,20 @@
   .panel button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
 
   @media (max-height: 700px){
-    .bar button{padding:9px 6px}
-    .hud div{padding:5px 4px}
-    .hud .v{font-size:14px}
-    .top{margin-bottom:6px}
-    .bar{margin-top:8px}
-  }
-  /* 横屏（矮而宽）：信息区和按钮压扁，尽量把高度让给场地 */
-  @media (orientation: landscape) and (max-height: 600px){
-    .top{margin-bottom:4px}
-    .top h1{font-size:15px}
-    .top a{font-size:17px;padding:4px 8px}
-    .hud{margin-bottom:4px}
-    .hud div{padding:3px 4px;border-radius:9px}
-    .hud .k{font-size:9px}
-    .hud .v{font-size:13px}
-    .bar{margin-top:6px}
     .bar button{padding:7px 6px;font-size:12px}
+    .top{margin-bottom:4px}
+    .bar{margin-top:6px}
+    .hud{padding:4px 8px}
+  }
+  /* 横屏（矮而宽）：进一步压扁，尽量把高度让给场地 */
+  @media (orientation: landscape) and (max-height: 600px){
+    .top{margin-bottom:3px}
+    .top h1{font-size:13px}
+    .top a{font-size:16px;padding:3px 7px}
+    .hud{font-size:10.5px;padding:3px 8px;gap:7px}
+    .hud b{font-size:12.5px}
+    .bar{margin-top:5px}
+    .bar button{padding:6px 6px;font-size:11.5px}
   }
 </style>
 </head>
@@ -87,12 +92,13 @@
 <div class="top">
   <a href="/">‹</a>
   <h1>打砖块</h1>
-</div>
-
-<div class="hud">
-  <div><div class="k">分数</div><div class="v" id="hScore">0</div></div>
-  <div><div class="k">关卡</div><div class="v" id="hLevel">1</div></div>
-  <div><div class="k">剩余球</div><div class="v" id="lives">●●●</div></div>
+  <div class="hud">
+    <span><b id="hScore">0</b> 分</span>
+    <span class="sep">·</span>
+    <span>第 <b id="hLevel">1</b> 关</span>
+    <span class="sep">·</span>
+    <span id="lives">●●●</span>
+  </div>
 </div>
 
 <div id="stage"><canvas id="cv" tabindex="0"></canvas></div>
@@ -104,6 +110,7 @@
 </div>
 
 <div id="toast"></div>
+<div id="dbg"></div>
 
 <div id="over"><div class="panel">
   <h2 id="overTitle">第 1 关</h2>
@@ -121,9 +128,11 @@
   let   H = 440;                 // 逻辑高度按屏幕比例动态算（见 layout），不然手机上画布上下会各空一大块
   const H_MIN = 180, H_MAX = 800, H_REF = 440;   // 夹取范围放宽到「几乎任何比例都能填满」；
                                                  // 下限若硬撑太高（如 400），横屏/矮屏时画布会被压得极小
-  const M = 12, GAP = 5, COLS = 6;               // 6 列而不是 8：砖块大一倍，手机上才看得清
-  const BRICK_W = (W - 2 * M - (COLS - 1) * GAP) / COLS;   // ≈45.2
-  const BRICK_H = 20, BRICK_TOP = 28;
+  const M = 12, GAP = 5, COLS = 4;               // ★ 列数是唯一能真正放大画面的杠杆：
+                                                 //   屏幕占比固定时「格子占屏宽 %」≈ 100/列数，
+                                                 //   改逻辑尺寸/缩放都不影响它（砖宽×缩放 ≈ 可用宽/列数）
+  const BRICK_W = (W - 2 * M - (COLS - 1) * GAP) / COLS;   // =70.25
+  const BRICK_H = 26, BRICK_TOP = 28;
   const MAX_LEVEL = 8;
 
   const cv = document.getElementById('cv');
@@ -206,10 +215,10 @@
 
   function levelCfg(n){
     return {
-      rows:  Math.min(maxRows(), 4 + Math.floor((n - 1) / 2)),   // 4,4,5,5,6,6,7,7（受场地高度上限约束）
+      rows:  Math.min(maxRows(), 5 + Math.floor((n - 1) / 2)),   // 5,5,6,6,7,7,7,7（受场地高度上限约束）
       hard:  2, hardRows: n >= 4 ? 1 : 0,                        // 第 4 关起最上面一行要打两下
       speedBase: Math.min(460, 300 + (n - 1) * 24),              // 球速要够快，否则来回一趟太久
-      paddleW: Math.max(44, 64 - (n - 1) * 2.5)
+      paddleW: Math.max(50, 76 - (n - 1) * 3)
     };
   }
 
@@ -226,7 +235,7 @@
       const bottom = Math.max.apply(null, bricks.map(b => b.y + b.h));
       if(bottom > H - 90){ startLevel(level, true); return; }
     }
-    paddle.y = H - 22;
+    paddle.y = H - 24;
     ball.y = ball.stuck ? paddle.y - ball.r - 1 : clamp(ball.y, ball.r + 0.5, H - ball.r - 0.5);
   }
 
@@ -261,8 +270,8 @@
     if(!keepScore) score = 0;
     lives = 3;
     bricks = makeBricks(); alive = bricks.length;
-    paddle = {x: W / 2, y: H - 22, w: cfg.paddleW, h: 10, vx: 0, target: W / 2};
-    ball = {x: W / 2, y: 0, r: 5.5, vx: 0, vy: 0, stuck: true, trail: []};
+    paddle = {x: W / 2, y: H - 24, w: cfg.paddleW, h: 12, vx: 0, target: W / 2};
+    ball = {x: W / 2, y: 0, r: 7.5, vx: 0, vy: 0, stuck: true, trail: []};
     particles = []; shakeT = 0; flashT = 0;
     state = 'ready';                       // ready -> play -> pause -> lost/clear/over
     resetBall(true);
@@ -287,7 +296,7 @@
   function layout(){
     const stageEl = $('stage');
     const mw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--mw')) || 480;
-    const availW = Math.min(window.innerWidth - 28, mw);
+    const availW = Math.min(window.innerWidth - 8, mw);   // 8 = body 左右各 4px 内边距；别多减，多减就是白丢场地宽度
     const availH = (stageEl && stageEl.clientHeight) ? stageEl.clientHeight : Math.max(200, window.innerHeight - 300);
     // 逻辑高度跟着 stage 的宽高比走 ⇒ 画布正好把 stage 填满，不留上下两块空白
     const targetH = clamp(Math.round(W * availH / availW), H_MIN, H_MAX);
@@ -309,6 +318,14 @@
       S *= 0.965; apply(S);
     }
     draw();
+    const bw = BRICK_W * S, bh = BRICK_H * S;
+    if(location.search.indexOf('debug') >= 0){
+      const el = $('dbg');
+      el.classList.add('on');
+      el.textContent = `视口 ${window.innerWidth}×${window.innerHeight} · 画布 ${Math.round(W * S)}×${Math.round(H * S)}`
+        + ` · 逻辑 ${W}×${H} · scale ${S.toFixed(2)} · 砖 ${Math.round(bw)}×${Math.round(bh)}px`
+        + ` · ${COLS}列 ${cfg ? cfg.rows : '?'}行 · 挡板 ${Math.round((cfg ? cfg.paddleW : 0) * S)}px`;
+    }
   }
   let scale = 1;
 
