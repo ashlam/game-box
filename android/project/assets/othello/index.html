@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>黑白棋 · 小游戏盒子</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#191d26; --card2:#202632; --line:#2b3242;
+    --txt:#e8ecf3; --dim:#8b95a7; --acc:#5b8cff; --acc2:#38d39f;
+    --felt:#1f6f4a; --felt2:#175538;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+  html,body{margin:0}
+  body{
+    background:radial-gradient(1200px 600px at 50% -10%,#1b2233 0%,var(--bg) 60%);
+    color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    min-height:100vh;display:flex;flex-direction:column;align-items:center;
+    padding:calc(env(safe-area-inset-top) + 12px) 14px calc(env(safe-area-inset-bottom) + 16px);
+  }
+  .top{width:100%;max-width:460px;display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .top a{color:var(--dim);text-decoration:none;font-size:20px;padding:6px 8px;border-radius:10px;background:var(--card);border:1px solid var(--line)}
+  .top h1{font-size:18px;margin:0;flex:1;text-align:center;padding-right:44px}
+
+  .score{width:100%;max-width:460px;display:flex;gap:10px;margin-bottom:10px}
+  .side{
+    flex:1;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px;
+    display:flex;align-items:center;gap:10px;transition:border-color .2s,background .2s
+  }
+  .side.active{border-color:var(--acc);background:var(--card2)}
+  .dot{width:20px;height:20px;border-radius:50%;flex:0 0 20px}
+  .dot.b{background:radial-gradient(circle at 34% 30%,#6b7280,#0b0d12 70%);box-shadow:inset 0 1px 2px rgba(255,255,255,.25)}
+  .dot.w{background:radial-gradient(circle at 34% 30%,#ffffff,#c3c9d4 75%);box-shadow:inset 0 1px 2px rgba(255,255,255,.6)}
+  .side .n{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}
+  .side .lbl{font-size:11px;color:var(--dim)}
+
+  #status{
+    width:100%;max-width:460px;text-align:center;font-size:13.5px;color:var(--dim);
+    min-height:20px;margin-bottom:10px
+  }
+  #status b{color:var(--acc2)}
+
+  .wrap{width:100%;max-width:460px;display:flex;justify-content:center}
+  #board{
+    position:relative;
+    width:min(92vw,432px);aspect-ratio:1/1;display:grid;grid-template-columns:repeat(8,1fr);
+    gap:2px;background:var(--felt2);border:4px solid #0d3324;border-radius:14px;padding:2px;
+    box-shadow:0 10px 30px rgba(0,0,0,.45)
+  }
+  .cell{
+    background:var(--felt);border-radius:3px;display:grid;place-items:center;position:relative;
+    transition:background .12s
+  }
+  .cell.can{background:#268059;cursor:pointer}
+  .cell.can::after{content:"";width:30%;height:30%;border-radius:50%;background:#ffd54a;
+                   box-shadow:0 0 8px 2px rgba(255,213,74,.55)}
+  .disc{width:84%;height:84%;border-radius:50%;animation:pop .16s ease-out}
+  .disc.b{background:radial-gradient(circle at 34% 30%,#6b7280,#08090d 72%);box-shadow:inset 0 2px 3px rgba(255,255,255,.22)}
+  .disc.w{background:radial-gradient(circle at 34% 30%,#fff,#c8ced8 78%);box-shadow:inset 0 2px 3px rgba(255,255,255,.7)}
+  .disc.last{outline:2px solid #ffd166;outline-offset:1px}
+  /* 清点棋盘：被数到的棋子闪一下 */
+  .disc.flash{animation:flash .24s ease-out}
+  @keyframes flash{
+    0%{transform:scale(1);box-shadow:0 0 0 0 rgba(255,209,102,.95)}
+    40%{transform:scale(1.26);box-shadow:0 0 14px 5px rgba(255,209,102,.8)}
+    100%{transform:scale(1);box-shadow:0 0 0 0 rgba(255,209,102,0)}
+  }
+  /* 结束→数子的过渡提示 */
+  #intro{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+         z-index:7;background:rgba(6,10,14,.52);backdrop-filter:blur(3px);pointer-events:none}
+  #intro.on{display:flex;animation:introIn .3s ease-out}
+  #intro .ttl{font-size:clamp(22px,7vw,30px);font-weight:800;color:#ffd54a;letter-spacing:.08em;
+              text-shadow:0 2px 14px rgba(0,0,0,.75);animation:introPop .5s ease-out}
+  #intro .sub{font-size:clamp(12px,3.6vw,15px);color:#e8edf5;opacity:.92;text-shadow:0 1px 6px #000}
+  @keyframes introIn{from{opacity:0}to{opacity:1}}
+  @keyframes introPop{0%{transform:scale(.86);opacity:.4}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}
+  /* 屏幕边缘的计票条 */
+  .tally{position:fixed;top:20%;height:46%;width:14px;z-index:6;display:none;overflow:hidden;
+         background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:9px}
+  .tally.on{display:block}
+  #tallyB{left:5px} #tallyW{right:5px}
+  .tally .fill{position:absolute;left:0;right:0;bottom:0;height:0%;transition:height .06s linear}
+  #tallyB .fill{background:linear-gradient(180deg,#cdd4e0,#59616f)}
+  #tallyW .fill{background:linear-gradient(180deg,#ffffff,#bcc3cf)}
+  .tally .glyph{position:absolute;left:50%;transform:translateX(-50%);top:5px;font-size:10px;line-height:1;
+                color:#fff;text-shadow:0 1px 3px #000;opacity:.85}
+  .side.win{border-color:var(--acc2);box-shadow:inset 0 0 0 1px rgba(56,211,159,.45)}
+  .side.win .n{color:var(--acc2)}
+  @keyframes pop{from{transform:scale(.4);opacity:.4}to{transform:scale(1);opacity:1}}
+  .flip{animation:flip .28s ease-out}
+  @keyframes flip{from{transform:rotateY(0) scale(.86)}to{transform:rotateY(360deg) scale(1)}}
+
+  .bar{width:100%;max-width:460px;display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  button{
+    flex:1 1 auto;min-width:calc(50% - 4px);font-size:14px;padding:13px 10px;border-radius:12px;
+    border:1px solid var(--line);background:var(--card2);color:var(--txt);font-family:inherit;
+    transition:transform .1s,border-color .12s
+  }
+  button:active{transform:scale(.97)}
+  button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+  button:disabled{opacity:.4}
+  .seg{width:100%;max-width:460px;display:flex;gap:6px;background:var(--card);border:1px solid var(--line);
+       padding:5px;border-radius:12px;margin-top:14px}
+  .seg button{min-width:0;border:0;background:transparent;padding:10px 4px;font-size:13.5px;border-radius:9px;color:var(--dim)}
+  .seg button.on{background:var(--acc);color:#fff;font-weight:600}
+  .lbl2{width:100%;max-width:460px;font-size:11.5px;color:var(--dim);margin:12px 0 -6px;text-align:left}
+
+  #toast{
+    position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 26px);transform:translate(-50%,20px);
+    background:#20262ff2;border:1px solid var(--line);color:var(--txt);padding:11px 18px;border-radius:12px;
+    font-size:13.5px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:88vw;text-align:center
+  }
+  #toast.on{opacity:1;transform:translate(-50%,0)}
+
+  #over{
+    position:fixed;inset:0;background:rgba(8,10,14,.82);backdrop-filter:blur(3px);display:none;
+    align-items:center;justify-content:center;padding:24px;z-index:9
+  }
+  #over.on{display:flex}
+  .panel{
+    width:100%;max-width:340px;background:var(--card);border:1px solid var(--line);border-radius:20px;
+    padding:24px 20px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.6)
+  }
+  .panel h2{margin:0 0 6px;font-size:22px}
+  .panel p{color:var(--dim);font-size:13.5px;margin:0 0 18px;line-height:1.6}
+  .panel button{width:100%;min-width:0}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="../index.html">‹</a>
+  <h1>黑白棋</h1>
+</div>
+
+<div class="score">
+  <div class="side" id="sideB">
+    <div class="dot b"></div>
+    <div><div class="n" id="cntB">2</div><div class="lbl">黑棋 · 你</div></div>
+  </div>
+  <div class="side" id="sideW">
+    <div class="dot w"></div>
+    <div><div class="n" id="cntW">2</div><div class="lbl">白棋 · 电脑</div></div>
+  </div>
+</div>
+
+<div id="status">你执黑先行，点绿点落子</div>
+
+<div class="wrap"><div id="board"></div></div>
+
+<div class="bar">
+  <button class="pri" id="btnNew">重新开始</button>
+  <button id="btnUndo">悔棋</button>
+  <button id="btnHint">提示：开</button>
+  <button id="btnSound">🔊 音效：开</button>
+</div>
+
+<div class="lbl2">电脑难度</div>
+<div class="seg" id="segLv">
+  <button data-lv="1">简单</button>
+  <button data-lv="3" class="on">普通</button>
+  <button data-lv="4">困难</button>
+</div>
+
+<div id="toast"></div>
+
+<div id="intro">
+  <div class="ttl">对局结束</div>
+  <div class="sub">开始清点棋盘…</div>
+</div>
+
+<div class="tally" id="tallyB"></div>
+<div class="tally" id="tallyW"></div>
+
+<div id="over"><div class="panel">
+  <h2 id="overTitle">结束</h2>
+  <p id="overText"></p>
+  <button class="pri" id="overBtn">再来一局</button>
+</div></div>
+
+<script>
+(function(){
+  const HUMAN = 1, AI = 2;                 // 1=黑, 2=白
+  const DIRS = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+  const W = [
+    [ 120,-24, 20,  8,  8, 20,-24, 120],
+    [ -24,-46, -6, -6, -6, -6,-46, -24],
+    [  20, -6, 14,  4,  4, 14, -6,  20],
+    [   8, -6,  4,  2,  2,  4, -6,   8],
+    [   8, -6,  4,  2,  2,  4, -6,   8],
+    [  20, -6, 14,  4,  4, 14, -6,  20],
+    [ -24,-46, -6, -6, -6, -6,-46, -24],
+    [ 120,-24, 20,  8,  8, 20,-24, 120]
+  ];
+
+  let board, turn, over, history, hint = true, depth = 3, busy = false, lastMove = null;
+
+  /* ---------- 音效：Web Audio 现场合成（零依赖、无音频文件、可静音） ---------- */
+  const SKEY = 'othello_sound';
+  let soundOn = localStorage.getItem(SKEY) !== '0';
+  let actx = null, soundCount = 0, lastAiDelay = 0, thinkTimer = null;
+
+  function ac(){
+    if(actx === null){
+      const C = window.AudioContext || window.webkitAudioContext;
+      try{ actx = C ? new C() : false; }catch(e){ actx = false; }
+    }
+    if(actx && actx.state === 'suspended'){ try{ actx.resume(); }catch(e){} }
+    return actx || null;
+  }
+  function tone(freq, dur, opt){
+    const o = opt || {};
+    if(!soundOn) return;
+    const c = ac(); if(!c) return;
+    const t0 = c.currentTime + (o.at || 0);
+    const osc = c.createOscillator(), g = c.createGain();
+    osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    if(o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t0 + dur);
+    const vol = (o.gain === undefined ? 0.12 : o.gain);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);          // 极短起音=敲击感
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);         // 自然衰减
+    osc.connect(g); g.connect(c.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+    soundCount++;
+  }
+  // 落子：「嗒」一下 + 被翻的棋子一串碎响（谁落子音高不同，听得出）
+  function sndPlace(who, nFlip){
+    tone(who === HUMAN ? 220 : 168, 0.15, {type:'sine', gain:0.16, to: who === HUMAN ? 150 : 115});
+    tone(who === HUMAN ? 640 : 540, 0.05, {type:'triangle', gain:0.05});
+    const k = Math.min(6, Math.max(2, nFlip || 0));
+    for(let i=0;i<k;i++) tone(780 + i*70, 0.035, {type:'triangle', gain:0.04, at: 0.035 + i*0.03});
+  }
+  function sndWin(){ [523,659,784,1047].forEach((f,i)=> tone(f, 0.22, {type:'sine', gain:0.13, at:i*0.11})); }
+  function sndLose(){ [392,330,262].forEach((f,i)=> tone(f, 0.28, {type:'sine', gain:0.12, at:i*0.13})); }
+  function sndDraw(){ [440,440].forEach((f,i)=> tone(f, 0.18, {type:'sine', gain:0.10, at:i*0.16})); }
+  function sndEnd(){ tone(330, 0.22, {type:'sine', gain:0.09}); tone(247, 0.32, {type:'sine', gain:0.09, at:0.17}); }  // 结束过渡的收尾音
+  function sndSoft(){ tone(320, 0.09, {type:'sine', gain:0.06, to: 210}); }
+  function setSoundLabel(){ $('btnSound').textContent = soundOn ? '🔊 音效：开' : '🔇 音效：关'; }
+
+  // 移动端解锁音频：首次触摸/点击时 resume（iOS 要求必须在用户手势里）
+  const unlockAudio = () => {
+    const c = ac();
+    if(c && c.state === 'running'){
+      document.removeEventListener('touchend', unlockAudio);
+      document.removeEventListener('click', unlockAudio);
+    }
+  };
+  document.addEventListener('touchend', unlockAudio, {passive:true});
+  document.addEventListener('click', unlockAudio);
+
+  /* ---------- 结束演出：一枚一枚清点棋盘，把比分数出来 ---------- */
+  const COUNT_STEP_MS = 150;          // 清点节奏：每 0.15 秒数一枚（改这一行即可调快慢）
+  const INTRO_MS = 1100;              // 结束→数子之间的过渡提示时长
+  let countTimer = null, introTO = null, counting = false, resultTO = null;
+  // 计票条内部结构用 JS 建（浏览器与测试桩都能跑）
+  ['tallyB','tallyW'].forEach(id => {
+    const el = document.getElementById(id);
+    const f = document.createElement('div'); f.className = 'fill'; el.appendChild(f);
+    const g = document.createElement('div'); g.className = 'glyph';
+    g.textContent = (id === 'tallyB') ? '●' : '○'; el.appendChild(g);
+  });
+
+  function setTally(bp, wp){
+    const fb = document.getElementById('tallyB').querySelector('.fill');
+    const fw = document.getElementById('tallyW').querySelector('.fill');
+    if(fb && fb.style) fb.style.height = bp + '%';
+    if(fw && fw.style) fw.style.height = wp + '%';
+  }
+  function tallyOn(on){
+    document.getElementById('tallyB').classList.toggle('on', on);
+    document.getElementById('tallyW').classList.toggle('on', on);
+  }
+  function stopCounting(restoreTotals){
+    clearTimeout(countTimer); countTimer = null;
+    clearTimeout(resultTO); resultTO = null;
+    clearTimeout(introTO); introTO = null;
+    counting = false;
+    const intro = document.getElementById('intro');
+    if(intro) intro.classList.remove('on');
+    document.querySelectorAll('.disc.flash').forEach(d => d.classList.remove('flash'));
+    tallyOn(false);
+    setTally(0, 0);
+    if(restoreTotals){ const [a,w] = counts(board); $('cntB').textContent = a; $('cntW').textContent = w; }
+  }
+
+  function startCounting(a, w, title, text){
+    stopCounting(false);
+    const cells = [];                                  // 清点顺序：从左到右、从上到下
+    for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(board[r][c]) cells.push([r,c,board[r][c]]);
+    const total = Math.max(1, a + w);
+    const boardNode = document.getElementById('board');
+    counting = true;
+    $('status').textContent = '清点棋盘…';
+    $('cntB').textContent = '0'; $('cntW').textContent = '0';
+    tallyOn(true);
+    // 一枚一枚数：固定每 COUNT_STEP_MS 数一枚（当前 0.4 秒/枚），节奏看得清先后
+    const step = COUNT_STEP_MS;
+    let i = 0, nb = 0, nw = 0, lastTick = 0;
+    const oneByOne = () => {
+      if(i >= cells.length){                           // 数完了：停顿一拍再亮结果
+        setTally(a / total * 100, w / total * 100);
+        $('cntB').textContent = a; $('cntW').textContent = w;
+        resultTO = setTimeout(() => {
+          resultTO = null; counting = false; tallyOn(false);
+          showResult(title, text, a, w);
+        }, 460);
+        return;
+      }
+      const [r, c, v] = cells[i++];
+      const cell = boardNode.children[r * 8 + c];
+      const disc = cell && cell.firstChild;
+      if(disc && disc.classList) disc.classList.add('flash');    // 数到哪枚，哪枚闪一下
+      if(v === HUMAN) nb++; else nw++;
+      $('cntB').textContent = nb; $('cntW').textContent = nw;    // 对应一方比分 +1
+      setTally(nb / total * 100, nw / total * 100);              // 计票条跟着长
+      const now = performance.now();
+      if(soundOn && now - lastTick > 30){ lastTick = now; tone(v === HUMAN ? 700 : 560, 0.026, {type:'triangle', gain:0.026}); }
+      countTimer = setTimeout(oneByOne, step);
+    };
+    countTimer = setTimeout(oneByOne, step);
+  }
+
+  function showResult(title, text, a, w){
+    $('sideB').classList.toggle('win', a > w);
+    $('sideW').classList.toggle('win', w > a);
+    $('overTitle').textContent = title;
+    $('overText').textContent = text;
+    $('over').classList.add('on');
+    $('status').textContent = text;
+    if(a > w) sndWin(); else if(a < w) sndLose(); else sndDraw();
+  }
+
+  /* ---------- 电脑「思考」延时：0.4~2 秒，别让它秒回 ---------- */
+  const THINK_MIN = 400, THINK_MAX = 2000;
+  function thinking(on){
+    clearInterval(thinkTimer); thinkTimer = null;
+    if(!on) return;
+    let n = 0;
+    const paint = () => { $('status').textContent = '电脑思考中' + '·'.repeat(1 + (n++ % 3)); };
+    paint();
+    thinkTimer = setInterval(paint, 360);
+  }
+
+  const $ = id => document.getElementById(id);
+  const boardEl = $('board');
+
+  /* ---------- 规则 ---------- */
+  function fresh(){
+    const b = Array.from({length:8},()=>Array(8).fill(0));
+    b[3][3] = AI; b[4][4] = AI; b[3][4] = HUMAN; b[4][3] = HUMAN;
+    return b;
+  }
+  function flips(b,r,c,p){
+    if(b[r][c] !== 0) return [];
+    const q = 3-p, out = [];
+    for(const [dr,dc] of DIRS){
+      let rr = r+dr, cc = c+dc; const line = [];
+      while(rr>=0 && rr<8 && cc>=0 && cc<8 && b[rr][cc] === q){ line.push([rr,cc]); rr+=dr; cc+=dc; }
+      if(line.length && rr>=0 && rr<8 && cc>=0 && cc<8 && b[rr][cc] === p) out.push(...line);
+    }
+    return out;
+  }
+  function legalMoves(b,p){
+    const out = [];
+    for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(b[r][c]===0 && flips(b,r,c,p).length) out.push([r,c]);
+    return out;
+  }
+  function place(b,r,c,p){
+    const nb = b.map(row=>row.slice());
+    nb[r][c] = p;
+    for(const [rr,cc] of flips(b,r,c,p)) nb[rr][cc] = p;
+    return nb;
+  }
+  function counts(b){
+    let a=0,w=0;
+    for(let r=0;r<8;r++) for(let c=0;c<8;c++){ if(b[r][c]===HUMAN) a++; else if(b[r][c]===AI) w++; }
+    return [a,w];
+  }
+
+  /* ---------- AI ---------- */
+  function evaluate(b,p){
+    let s = 0, my = 0, op = 0;
+    for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+      const v = b[r][c];
+      if(v === p){ s += W[r][c]; my++; }
+      else if(v === 3-p){ s -= W[r][c]; op++; }
+    }
+    const mob = legalMoves(b,p).length - legalMoves(b,3-p).length;
+    return s + mob*9 + (my-op)*2;
+  }
+  function terminalScore(b,p){ const [a,w] = counts(b); const d = p===HUMAN ? a-w : w-a; return d*1000; }
+  function ordered(b,moves,p){
+    return moves.map(([r,c])=>({r,c,v:W[r][c]})).sort((x,y)=>y.v-x.v);
+  }
+  function negamax(b,p,d,alpha,beta){
+    const moves = legalMoves(b,p);
+    const empties = b.flat().filter(v=>v===0).length;
+    if(empties === 0) return terminalScore(b,p);
+    if(d <= 0) return evaluate(b,p);
+    if(!moves.length){
+      // 对方也没得下 ⇒ 这才是终局；否则只跳过一轮（千万别用同深度对跳，会无限递归爆栈）
+      if(!legalMoves(b, 3-p).length) return terminalScore(b, p);
+      return -negamax(b, 3-p, d, -beta, -alpha);
+    }
+    let best = -Infinity;
+    for(const {r,c} of ordered(b,moves,p)){
+      const v = -negamax(place(b,r,c,p), 3-p, d-1, -beta, -alpha);
+      if(v > best) best = v;
+      if(best > alpha) alpha = best;
+      if(alpha >= beta) break;
+    }
+    return best;
+  }
+  function aiPick(b,p){
+    const moves = legalMoves(b,p);
+    if(!moves.length) return null;
+    const scored = moves.map(([r,c]) => ({r, c, v:-negamax(place(b,r,c,p), 3-p, depth-1, -Infinity, Infinity) + Math.random()*(depth<=2?60:0)}));
+    scored.sort((x,y)=>y.v-x.v);
+    // 简单档：前 3 名里随机挑一个，别太虐人
+    const pick = (depth<=1 && scored.length>1) ? scored[Math.floor(Math.random()*Math.min(3,scored.length))] : scored[0];
+    return [pick.r, pick.c];
+  }
+
+  /* ---------- 尺寸自适应：量真实控件高度算棋盘大小，任何机型一屏放下 ---------- */
+  function fitBoard(){
+    const h = sel => { const e = document.querySelector(sel); return e ? e.offsetHeight : 0; };
+    const b = document.getElementById('board');
+    const apply = w => { b.style.width = w + 'px'; b.style.height = w + 'px'; };
+    const contentBottom = () => {
+      const seg = document.querySelector('.seg').getBoundingClientRect();
+      const pad = parseFloat(getComputedStyle(document.body).paddingBottom) || 0;
+      return seg.bottom + pad;
+    };
+    const chrome = h('.top') + h('.score') + h('#status') + h('.bar') + h('.lbl2') + h('.seg') + 50;
+    let w = Math.max(180, Math.floor(Math.min(window.innerWidth - 28, 432, window.innerHeight - chrome)));
+    apply(w);
+    // 兜底：若整页仍超出视口，继续微缩棋盘直到一屏放下
+    let guard = 0;
+    while(contentBottom() > window.innerHeight && w > 180 && guard++ < 60){ w -= 4; apply(w); }
+  }
+  window.addEventListener('resize', fitBoard);
+  window.addEventListener('orientationchange', () => setTimeout(fitBoard, 250));
+
+  /* ---------- 渲染 ---------- */
+  const cells = [];
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const d = document.createElement('div');
+    d.className = 'cell';
+    d.dataset.r = r; d.dataset.c = c;
+    boardEl.appendChild(d);
+    cells.push(d);
+  }
+  const cellAt = (r,c) => cells[r*8+c];
+
+  function render(animate){
+    // 先清掉上一手的黄圈标记，否则会一路残留累积
+    document.querySelectorAll('.disc.last').forEach(d => d.classList.remove('last'));
+    for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+      const el = cellAt(r,c), v = board[r][c];
+      const wanted = v === 0 ? '' : (v === HUMAN ? 'b' : 'w');
+      const cur = el.firstChild;
+      const curKind = cur ? cur.dataset.k : '';
+      if(curKind !== wanted || (animate && wanted && el.dataset.dirty === '1')){
+        el.innerHTML = '';
+        if(wanted){
+          const s = document.createElement('div');
+          s.className = 'disc ' + wanted + (animate ? ' flip' : '') + (lastMove && lastMove[0]===r && lastMove[1]===c ? ' last' : '');
+          s.dataset.k = wanted;
+          el.appendChild(s);
+        }
+      } else if(cur && cur.dataset.k === wanted && lastMove && lastMove[0]===r && lastMove[1]===c){
+        cur.classList.add('last');
+      }
+    }
+    for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+      const el = cellAt(r,c);
+      const can = !over && turn === HUMAN && board[r][c] === 0 && flips(board,r,c,HUMAN).length > 0;
+      el.classList.toggle('can', hint && can);
+    }
+    const [a,w] = counts(board);
+    if(!counting){                       // 清点动画期间由动画自己写数字，别被覆盖
+      $('cntB').textContent = a;
+      $('cntW').textContent = w;
+    }
+    $('sideB').classList.toggle('active', turn === HUMAN && !over);
+    $('sideW').classList.toggle('active', turn === AI && !over);
+  }
+
+  function toast(msg){
+    const t = $('toast');
+    t.textContent = msg; t.classList.add('on');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(()=>t.classList.remove('on'), 1600);
+  }
+
+  function setStatus(){
+    if(over) return;
+    $('status').textContent = turn === HUMAN ? '轮到你（黑棋），点绿色格落子' : '电脑思考中…';
+  }
+
+  /* ---------- 流程 ---------- */
+  function pushHistory(){
+    history.push({b: board.map(r=>r.slice()), turn, last: lastMove});
+    if(history.length > 80) history.shift();
+  }
+
+  function humanMove(r,c){
+    if(over || busy || turn !== HUMAN) return;
+    if(!(board[r][c] === 0 && flips(board,r,c,HUMAN).length)) return;
+    ac();                                        // 用户手势里解锁音频（移动端必须）
+    const nFlip = flips(board, r, c, HUMAN).length;
+    pushHistory();
+    lastMove = [r,c];
+    board = place(board,r,c,HUMAN);
+    sndPlace(HUMAN, nFlip);
+    render(true);
+    turn = AI;
+    render(false);
+    scheduleAi();
+  }
+
+  // 电脑「思考」：延时从玩家落子那一刻起算，计算耗时也算在内，保证观感是 0.4~2 秒
+  function scheduleAi(){
+    if(over) return;
+    busy = true;
+    thinking(true);
+    render(false);
+    const t0 = performance.now();
+    const target = THINK_MIN + Math.random() * (THINK_MAX - THINK_MIN);
+    lastAiDelay = Math.round(target);
+    setTimeout(() => {
+      let mv = null;
+      try { mv = aiPick(board, AI); }
+      catch(err){                                              // 引擎异常兜底：至少别让游戏卡死
+        if(window.console && console.warn) console.warn('[othello] AI 搜索异常，回退到第一个合法落点', err);
+        mv = legalMoves(board, AI)[0] || null;
+      }
+      const used = performance.now() - t0;
+      const wait = Math.max(100, target - used);
+      setTimeout(() => { thinking(false); applyAi(mv); }, wait);
+    }, 60);
+  }
+
+  function applyAi(mv){
+    if(over) return;
+    if(!mv){
+      if(!legalMoves(board, HUMAN).length){ busy = false; finish(); return; }
+      toast('电脑无子可下，跳过');
+      turn = HUMAN; busy = false; setStatus(); render(false); return;
+    }
+    const nFlip = flips(board, mv[0], mv[1], AI).length;
+    pushHistory();
+    lastMove = mv;
+    board = place(board, mv[0], mv[1], AI);
+    turn = HUMAN;
+    busy = false;
+    sndPlace(AI, nFlip);
+    render(true);
+    if(!legalMoves(board, AI).length && !legalMoves(board, HUMAN).length){ finish(); return; }
+    if(!legalMoves(board, HUMAN).length){
+      toast('你无子可下，电脑继续'); setStatus();
+      setTimeout(() => { turn = AI; scheduleAi(); }, 320);
+      return;
+    }
+    setStatus();
+  }
+
+  function finish(){
+    over = true;
+    render(false);
+    const [a,w] = counts(board);
+    const diff = a - w;
+    let title, text;
+    if(diff > 0){ title = '🎉 你赢了！'; text = `黑 ${a} : 白 ${w}，你领先 ${diff} 子`; }
+    else if(diff < 0){ title = '😵 电脑赢了'; text = `黑 ${a} : 白 ${w}，电脑领先 ${-diff} 子`; }
+    else { title = '🤝 平局'; text = `黑 ${a} : 白 ${w}`; }
+    // 过渡：先明确告诉玩家「结束了」，别让数子突然开始
+    $('status').textContent = '对局结束';
+    sndEnd();                                                     // 一声收尾音（静音时自动跳过）
+    $('cntB').textContent = '–'; $('cntW').textContent = '–';     // 比分先收起，等数子一枚枚数出来
+    const intro = document.getElementById('intro');
+    if(intro) intro.classList.add('on');
+    clearTimeout(introTO);
+    introTO = setTimeout(() => { introTO = null; startCounting(a, w, title, text); }, INTRO_MS);
+  }
+
+  function reset(){
+    thinking(false);
+    stopCounting(false);
+    $('sideB').classList.remove('win'); $('sideW').classList.remove('win');
+    fitBoard();
+    board = fresh(); turn = HUMAN; over = false; history = []; lastMove = null; busy = false;
+    $('over').classList.remove('on');
+    render(false); setStatus();
+  }
+
+  /* ---------- 交互 ---------- */
+  boardEl.addEventListener('click', e => {
+    const cell = e.target.closest('.cell');
+    if(!cell) return;
+    humanMove(+cell.dataset.r, +cell.dataset.c);
+  });
+
+  $('btnNew').onclick = () => { ac(); sndSoft(); reset(); };
+  $('overBtn').onclick = () => { ac(); sndSoft(); reset(); };
+  $('btnUndo').onclick = () => {
+    if(busy) return toast('电脑正在落子…');
+    if(!history.length) return toast('没有可悔的棋了');
+    // 回退到上一次「轮到我」的状态
+    let snap = null;
+    while(history.length){
+      snap = history.pop();
+      if(snap.turn === HUMAN) break;
+      snap = null;
+    }
+    if(!snap){ if(history.length) snap = history.pop(); else return toast('没有可悔的棋了'); }
+    ac(); sndSoft();
+    stopCounting(true);                                   // 悔棋时取消清点动画，数字回到真实值
+    $('sideB').classList.remove('win'); $('sideW').classList.remove('win');
+    board = snap.b; turn = snap.turn; lastMove = snap.last; over = false;
+    $('over').classList.remove('on');
+    render(true); setStatus();
+  };
+  $('btnSound').onclick = () => {
+    soundOn = !soundOn;
+    try{ localStorage.setItem(SKEY, soundOn ? '1' : '0'); }catch(e){}
+    setSoundLabel();
+    ac();
+    if(soundOn) sndSoft();
+  };
+  $('btnHint').onclick = () => {
+    hint = !hint;
+    $('btnHint').textContent = '提示：' + (hint ? '开' : '关');
+    render(false);
+  };
+  $('segLv').addEventListener('click', e => {
+    const b = e.target.closest('button'); if(!b) return;
+    depth = +b.dataset.lv;
+    [...$('segLv').children].forEach(x=>x.classList.toggle('on', x === b));
+    toast('难度：' + b.textContent + '（重开一局生效）');
+  });
+
+  reset();
+
+  // 只读调试钩子（不影响游戏）：控制台 __othello() 可查音效次数 / 电脑延时等
+  window.__othello = () => ({soundOn, sounds: soundCount, lastAiDelay, busy, over, turn, depth,
+                             black: counts(board)[0], white: counts(board)[1],
+                             status: $('status').textContent,
+                             audioState: actx ? actx.state : 'none'});
+})();
+</script>
+</body>
+</html>

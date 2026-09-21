@@ -1,0 +1,15 @@
+# 运行时日志（守护脚本每次运行都会写）
+ops/logs/
+*.log
+
+# APK 构建中间产物
+android/output/
+
+# 签名密钥：不进版本库，必须单独备份（丢了就无法覆盖安装升级）
+private/
+
+# Python / 编辑器 / 系统
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db

@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>仓库番 · 小游戏盒子</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#191d26; --card2:#202632; --line:#2b3242;
+    --txt:#e8ecf3; --dim:#8b95a7; --acc:#5b8cff; --acc2:#38d39f;
+    --mw:480px;                      /* 内容列宽：平板上放宽，别让棋盘挤在中间 */
+  }
+  @media (min-width:700px){ :root{ --mw:620px } }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+  html,body{margin:0}
+  body{
+    background:radial-gradient(1200px 600px at 50% -10%,#1b2233 0%,var(--bg) 60%);
+    color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    min-height:100vh;min-height:100dvh;              /* 整屏高度：信息区贴顶、操作区贴底 */
+    display:flex;flex-direction:column;align-items:center;
+    padding:calc(env(safe-area-inset-top) + 10px) 14px calc(env(safe-area-inset-bottom) + 10px);
+  }
+  .top{width:100%;max-width:var(--mw);display:flex;align-items:center;gap:8px;margin-bottom:10px;flex:0 0 auto}
+  .top a{color:var(--dim);text-decoration:none;font-size:20px;padding:6px 10px;border-radius:10px;background:var(--card);border:1px solid var(--line);line-height:1}
+  .top h1{font-size:18px;margin:0;flex:1;text-align:center;padding-right:38px}
+  .hud{width:100%;max-width:var(--mw);display:flex;gap:8px;margin-bottom:10px;flex:0 0 auto}
+  .hud div{
+    flex:1;background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:8px 6px;text-align:center
+  }
+  .hud .k{font-size:10.5px;color:var(--dim)}
+  .hud .v{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+  .hud .v.done{color:var(--acc2)}
+
+  .lvname{width:100%;max-width:var(--mw);font-size:11.5px;color:var(--dim);margin:-4px 0 9px;text-align:center;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 0 auto}
+
+  #stage{width:100%;max-width:var(--mw);flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;touch-action:none}
+  canvas{display:block;border-radius:14px;background:#12151c;border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.45)}
+
+  /* 方向键：山形（上 / 左下右），撤销竖排在右侧 —— 比 3×3 省一行 */
+  .pad{width:100%;max-width:var(--mw);display:grid;grid-template-columns:repeat(3,1fr) 68px;gap:8px;margin-top:12px;flex:0 0 auto}
+  .pad button{
+    font-size:26px;padding:16px 0;border-radius:14px;border:1px solid var(--line);
+    background:var(--card2);color:var(--txt);font-family:inherit;line-height:1
+  }
+  .pad button:active{background:var(--acc);border-color:var(--acc)}
+  .pad .sp{visibility:hidden}
+  .pad .undo{grid-column:4;grid-row:1/3;font-size:15px;padding:0}
+
+  .bar{width:100%;max-width:var(--mw);display:flex;gap:8px;margin-top:8px;flex:0 0 auto}
+  .bar button{
+    flex:1;font-size:13.5px;padding:12px 6px;border-radius:12px;border:1px solid var(--line);
+    background:var(--card);color:var(--txt);font-family:inherit
+  }
+  .bar button:active{transform:scale(.97)}
+  .bar button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+
+  #toast{
+    position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 88px);transform:translate(-50%,-12px);
+    background:#20262ff2;border:1px solid var(--line);padding:11px 18px;border-radius:12px;font-size:13.5px;
+    opacity:0;pointer-events:none;transition:.2s;max-width:88vw;text-align:center;z-index:7
+  }
+  #toast.on{opacity:1;transform:translate(-50%,0)}
+
+  #over{position:fixed;inset:0;background:rgba(8,10,14,.84);backdrop-filter:blur(3px);display:none;
+        align-items:center;justify-content:center;padding:22px;z-index:9}
+  #over.on{display:flex}
+  .panel{width:100%;max-width:340px;background:var(--card);border:1px solid var(--line);border-radius:20px;
+         padding:24px 20px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.6)}
+  .panel h2{margin:0 0 8px;font-size:22px}
+  .panel p{color:var(--dim);font-size:13.5px;margin:0 0 18px;line-height:1.6;white-space:pre-line}
+  .panel button{width:100%;font-size:15px;padding:13px;border-radius:12px;border:1px solid var(--line);
+                background:var(--card2);color:var(--txt);font-family:inherit;margin-bottom:8px}
+  .panel button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+
+  #picker{position:fixed;inset:0;background:rgba(8,10,14,.84);display:none;align-items:flex-end;z-index:8}
+  #picker.on{display:flex}
+  .sheet{width:100%;background:var(--card);border-top-left-radius:20px;border-top-right-radius:20px;
+         padding:18px 16px calc(env(safe-area-inset-bottom) + 20px);max-height:70vh;overflow:auto}
+  .sheet h3{margin:0 0 14px;font-size:16px}
+  .lv-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+  .lv-grid button{
+    aspect-ratio:1/1;border-radius:12px;border:1px solid var(--line);background:var(--card2);
+    color:var(--txt);font-size:15px;font-family:inherit
+  }
+  .lv-grid button.cur{border-color:var(--acc);background:var(--acc);color:#fff;font-weight:700}
+  .lv-grid button.cleared{color:var(--acc2);border-color:rgba(56,211,159,.4)}
+  .lv-grid button.locked{opacity:.32}
+
+  /* 矮屏（老款小屏手机）压缩控件高度，保证棋盘+方向键一屏放下 */
+  @media (max-height: 700px){
+    .pad button{padding:9px 0;font-size:20px}
+    .bar button{padding:9px 6px}
+    .hud div{padding:5px 4px}
+    .hud .v{font-size:14px}
+    .top{margin-bottom:6px}
+    .pad{margin-top:10px}
+  }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="/">‹</a>
+  <h1>仓库番</h1>
+</div>
+
+<div class="hud">
+  <div><div class="k">关卡</div><div class="v" id="hLv">1</div></div>
+  <div><div class="k">步数</div><div class="v" id="hMove">0</div></div>
+  <div><div class="k">推动</div><div class="v" id="hPush">0</div></div>
+  <div><div class="k">归位</div><div class="v" id="hBox">0/1</div></div>
+</div>
+
+<div class="lvname" id="hName">—</div>
+
+<div id="stage"><canvas id="cv"></canvas></div>
+
+<div class="pad">
+  <button class="sp"></button>
+  <button data-mv="U">▲</button>
+  <button class="sp"></button>
+  <button class="undo" id="btnUndo">撤销</button>
+  <button data-mv="L">◀</button>
+  <button data-mv="D">▼</button>
+  <button data-mv="R">▶</button>
+</div>
+
+<div class="bar">
+  <button id="btnReset">重开本关</button>
+  <button id="btnPrev">上一关</button>
+  <button id="btnNext">下一关</button>
+  <button class="pri" id="btnPick">选关</button>
+</div>
+
+<div id="toast"></div>
+
+<div id="over"><div class="panel">
+  <h2 id="overTitle">过关！</h2>
+  <p id="overText"></p>
+  <button class="pri" id="overNext">下一关</button>
+  <button id="overRetry">再玩一次</button>
+</div></div>
+
+<div id="picker"><div class="sheet">
+  <h3>选择关卡</h3>
+  <div class="lv-grid" id="lvGrid"></div>
+</div></div>
+
+<script>
+(function(){
+  /* ===== 关卡数据（全部经 BFS 求解器验证可解）===== */
+  const LEVELS = [
+    {name: "极简 · Easy #01", best: {pushes: 1, moves: 1}, map: ["#####", "#.$@#", "#####"]},
+    {name: "极简 · Easy #02", best: {pushes: 2, moves: 3}, map: ["#######", "#.$@$.#", "#######"]},
+    {name: "极简 · Easy #03", best: {pushes: 3, moves: 5}, map: ["  ###", "  #.#", "###$###", "#.$@$.#", "#######"]},
+    {name: "教学示例 · Illustrative #02", best: {pushes: 4, moves: 14}, map: ["  ####", "  #  #", "###  #", "#+*$ #", "#   ##", "#####"]},
+    {name: "极简 · Easy #05", best: {pushes: 5, moves: 6}, map: [" ###", " #.###", "##$#.#", "#.$@$##", "###$$.#", "  #.###", "  ###"]},
+    {name: "极简 · Easy #06", best: {pushes: 6, moves: 6}, map: ["#####", "#@$.##", "##$$.##", " #.$$.#", " ##.$##", "  ##.#", "   ###"]},
+    {name: "貌似容易 · #04", best: {pushes: 7, moves: 20}, map: ["    #########", "   ##       ##", "  ##  #####  #", "  #  ##   ## #", "### ##  $  # #", "#      *+*.# #", "#       #  # #", "######### ## #", "     #   $   #", "     #### # ##", "        #   #", "        #####"]},
+    {name: "极简 · Easy #08", best: {pushes: 8, moves: 21}, map: ["    ###", "   ##@#", "  ## $###", " ## $.#.#", "## $.#.$#", "# $.#.$ #", "# .#.$ ##", "# ##$ ##", "#    ##", "######"]},
+    {name: "极简 · Easy #09", best: {pushes: 9, moves: 31}, map: ["       ###", "      ##@#", "####### $#", "#    # $.#", "# ##  $.####", "#$ ###.###.#", "#.$ #####.$#", "##.$   #.$ #", " ##.## #$ ##", "  #### # ##", "     #   #", "     #####"]},
+    {name: "教学示例 · Illustrative #06", best: {pushes: 10, moves: 46}, map: ["#########", "#       ##", "#        #", "# +* #   #", "#  **   ##", "#   **$ #", "#     # #", "#    #  #", "####   ##", "   #####"]},
+    {name: "教学示例 · Illustrative #13", best: {pushes: 14, moves: 44}, map: ["#########", "#       #", "# $. .$ #", "# **$*. #", "#  $+$  #", "#  *$*. #", "# *. .$ #", "#       #", "#########"]},
+    {name: "教学示例 · Illustrative #11", best: {pushes: 16, moves: 74}, map: ["######", "#    #", "# ## ###", "#  #   ##", "#  $* . ##", "#  .*$@. #", "#    $$  #", "#  .*$.. #", "#  $* * ##", "#  #   ##", "# ## ###", "#    #", "######"]},
+    {name: "折磨 · #06", best: {pushes: 17, moves: 111}, map: ["      ########", "  #####      #", "  #     #### #", "### ###$#  # #", "#   #      # ###", "# ### #### #   #", "#     *+*  ### #", "###  #.**    # #", "  #### $ ### # #", "     ##  #   # #", "     #  ## ### #", "     #  ## #   #", "     #  #    ###", "     #    ####", "     ######"]},
+    {name: "折磨 · #04", best: {pushes: 18, moves: 71}, map: ["     ### #####", "###### ###   ###", "#    #   # #   #", "# ##  $# # ### #", "#  # # #   #   #", "## ###.##### ###", "#  $ + *       #", "### ##.####### #", " #   # #       #", " # # #$  #######", " #     ###", " ##### #", "     ###"]},
+    {name: "貌似容易 · #01", best: {pushes: 19, moves: 49}, map: [" ###  ####", " # ####  #", " # $     #", " # ###   #", "##   ### ####", "#      @    #", "#   ## # ## #", "#.####      #", "###  ########"]},
+    {name: "教学示例 · Illustrative #12", best: {pushes: 22, moves: 91}, map: ["   ########", "####      ##", "#  #       #", "#  $$$     #", "#   $.**   #", "###...@...###", " #   **.$   #", " #     $$$  #", " #       #  #", " ##      ####", "  ########"]},
+    {name: "貌似容易 · #02", best: {pushes: 30, moves: 69}, map: [" #########", " #  #    #", " #       #", " # ##   ####", " #.# $@$ #.#", "## #    ## #", "#  ######  ##", "#           #", "## ######  ##", " ###    ####"]},
+    {name: "教学示例 · Illustrative #08", best: {pushes: 32, moves: 91}, map: ["  ######", " ##    #####", " #     #   #", " # ****    #", " #    ##  ##", " #     # ##", " # ##### #", " #     # ##", "##     #  #", "#  ***+#$ #", "#      #  #", "###########"]},
+    {name: "教学示例 · Illustrative #07", best: {pushes: 34, moves: 105}, map: [" ###### #####", "##.   ###   #", "#+*     *   #", "##  ####** ##", " ####  $ *  #", "    # ##    #", "    #  ##   #", "    # # $ ###", "    #   # #", "    ##    #", "     ###  #", "       ####"]},
+    {name: "教学示例 · Illustrative #04", best: {pushes: 46, moves: 110}, map: ["       ####", "########  ##", "#          ###", "# @$$ ##   ..#", "# $$   ##  ..#", "#         ####", "###########"]},
+    {name: "折磨 · #02", best: {pushes: 47, moves: 96}, map: [" ########", "##   #  #", "#       #", "#    #  ####", "###  # ##  ####", " #   # #      #", " #   # #      #", " # ### # ## ###", " #  # $+* # #", " #  ##   ## #", "##   ##     ###", "#             #", "#   #######   #", "#####     #####"]},
+    {name: "貌似容易 · #03", best: {pushes: 48, moves: 111}, map: [" #########", " #  #    #", " #       #", " # ## $ ####", " #.# $@$ #.#", "## #    ## #", "#  ######  ##", "#         . #", "## ######  ##", " ###    ####"]},
+    {name: "貌似容易 · #08", best: {pushes: 81, moves: 196}, map: ["   #############", "   #  . .#     #", "   #     #     #", "####     #     #", "# .# $   #  .  #", "#  # $@$ $ #   #", "# .##$$$$   .  #", "#   #       #  #", "#   ####    #  #", "#     .#. ###  #", "#              #", "#  ##########  #", "####        ####"]},
+    {name: "教学示例 · Illustrative #14", best: {pushes: 91, moves: 209}, map: ["  ########", " ##      #", " #       ###", "##         #", "#   #$$    #", "# $$  $$   #", "## $$  $$ ##", " #  $$  $$#", " ## .#.#. ##", " # . . . . #", " #  . + .  #", " ##. . . .##", "  #########"]}
+  ];
+
+  const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  const $ = id => document.getElementById(id);
+  const KEY = 'sokoban_cleared';
+  let cleared = new Set(JSON.parse(localStorage.getItem(KEY) || '[]'));
+  const BKEY = 'sokoban_best';
+  let bests = {};
+  try{ bests = JSON.parse(localStorage.getItem(BKEY) || '{}') || {}; }catch(e){ bests = {}; }
+
+  const WALL='#', FLOOR=' ', GOAL='.', BOX='$', BOXG='*', MAN='@', MANG='+';
+  let lv = 0;            // 关卡索引
+  let map, rows, cols, cell, moves, pushes, hist, win, reach, overTimer = null;
+
+  /* ---------- 解析关卡 ---------- */
+  function load(idx){
+    lv = Math.max(0, Math.min(LEVELS.length - 1, idx));
+    const def = LEVELS[lv] || {};
+    const raw = def.map || def;                       // 兼容旧的纯数组格式
+    cols = Math.max(...raw.map(s => s.length));
+    rows = raw.length;
+    map = raw.map(s => s.padEnd(cols, ' ').split(''));
+    moves = 0; pushes = 0; hist = []; win = false;
+    clearTimeout(overTimer); overTimer = null;      // 取消上一关残留的「通关面板」定时器
+    reach = computeReach();          // 玩家能走到的格子=室内，其余空白不画（避免空洞）
+    $('over').classList.remove('on');
+    layout(); draw(); hud(); saveCur();
+  }
+  function computeReach(){
+    const s = new Set(), p = findPlayer();
+    if(!p) return s;
+    const stack = [p];
+    while(stack.length){
+      const [r, c] = stack.pop();
+      if(r < 0 || r >= rows || c < 0 || c >= cols) continue;
+      if(map[r][c] === WALL) continue;
+      const k = r + ',' + c;
+      if(s.has(k)) continue;
+      s.add(k);
+      stack.push([r+1,c], [r-1,c], [r,c+1], [r,c-1]);
+    }
+    return s;
+  }
+  function findPlayer(){ for(let r=0;r<rows;r++) for(let c=0;c<cols;c++) if(map[r][c]===MAN||map[r][c]===MANG) return [r,c]; return null; }
+  function boxCount(){ let t=0,d=0; for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){ if(map[r][c]===BOX) t++; else if(map[r][c]===BOXG){t++;d++;} } return [d,t]; }
+
+  /* ---------- 尺寸自适应 ---------- */
+  function applySize(){
+    const w = cell * cols, h = cell * rows, dpr = window.devicePixelRatio || 1;
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  function layout(){
+    const stageEl = document.getElementById('stage');
+    const mw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--mw')) || 480;
+    const isWide = window.innerWidth >= 700;
+    const availW = Math.min(window.innerWidth - 28, mw);
+    // 整屏 flex 布局：#stage 吃掉剩余空间 ⇒ 先放个最小棋盘把布局稳定下来，再量它的真实高度
+    cell = 18; applySize();
+    const availH = (stageEl && stageEl.clientHeight) ? stageEl.clientHeight : Math.max(150, window.innerHeight - 320);
+    cell = Math.floor(Math.min(availW / cols, availH / rows, isWide ? 88 : 66));
+    cell = Math.max(cell, 18);       // 下限 18px：大关（16 列 / 15 行）在小屏才放得下
+    applySize();
+    // 兜底：整页仍放不下就继续缩；缩到 18px 还放不下就允许轻微滚动（不牺牲可读性）
+    let guard = 0;
+    while(document.documentElement.scrollHeight > window.innerHeight + 1 && cell > 18 && guard++ < 40){
+      cell--; applySize();
+    }
+  }
+
+  /* ---------- 绘制 ---------- */
+  function rr(x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  function draw(){
+    const w = cell * cols, h = cell * rows;
+    ctx.clearRect(0, 0, w, h);
+    for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+      const x = c * cell, y = r * cell, ch = map[r][c];
+      if(ch === WALL){
+        ctx.fillStyle = '#2d3444'; rr(x + 1, y + 1, cell - 2, cell - 2, Math.max(3, cell * .12)); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.05)'; rr(x + 1, y + 1, cell - 2, (cell - 2) * .42, Math.max(3, cell * .12)); ctx.fill();
+        continue;
+      }
+      if(ch === ' ' && !isInside(r, c)) continue;
+      ctx.fillStyle = '#1a1f29'; ctx.fillRect(x, y, cell, cell);
+      ctx.strokeStyle = 'rgba(255,255,255,.03)'; ctx.strokeRect(x + .5, y + .5, cell - 1, cell - 1);
+      if(ch === GOAL || ch === BOXG || ch === MANG){
+        ctx.beginPath();
+        ctx.arc(x + cell/2, y + cell/2, cell * .17, 0, Math.PI * 2);
+        ctx.fillStyle = ch === GOAL ? '#38d39f' : 'rgba(255,255,255,.5)';
+        ctx.fill();
+      }
+      if(ch === BOX || ch === BOXG){
+        const pad = cell * .12, s = cell - pad * 2;
+        const g = ctx.createLinearGradient(x, y, x, y + cell);
+        if(ch === BOXG){ g.addColorStop(0, '#4fdcaa'); g.addColorStop(1, '#1f9c72'); }
+        else { g.addColorStop(0, '#e0a45a'); g.addColorStop(1, '#a86a25'); }
+        ctx.fillStyle = g; rr(x + pad, y + pad, s, s, Math.max(3, cell * .14)); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1.4; ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x + pad, y + cell/2); ctx.lineTo(x + cell - pad, y + cell/2);
+        ctx.moveTo(x + cell/2, y + pad); ctx.lineTo(x + cell/2, y + cell - pad);
+        ctx.stroke();
+      }
+      if(ch === MAN || ch === MANG){
+        ctx.beginPath();
+        ctx.arc(x + cell/2, y + cell * .40, cell * .15, 0, Math.PI * 2);
+        ctx.fillStyle = '#eef2f8'; ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(x + cell*.30, y + cell*.82); ctx.lineTo(x + cell*.70, y + cell*.82);
+        ctx.lineTo(x + cell*.62, y + cell*.55); ctx.lineTo(x + cell*.38, y + cell*.55);
+        ctx.closePath(); ctx.fillStyle = '#5b8cff'; ctx.fill();
+      }
+    }
+  }
+  function isInside(r, c){ return reach.has(r + ',' + c); }
+
+  /* ---------- 游戏逻辑 ---------- */
+  function move(dir){
+    if(win) return;
+    const d = {U:[-1,0], D:[1,0], L:[0,-1], R:[0,1]}[dir];
+    const p = findPlayer();
+    if(!p) return;
+    const [r, c] = p, nr = r + d[0], nc = c + d[1];
+    if(nr < 0 || nr >= rows || nc < 0 || nc >= cols) return;
+    const t = map[nr][nc];
+    if(t === WALL) return;
+    let pushed = false;
+    if(t === BOX || t === BOXG){
+      const br = nr + d[0], bc = nc + d[1];
+      if(br < 0 || br >= rows || bc < 0 || bc >= cols) return;
+      const bt = map[br][bc];
+      if(bt === WALL || bt === BOX || bt === BOXG) return;
+      map[br][bc] = (bt === GOAL) ? BOXG : BOX;
+      pushed = true;
+    }
+    // 记录历史（用于撤销）
+    hist.push({r, c, nr, nc, pushed, br: pushed ? nr + d[0] : -1, bc: pushed ? nc + d[1] : -1});
+    map[r][c] = (map[r][c] === MANG) ? GOAL : FLOOR;
+    map[nr][nc] = (map[nr][nc] === BOXG || map[nr][nc] === GOAL) ? MANG : MAN;
+    moves++; if(pushed) pushes++;
+    draw(); hud();
+    checkWin();
+  }
+
+  function undo(){
+    if(!hist.length){ toast('没有可撤销的步骤'); return; }
+    const h = hist.pop();
+    // 注意顺序：先清箱子落点，再清玩家格，最后把箱子/玩家放回原位（顺序错了会让箱子凭空消失）
+    if(h.pushed){
+      map[h.br][h.bc] = (map[h.br][h.bc] === BOXG) ? GOAL : FLOOR;
+    }
+    map[h.nr][h.nc] = (map[h.nr][h.nc] === MANG) ? GOAL : FLOOR;
+    if(h.pushed){
+      map[h.nr][h.nc] = (map[h.nr][h.nc] === GOAL) ? BOXG : BOX;
+    }
+    map[h.r][h.c] = (map[h.r][h.c] === GOAL) ? MANG : MAN;
+    moves--; if(h.pushed) pushes--;
+    draw(); hud();
+  }
+
+  function checkWin(){
+    const [d, t] = boxCount();
+    if(d === t && t > 0){
+      win = true;
+      cleared.add(lv + 1);
+      localStorage.setItem(KEY, JSON.stringify([...cleared]));
+      // 记录本关最好成绩
+      const k = String(lv + 1), prev = bests[k];
+      const isNew = !prev || moves < prev.moves;
+      if(isNew){
+        bests[k] = {moves, pushes};
+        try{ localStorage.setItem(BKEY, JSON.stringify(bests)); }catch(e){}
+      }
+      const ref = (LEVELS[lv] || {}).best;
+      // 关键：数值在「通关那一刻」快照下来；延迟回调若被切关打断，也要能取消（否则会串到下一关的数据）
+      const snap = {moves, pushes, isNew, prev, ref,
+                    last: (lv + 1 >= LEVELS.length), no: lv + 1};
+      clearTimeout(overTimer);
+      overTimer = setTimeout(() => {
+        $('overTitle').textContent = snap.last ? '🏆 全部通关！' : '🎉 过关！';
+        let txt = `第 ${snap.no} 关　你用 ${snap.moves} 步 / 推动 ${snap.pushes} 次`;
+        if(snap.ref) txt += `\n参考最优 ${snap.ref.moves} 步 / ${snap.ref.pushes} 推`;
+        if(snap.prev && snap.isNew) txt += '\n🏅 刷新了你的纪录';
+        else if(snap.prev) txt += `\n你的最好成绩 ${snap.prev.moves} 步`;
+        $('overText').textContent = txt;
+        $('overNext').style.display = snap.last ? 'none' : 'block';
+        $('over').classList.add('on');
+      }, 180);
+    }
+  }
+
+  function hud(){
+    const [d, t] = boxCount();
+    $('hLv').textContent = lv + 1;
+    $('hMove').textContent = moves;
+    $('hPush').textContent = pushes;
+    const el = $('hBox');
+    el.textContent = d + '/' + t;
+    el.classList.toggle('done', d === t);
+    const def = LEVELS[lv] || {};
+    $('hName').textContent = `第 ${lv + 1} 关` + (def.name ? ' · ' + def.name : '');
+  }
+
+  function toast(msg){
+    const t = $('toast');
+    t.textContent = msg; t.classList.add('on');
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 1500);
+  }
+  function saveCur(){ try{ localStorage.setItem('sokoban_last', lv); }catch(e){} }
+
+  /* ---------- 选关面板 ---------- */
+  function buildPicker(){
+    const g = $('lvGrid'); g.innerHTML = '';
+    LEVELS.forEach((_, i) => {
+      const b = document.createElement('button');
+      b.textContent = i + 1;
+      if(i === lv) b.classList.add('cur');
+      if(cleared.has(i + 1)) b.classList.add('cleared');
+      const rec = bests[String(i + 1)];
+      const def = LEVELS[i] || {};
+      b.title = (def.name || '') + (rec ? ` （你的最好成绩 ${rec.moves} 步）` : '');
+      b.onclick = () => { $('picker').classList.remove('on'); load(i); };
+      g.appendChild(b);
+    });
+  }
+
+  /* ---------- 交互 ---------- */
+  document.querySelectorAll('.pad button[data-mv]').forEach(b => {
+    b.addEventListener('click', () => move(b.dataset.mv));
+  });
+  document.addEventListener('keydown', e => {
+    const k = {ArrowUp:'U', ArrowDown:'D', ArrowLeft:'L', ArrowRight:'R', w:'U', s:'D', a:'L', d:'R'}[e.key];
+    if(k){ e.preventDefault(); move(k); }
+    if(e.key === 'z' || e.key === 'Backspace'){ e.preventDefault(); undo(); }
+    if(e.key === 'r'){ load(lv); }
+  });
+  // 滑动操作
+  let sx = 0, sy = 0, tracking = false;
+  const stage = $('stage');
+  stage.addEventListener('touchstart', e => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; tracking = true; }, {passive:true});
+  stage.addEventListener('touchmove', e => {
+    if(!tracking) return;
+    const t = e.touches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+    if(Math.hypot(dx, dy) > 26){
+      if(Math.abs(dx) > Math.abs(dy)) move(dx > 0 ? 'R' : 'L'); else move(dy > 0 ? 'D' : 'U');
+      tracking = false;
+    }
+  }, {passive:true});
+  stage.addEventListener('touchend', () => { tracking = false; }, {passive:true});
+
+  $('btnUndo').onclick = undo;
+  $('btnReset').onclick = () => { load(lv); toast('已重开本关'); };
+  $('btnPrev').onclick = () => { if(lv > 0) load(lv - 1); else toast('已经是第一关'); };
+  $('btnNext').onclick = () => { if(lv < LEVELS.length - 1) load(lv + 1); else toast('已经是最后一关'); };
+  $('btnPick').onclick = () => { buildPicker(); $('picker').classList.add('on'); };
+  $('picker').onclick = e => { if(e.target === $('picker')) $('picker').classList.remove('on'); };
+  $('overNext').onclick = () => { load(Math.min(LEVELS.length - 1, lv + 1)); };
+  $('overRetry').onclick = () => { load(lv); };
+  window.addEventListener('resize', () => { layout(); draw(); });
+  window.addEventListener('orientationchange', () => setTimeout(() => { layout(); draw(); }, 250));
+
+  const last = parseInt(localStorage.getItem('sokoban_last') || '0', 10);
+  load(isNaN(last) ? 0 : last);
+
+  // 只读调试钩子：控制台里 __sokoban() 可查看当前局面（不影响游戏）
+  window.__sokoban = () => ({ lv: lv + 1, moves, pushes, win, map: map.map(r => r.join('')) });
+})();
+</script>
+</body>
+</html>
