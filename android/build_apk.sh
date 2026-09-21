@@ -75,6 +75,9 @@ echo "==> 清理输出目录 $OUT"
 rm -rf "$OUT"
 mkdir -p "$OUT/compiled" "$OUT/R" "$OUT/classes" "$OUT/dex"
 
+echo "==> 0/8 同步 web/ -> android/project/assets/（避免新游戏漏进 APK）"
+python3 "$PROJECT/android/sync_assets.py"
+
 echo "==> 1/8 aapt2 编译资源（逐文件；compile --dir 会把输出目录误当输入）"
 "$BUILD/aapt2" compile "$PROJ/res/values/strings.xml"      -o "$OUT/compiled"
 "$BUILD/aapt2" compile "$PROJ/res/drawable/ic_launcher.xml" -o "$OUT/compiled"

@@ -1,6 +1,6 @@
 # 小游戏盒子（Games Box）
 
-纯静态的网页小游戏合集：手机浏览器打开就能玩，两个游戏（黑白棋「奥赛罗」、推箱子「仓库番」）都是单文件自包含、零外部依赖、断网可玩。另附一个最小 WebView 壳工程，可打成离线 APK 装到安卓设备上。
+纯静态的网页小游戏合集：手机浏览器打开就能玩。三个游戏（黑白棋「奥赛罗」、推箱子「仓库番」、打砖块）都是单文件自包含、零外部依赖、断网可玩。另附一个最小 WebView 壳工程，可打成离线 APK 装到安卓设备上。
 
 - 项目根：`/volume1/docker/hermes/files/bot_workspace/projects/games-box`
 - 服务端口：`4321`
@@ -13,9 +13,11 @@ games-box/
 ├── web/                     # 静态站点根（http.server 直接托管的就是这里）
 │   ├── index.html           # 主页索引（卡片式）
 │   ├── othello/index.html   # 黑白棋（单文件，含 AI / 音效 / 逐枚清点比分）
-│   └── sokoban/index.html   # 仓库番（经典关卡集，含最优解参考）
+│   ├── sokoban/index.html   # 仓库番（经典关卡集，含最优解参考）
+│   └── breakout/index.html  # 打砖块（8 关，触屏拖动挡板，砖块有硬度）
 ├── android/
 │   ├── project/             # 最小 WebView 工程：AndroidManifest + res/ + src/ + assets/
+│   ├── sync_assets.py       # 把 web/ 同步成 assets/ 的离线版（链接改写），构建前自动跑
 │   ├── build_apk.sh         # 可重复 APK 构建脚本（aapt2/javac/d8/zipalign/apksigner）
 │   └── output/              # 构建中间产物（已 gitignore）
 ├── tools/                   # 关卡生成/验证/难度筛选、黑白棋 fuzz 与整局测试
@@ -98,11 +100,20 @@ bash android/build_apk.sh --genkey     # 密钥丢失时先生成一把新的
 ```bash
 python3 tools/verify_by_solution.py     # 重放官方解法，验证关卡集可解性
 node   tools/test_othello.js            # 黑白棋整局对局 + 计时断言
+node   tools/test_breakout.js           # 打砖块：完美挡板能否打通 8 关 / 边界不变量 / 计分一致性 / 音效
 node   tools/hunt_stall.js              # 卡死猎手
 ```
 
 > 注意：这些脚本里引用到的 `classic_analysis.json` / `final_levels2.json` 等属于**中间产物**，库中本就没有，
 > 需先跑上游步骤生成。游戏本体（`web/`、`android/`）不依赖 `tools/`。
+
+## 加新游戏时要动的地方
+
+1. 新建 `web/<游戏名>/index.html`（单文件自包含、零外部依赖，返回键写 `href="/"`）。
+2. 在 `web/index.html` 的卡片列表里加一张卡（`href="/<游戏名>/"`）。
+3. 跑 `python3 android/sync_assets.py` 同步离线资源 —— **网页版和 APK 版的链接写法不同**
+   （网页版 `/othello/`，离线版 `othello/index.html`），这一步不跑，新游戏就会「网页上有、APK 里没有」。
+   `build_apk.sh` 已内置这一步，打 APK 时会自动同步。
 
 ## 手机直接下载安装包
 
