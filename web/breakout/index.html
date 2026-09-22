@@ -405,6 +405,12 @@
 
   function showDbg(){
     const el = $('dbg');
+    // 诊断条是 fixed 定位，默认会压住底部按钮行（开着诊断就点不到暂停/重开）。
+    // 这里按按钮行的实际高度把它顶上去，手机/桌面都自适应。
+    try{
+      const bar = document.querySelector && document.querySelector('.bar');
+      if(bar && bar.getBoundingClientRect) el.style.bottom = Math.round(bar.getBoundingClientRect().height + 12) + 'px';
+    }catch(e){}
     el.classList.add('on');
     el.textContent = dbgText();
     return el.textContent;
