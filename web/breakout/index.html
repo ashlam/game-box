@@ -446,8 +446,12 @@
       scale = s;
     };
     apply(S);
-    while(document.documentElement.scrollHeight > window.innerHeight + 1 && guard++ < 30){
-      S *= 0.965; apply(S);
+    // ★ 目标不是「刚好不溢出」而是「留出底部余量」：
+    //   真机实测（飞书内置浏览器 · 视口 411×740）出现 741/740 的 1px 溢出，
+    //   底部按钮行贴着屏幕下沿、下面还有飞书自己的工具栏，手感很挤。
+    //   所以这里要求整页比视口矮 10px 以上，宁可画布小 1~2%。
+    while(document.documentElement.scrollHeight > window.innerHeight - 10 && guard++ < 40){
+      S *= 0.985; apply(S);
     }
     draw();
     if(/[?&]debug/.test(location.search)) showDbg();
