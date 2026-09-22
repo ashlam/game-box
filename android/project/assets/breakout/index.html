@@ -20,7 +20,7 @@
     color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
     min-height:100vh;min-height:100dvh;              /* 整屏高度：信息区贴顶、操作区贴底 */
     display:flex;flex-direction:column;align-items:center;
-    padding:calc(env(safe-area-inset-top) + 10px) 14px calc(env(safe-area-inset-bottom) + 10px);
+    padding:calc(env(safe-area-inset-top) + 6px) 4px calc(env(safe-area-inset-bottom) + 6px);   /* 左右只留 4px */
   }
   .top{width:100%;max-width:var(--mw);display:flex;align-items:center;gap:8px;margin-bottom:10px;flex:0 0 auto}
   .top a{color:var(--dim);text-decoration:none;font-size:20px;padding:6px 10px;border-radius:10px;background:var(--card);border:1px solid var(--line);line-height:1}
@@ -49,6 +49,36 @@
     opacity:0;pointer-events:none;transition:.2s;max-width:88vw;text-align:center;z-index:7
   }
   #toast.on{opacity:1;transform:translate(-50%,0)}
+
+  /* ?debug=1 时显示的一行诊断，用来在真机上直接读渲染参数 */
+  #dbg{position:fixed;left:6px;bottom:6px;z-index:60;display:none;font-size:10px;line-height:1.4;
+       color:#8b95a7;background:rgba(0,0,0,.72);border:1px solid var(--line);border-radius:7px;
+       padding:3px 7px;max-width:96vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+  #dbg.on{display:block}
+
+  /* 顶部压成一行（统计塞进标题那一行）、按钮压扁、宽度上限放开 —— 把屏幕尽量让给场地 */
+  body.v2{--mw:2400px}
+  body.v2 .top{margin-bottom:6px}
+  body.v2 .top a{font-size:18px;padding:4px 9px;border-radius:9px}
+  body.v2 .top h1{flex:1;text-align:left;padding-right:0;font-size:15px;color:var(--dim)}
+  body.v2 .hud{margin:0 0 0 auto;width:auto;gap:9px;align-items:center;
+               background:var(--card);border:1px solid var(--line);border-radius:11px;padding:5px 10px}
+  body.v2 .hud>div{background:none;border:0;border-radius:0;padding:0;display:flex;align-items:center;gap:5px}
+  body.v2 .hud .k{font-size:11.5px}
+  body.v2 .hud .v{font-size:14px}
+  body.v2 .bar{margin-top:8px}
+  body.v2 .bar button{font-size:13px;padding:9px 6px;border-radius:11px}
+  @media (max-height:700px){
+    body.v2 .bar button{padding:7px 6px;font-size:12px}
+    body.v2 .bar{margin-top:6px}
+  }
+  @media (orientation:landscape) and (max-height:600px){
+    body.v2 .top{margin-bottom:3px}
+    body.v2 .top h1{font-size:13px}
+    body.v2 .hud{padding:3px 8px;gap:7px}
+    body.v2 .bar{margin-top:5px}
+    body.v2 .bar button{padding:6px 6px;font-size:11.5px}
+  }
 
   #over{position:fixed;inset:0;background:rgba(8,10,14,.84);backdrop-filter:blur(3px);display:none;
         align-items:center;justify-content:center;padding:22px;z-index:9}
@@ -92,6 +122,7 @@
 </div>
 
 <div id="toast"></div>
+<div id="dbg"></div>
 
 <div id="over"><div class="panel">
   <h2 id="overTitle">第 1 关</h2>
@@ -107,11 +138,37 @@
   /* ================= 逻辑坐标系（跟屏幕无关，绘制时统一缩放） ================= */
   const W = 320;                 // 逻辑宽度固定
   let   H = 440;                 // 逻辑高度按屏幕比例动态算（见 layout），不然手机上画布上下会各空一大块
-  const H_MIN = 400, H_MAX = 620, H_REF = 440;   // H 的夹取范围；H_REF 用于把球速换算成「每屏多少」
-  const M = 10, GAP = 4, COLS = 8;
-  const BRICK_W = (W - 2 * M - (COLS - 1) * GAP) / COLS;   // 34
-  const BRICK_H = 13, BRICK_TOP = 26;
+  const H_MIN = 180, H_MAX = 800, H_REF = 440;   // 夹取范围放宽：矮屏/横屏若还硬撑最小值，画布会被压得极小
+
+  /* ================= 兼容版核心：列数随屏幕宽度反推 =================
+     原理（整件事的关键）：
+       「单块砖占屏宽的百分比 ≈ 100 / 列数」
+       推导：砖宽 × scale / 可用宽
+             = [(W - 2M - (COLS-1)GAP)/COLS] × (可用宽/W) / 可用宽
+             ≈ 1 / COLS                    ← 逻辑宽 W 被约掉了
+     也就是：画面「缩放」唯一的控制量是【列数】，改逻辑尺寸 / scale / DPR 都没用。
+
+     把列数写成全局常量，必然只能讨好一种屏幕：
+       · 按大屏调 8 列 → 手机上每块砖只有 38×15px（"太小了"）
+       · 按手机调 4 列 → 1276px 的桌面上变成 4 块 315px 的巨砖（"不伦不类"）
+
+     所以让列数跟着可用宽度走，使单块砖在任何设备上都落在 ~84~103px：
+       手机 382px → 4 列(84px)   平板 759px → 8 列(87px)   桌面 1276px → 12 列(103px)
+     ================================================================ */
+  const COLS_TARGET_PX = 92;       // 每块砖的目标屏幕宽度
+  const BRICK_TOP = 26;
   const MAX_LEVEL = 8;
+
+  /* M 是砖墙左右两侧的留白。它必须大于球直径，否则球挤不进「砖墙边缘 ↔ 侧墙」那条缝，
+     一旦碰到最外侧砖的侧面就会被法线推到墙外。
+     实测（Node 回归抓到）：M=12 而球直径 14 时，球被顶到 x=315 > 墙限 313，越界 2 次。
+     原版 M=10 / 球直径 9 刚好能过，所以没暴露这个坑。 */
+  let M = 16, GAP = 5, BRICK_H = 26;
+  let COLS = 8, BRICK_W = 0;       // 真实列数在 layout() 里按可用宽度反推
+
+  function recomputeBrickW(){ BRICK_W = (W - 2 * M - (COLS - 1) * GAP) / COLS; }
+  function computeCols(availW){ return clamp(Math.round(availW / COLS_TARGET_PX), 4, 12); }
+  function maxRows(){ return clamp(Math.floor((H - 140) / (BRICK_H + GAP)), 3, 7); }
 
   const cv = document.getElementById('cv');
   const ctx = cv.getContext('2d');
@@ -188,10 +245,11 @@
 
   function levelCfg(n){
     return {
-      rows:  Math.min(6, 3 + Math.floor((n - 1) / 2)),   // 3,3,4,4,5,5,6,6 —— 别一上来就 4 行 32 块（实测 128 秒/关，太磨人）
+      // 砖块总数从 ~24 起（列数越多、行数越少），不随屏幕变宽而暴涨
+      rows:  Math.min(maxRows(), clamp(Math.round(24 / COLS), 2, 7) + Math.floor((n - 1) / 2)),
       hard:  2, hardRows: n >= 4 ? 1 : 0,                // 第 4 关起最上面一行要打两下
       speedBase: Math.min(460, 300 + (n - 1) * 24),      // 球速要够快，否则来回一趟太久
-      paddleW: Math.max(40, 56 - (n - 1) * 2)
+      paddleW: Math.max(50, 76 - (n - 1) * 3)
     };
   }
 
@@ -203,7 +261,7 @@
   /* 逻辑高度变了（旋转屏幕 / 换设备）⇒ 挡板位置和球的位置都得跟着挪，否则会卡在场地外 */
   function onFieldResize(){
     if(!paddle || !ball) return;
-    paddle.y = H - 22;
+    paddle.y = H - 24;
     ball.y = ball.stuck ? paddle.y - ball.r - 1 : clamp(ball.y, ball.r + 0.5, H - ball.r - 0.5);
   }
 
@@ -238,8 +296,8 @@
     if(!keepScore) score = 0;
     lives = 3;
     bricks = makeBricks(); alive = bricks.length;
-    paddle = {x: W / 2, y: H - 22, w: cfg.paddleW, h: 8, vx: 0, target: W / 2};
-    ball = {x: W / 2, y: 0, r: 4.5, vx: 0, vy: 0, stuck: true, trail: []};
+    paddle = {x: W / 2, y: H - 24, w: cfg.paddleW, h: 12, vx: 0, target: W / 2};
+    ball = {x: W / 2, y: 0, r: 7, vx: 0, vy: 0, stuck: true, trail: []};
     particles = []; shakeT = 0; flashT = 0;
     state = 'ready';                       // ready -> play -> pause -> lost/clear/over
     resetBall(true);
@@ -264,8 +322,11 @@
   function layout(){
     const stageEl = $('stage');
     const mw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--mw')) || 480;
-    const availW = Math.min(window.innerWidth - 28, mw);
+    const availW = Math.min(window.innerWidth - 8, 2400);   // 8 = body 左右各 4px
     const availH = (stageEl && stageEl.clientHeight) ? stageEl.clientHeight : Math.max(200, window.innerHeight - 300);
+    // ★ 列数随可用宽度反推：这是唯一能真正控制画面缩放的量（见文件头注释）
+    const want = computeCols(availW);
+    if(want !== COLS){ COLS = want; recomputeBrickW(); startLevel(level, true); }
     // 逻辑高度跟着 stage 的宽高比走 ⇒ 画布正好把 stage 填满，不留上下两块空白
     const targetH = clamp(Math.round(W * availH / availW), H_MIN, H_MAX);
     if(targetH !== H){ H = targetH; onFieldResize(); applySpeed(); }
@@ -286,6 +347,14 @@
       S *= 0.965; apply(S);
     }
     draw();
+    if(/[?&]debug/.test(location.search)){
+      const el = $('dbg');
+      el.classList.add('on');
+      el.textContent = `兼容版 · 视口 ${window.innerWidth}×${window.innerHeight}`
+        + ` · 画布 ${Math.round(W * S)}×${Math.round(H * S)} · 逻辑 ${W}×${H} · scale ${S.toFixed(2)}`
+        + ` · 砖 ${Math.round(BRICK_W * S)}×${Math.round(BRICK_H * S)}px`
+        + ` · ${COLS}列 ${cfg ? cfg.rows : '?'}行 · 挡板 ${Math.round((cfg ? cfg.paddleW : 0) * S)}px`;
+    }
   }
   let scale = 1;
 
@@ -441,6 +510,10 @@
       syncHud();
       break;                              // 一步只处理一块，避免同帧反复反射
     }
+
+    // ★ 不变量兜底：砖块碰撞沿法线把球推出重叠，可能把它顶到墙外（砖离墙太近时就会）。
+    //   「球永不越界」是回归测试盯着的不变量，这里在子步进收尾处再夹一次保证它成立。
+    ball.x = clamp(ball.x, ball.r, W - ball.r);
 
     // 掉出底部
     if(ball.y - ball.r > H){
@@ -681,6 +754,16 @@
   document.addEventListener('visibilitychange', () => { if(document.hidden) pause(); });
 
   /* ================= 启动 ================= */
+  // 兼容版：给 body 打标（CSS 覆盖用），并把统计塞进标题那一行 ⇒ 顶部只占一行
+  document.body.classList.add('v2');
+  (function(){
+    const topEl = document.querySelector('.top'), hudEl = document.querySelector('.hud');
+    if(topEl && hudEl) topEl.appendChild(hudEl);
+  })();
+  // 先按窗口宽度估一次列数，免得 startLevel 建一次又被 layout 重建
+  COLS = computeCols(Math.min(window.innerWidth - 8, 2400));
+  recomputeBrickW();
+
   startLevel(1, false);
   layout();
   window.addEventListener('resize', layout);
