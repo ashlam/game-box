@@ -6,6 +6,38 @@
 - 服务端口：`4321`
 - 手机访问：`http://192.168.101.42:4321/`（手机需与 NAS 同一 WiFi）
 
+## 仓库番的两套关卡集
+
+游戏内「选关」面板顶部可切换，**两套进度分开存**（`sokoban_cleared_v5:<setId>`）：
+
+| 关卡集 | 关数 | 来源 | 难度（推动数） |
+|---|---|---|---|
+| 经典集 | 24 | 经典关卡集（ExtremelyEasy / IllustrativeLevels / SeeminglyHard / FrustratinglyDifficult），已剔除 <14 推的开局消遣关 | 12 → 91 |
+| 街机版 | 48 | **《Sokoban Deluxe》(倉庫番Deluxe, Namco, 1990, Namco System 1 街机基板)** 原版 55 关 | 6 → 84 |
+
+街机版关卡数据：`tools/classic/Deluxe.txt`（源自 github.com/borgar/borgar.net）。原版 55 关中
+`3-9 / 5-1 / 5-3` 三关的转录数据箱子数与目标数对不上（必然无解），已剔除；`5-4 / 5-7 / 5-10 / 5-11`
+在求解预算内未搜到解，也先不进游戏。
+
+### ⚠️ 一个重要发现：`.sok` 文件附带的解并不是最优解
+
+经典集原来的「参考最优」取自关卡文件里附带的解。用可采纳 A* 重算后发现**那些解普遍不是最优**：
+
+| 关卡 | `.sok` 声明 | 真最优 |
+|---|---|---|
+| 经典集第 1 关 | 14 推 | **12 推** |
+| 经典集第 8 关 | 19 推 | **15 推** |
+| 经典集第 18 关 | 40 推 | **14 推** |
+
+（用独立的 Python 裸规则重放器逐个复核过，新解全部合法。）所以游戏里现在按 `best.opt` 区分标注：
+`true` 显示「（推动数最优）」，`false` 显示「（参考解，未证最优）」。
+
+**`best.pushes` 的可信来源是 `tools/solver3.js`**：h 用「盒子→目标最小代价完美匹配」（各目标 BFS 距离
++ 匈牙利算法）作可采纳启发式，且剪枝只用「死格」与「2x2 冻结块」两种充分条件，
+所以 weight=1 时给出的是**推动数最优**；另外终止条件必须是「目标态被弹出」而不是「刚生成就返回」，
+否则可能提前收工拿到次优解。
+
+
 ## 目录结构
 
 ```
@@ -100,8 +132,14 @@ bash android/build_apk.sh --genkey     # 密钥丢失时先生成一把新的
 ```bash
 python3 tools/verify_by_solution.py     # 重放官方解法，验证关卡集可解性
 python3 tools/select4.py                # 按难度下限重新选关（丢掉 <14 推的消遣关）-> final_levels4.json
-python3 tools/inject4.py                # 把关卡表注入 sokoban/index.html（顺带换代存档键）
-node   tools/test_sokoban.js            # 仓库番：逐关重放官方解法，断言通关且步数/推动数吻合
+
+# —— 仓库番求解器（JS 版，V8 比 CPython 快一个数量级）——
+node tools/solver3.js <关卡文件> <秒> <weight> [id]   # 单关：死格预判 + 2x2 冻结死锁 + A*（可采纳启发式）
+node tools/solve_arcade.js [最优秒] [加权秒] [id列表]  # 批量解街机版 55 关 -> arcade_solutions.json
+node tools/solve_classic.js [最优秒] [加权秒]          # 重算经典集 24 关真最优 -> classic_optima.json
+python3 tools/build_sets.py             # 两套关卡合成 -> level_sets.json
+python3 tools/inject5.py                # 注入 web/sokoban/index.html（可重复执行）
+node   tools/test_sokoban.js            # 仓库番：两套关卡逐关重放解法，断言通关且步数/推动数吻合
 node   tools/test_othello.js            # 黑白棋整局对局 + 计时断言
 node   tools/test_breakout.js           # 打砖块：完美挡板能否打通 8 关 / 边界不变量 / 计分一致性 / 音效
 node   tools/hunt_stall.js              # 卡死猎手

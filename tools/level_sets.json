@@ -1,0 +1,1544 @@
+[
+ {
+  "id": "classic",
+  "name": "经典集",
+  "hint": "24 关 · 难度 14→91 推",
+  "levels": [
+   {
+    "tag": "1",
+    "name": "教学示例 · Illustrative #13",
+    "best": {
+     "pushes": 14,
+     "moves": 44,
+     "opt": false
+    },
+    "map": [
+     "#########",
+     "#       #",
+     "# $. .$ #",
+     "# **$*. #",
+     "#  $+$  #",
+     "#  *$*. #",
+     "# *. .$ #",
+     "#       #",
+     "#########"
+    ],
+    "sol": "RDrUllLDRddrrUruuuuLulldDulDDuuulldRldRlddrU"
+   },
+   {
+    "tag": "2",
+    "name": "教学示例 · Illustrative #11",
+    "best": {
+     "pushes": 16,
+     "moves": 74,
+     "opt": false
+    },
+    "map": [
+     "######",
+     "#    #",
+     "# ## ###",
+     "#  #   ##",
+     "#  $* . ##",
+     "#  .*$@. #",
+     "#    $$  #",
+     "#  .*$.. #",
+     "#  $* * ##",
+     "#  #   ##",
+     "# ## ###",
+     "#    #",
+     "######"
+    ],
+    "sol": "DuuulluullldddddrrrRDRUlULrRuullDRdddLullldddddrrruurrUdllURuullluuRlddddR"
+   },
+   {
+    "tag": "3",
+    "name": "教学示例 · Illustrative #05",
+    "best": {
+     "pushes": 16,
+     "moves": 50,
+     "opt": false
+    },
+    "map": [
+     "      #####",
+     "  #####   #####",
+     "  #           #",
+     "  #  ### ###  #",
+     "#### #     # ####",
+     "#    #  *  #    #",
+     "# $  # *+*      #",
+     "#    #  *  #    #",
+     "#### #     # ####",
+     "  #  ### ###  #",
+     "  #           #",
+     "  #####   #####",
+     "      #####"
+    ],
+    "sol": "UrrdrruuuulllldDDuuulllldddllldRRdrUUUUluRRRRurDDD"
+   },
+   {
+    "tag": "4",
+    "name": "折磨 · #07",
+    "best": {
+     "pushes": 16,
+     "moves": 80,
+     "opt": false
+    },
+    "map": [
+     "      #####",
+     "  #####   ##",
+     "  #     #  #",
+     "### #####  #",
+     "#   #   #  #",
+     "# ######## ######",
+     "# #      $*#    #",
+     "# # # ###*+*  # #",
+     "# #      ***  # #",
+     "# ########  ### #",
+     "#      #    #   #",
+     "###### # # ## ###",
+     "     #        #",
+     "     ##########"
+    ],
+    "sol": "RDrruLurrrddddllddllluurUldddlllluullllluuuuuurruurrrrurrdddrdDLLLLLddlluuRRRRRR"
+   },
+   {
+    "tag": "5",
+    "name": "折磨 · #06",
+    "best": {
+     "pushes": 17,
+     "moves": 111,
+     "opt": false
+    },
+    "map": [
+     "      ########",
+     "  #####      #",
+     "  #     #### #",
+     "### ###$#  # #",
+     "#   #      # ###",
+     "# ### #### #   #",
+     "#     *+*  ### #",
+     "###  #.**    # #",
+     "  #### $ ### # #",
+     "     ##  #   # #",
+     "     #  ## ### #",
+     "     #  ## #   #",
+     "     #  #    ###",
+     "     #    ####",
+     "     ######"
+    ],
+    "sol": "RDLrrruLLdrrrrddlldddldlluuuuUdrUUrruuulllllddlllluurruurrrrDullllddllddrrrruurRRRurDDDldlddlddddrruruuurruulLL"
+   },
+   {
+    "tag": "6",
+    "name": "折磨 · #04",
+    "best": {
+     "pushes": 18,
+     "moves": 71,
+     "opt": false
+    },
+    "map": [
+     "     ### #####",
+     "###### ###   ###",
+     "#    #   # #   #",
+     "# ##  $# # ### #",
+     "#  # # #   #   #",
+     "## ###.##### ###",
+     "#  $ + *       #",
+     "### ##.####### #",
+     " #   # #       #",
+     " # # #$  #######",
+     " #     ###",
+     " ##### #",
+     "     ###"
+    ],
+    "sol": "rRRRRRRuurruullulldddlluullDDullulllddrddRRlddrddrrUUdrrurrrrrruuLLLLLL"
+   },
+   {
+    "tag": "7",
+    "name": "貌似容易 · #01",
+    "best": {
+     "pushes": 19,
+     "moves": 49,
+     "opt": false
+    },
+    "map": [
+     " ###  ####",
+     " # ####  #",
+     " # $     #",
+     " # ###   #",
+     "##   ### ####",
+     "#      @    #",
+     "#   ## # ## #",
+     "#.####      #",
+     "###  ########"
+    ],
+    "sol": "llllluuuRRRRRurDDDDllddrrUdrrruullLLLLLLulDrdLulD"
+   },
+   {
+    "tag": "8",
+    "name": "折磨 · #09",
+    "best": {
+     "pushes": 19,
+     "moves": 96,
+     "opt": false
+    },
+    "map": [
+     "      #####",
+     "      #   #",
+     "####### # #####",
+     "#       #     #",
+     "# ##### ##### #",
+     "# #    $    # #",
+     "# #   *.*   # #",
+     "# #   *+*   # #",
+     "# #   **.#  # #",
+     "# #    #    # #",
+     "# #### ### ## #",
+     "#     $ $     #",
+     "#####   ## ####",
+     "    ## ##  #",
+     "    #     ##",
+     "    #######"
+    ],
+    "sol": "uUllddRlddrUluuurrdRDrruLrdddddddldllluuUUUddrRRllldddrrruruUUUUruLLrddddrrruuuuuuuulllluullddDD"
+   },
+   {
+    "tag": "9",
+    "name": "教学示例 · Illustrative #16",
+    "best": {
+     "pushes": 20,
+     "moves": 93,
+     "opt": false
+    },
+    "map": [
+     "#####",
+     "#   ##",
+     "# *. #",
+     "# ** #",
+     "#  $ ####",
+     "#   #   ##",
+     "# *.  *. #",
+     "# **  ** #",
+     "#  $   $ #",
+     "##   #  ##",
+     " #### *+ #",
+     "    # ** #",
+     "    #  $ #",
+     "    ##   #",
+     "     #####"
+    ],
+    "sol": "rdddlluluuRuuluuurrdrddLULLullulluuuurrdrddLUddlluRdrUllddddrRURRdLdlUrrRdrUlddlddrUddrruLdlU"
+   },
+   {
+    "tag": "10",
+    "name": "折磨 · #08",
+    "best": {
+     "pushes": 20,
+     "moves": 91,
+     "opt": false
+    },
+    "map": [
+     " ####    #########",
+     " #  ######       #",
+     " #         ##### #",
+     " # ##### ###   # #",
+     "## #   **.     # #",
+     "#  #   * *###### #",
+     "#      **+   #   #",
+     "#######  #$#$# ###",
+     "      #        #",
+     "      ##  ######",
+     "       ####"
+    ],
+    "sol": "UlDrrrrDullllLruLLrdddrUUluRllulldRRldRlllluuuurrrrrrrrurrrrrrdddddllddlLLLLdlUUdrrUdrruulL"
+   },
+   {
+    "tag": "11",
+    "name": "折磨 · #05",
+    "best": {
+     "pushes": 20,
+     "moves": 60,
+     "opt": false
+    },
+    "map": [
+     "          #####",
+     "   ########   #",
+     "   #  #  #  # #",
+     "   #     $  # #",
+     "####  ###*### ####",
+     "#       *+*      #",
+     "#   # # #*# #### #",
+     "### # # #     #  #",
+     "  # # # # ### #  #",
+     "  # #   #   #   ##",
+     "  # ##### #######",
+     "  #       #",
+     "  #########"
+    ],
+    "sol": "RRddrrddrruuruulllLLrruuuullddlLLLLLulDDrdrrRlllLLdlluRRRRRR"
+   },
+   {
+    "tag": "12",
+    "name": "教学示例 · Illustrative #12",
+    "best": {
+     "pushes": 22,
+     "moves": 91,
+     "opt": false
+    },
+    "map": [
+     "   ########",
+     "####      ##",
+     "#  #       #",
+     "#  $$$     #",
+     "#   $.**   #",
+     "###...@...###",
+     " #   **.$   #",
+     " #     $$$  #",
+     " #       #  #",
+     " ##      ####",
+     "  ########"
+    ],
+    "sol": "lldddrrrUUdllluuruUrrrrdddLuuuuulllDDDLddddrrrrUUdRurrddlUruLdlUdllllluuuruulDDuLDlluRRRurD"
+   },
+   {
+    "tag": "13",
+    "name": "教学示例 · Illustrative #09",
+    "best": {
+     "pushes": 27,
+     "moves": 81,
+     "opt": false
+    },
+    "map": [
+     "####",
+     "#  ####",
+     "#     #",
+     "# +** #",
+     "#     #",
+     "### ###",
+     " #    #",
+     "##    #",
+     "# ***##",
+     "#    #",
+     "### ####",
+     "#      #",
+     "#    # #",
+     "# ***$ #",
+     "#    ###",
+     "######"
+    ],
+    "sol": "drUdrruulLdlluurDrdddddDDDDlldddrUUddrrULUUUUUUUUUdddddddrrrddLLdllluuuRdrUUUddrD"
+   },
+   {
+    "tag": "14",
+    "name": "貌似容易 · #02",
+    "best": {
+     "pushes": 30,
+     "moves": 69,
+     "opt": false
+    },
+    "map": [
+     " #########",
+     " #  #    #",
+     " #       #",
+     " # ##   ####",
+     " #.# $@$ #.#",
+     "## #    ## #",
+     "#  ######  ##",
+     "#           #",
+     "## ######  ##",
+     " ###    ####"
+    ],
+    "sol": "drUUddllUUruLLLulDDDDDldRRRRRRRRdrUUUddlllllllluuuuurrrrurrdLLLLLulDD"
+   },
+   {
+    "tag": "15",
+    "name": "教学示例 · Illustrative #08",
+    "best": {
+     "pushes": 32,
+     "moves": 91,
+     "opt": false
+    },
+    "map": [
+     "  ######",
+     " ##    #####",
+     " #     #   #",
+     " # ****    #",
+     " #    ##  ##",
+     " #     # ##",
+     " # ##### #",
+     " #     # ##",
+     "##     #  #",
+     "#  ***+#$ #",
+     "#      #  #",
+     "###########"
+    ],
+    "sol": "dlllUluuuuuuurDDrdLulDDDDRRRurDlllddlluRuuuuurrrURRRurrdLLLLuLLulDrrrdrrdddddrddlUUUUUUruLL"
+   },
+   {
+    "tag": "16",
+    "name": "教学示例 · Illustrative #07",
+    "best": {
+     "pushes": 34,
+     "moves": 105,
+     "opt": false
+    },
+    "map": [
+     " ###### #####",
+     "##.   ###   #",
+     "#+*     *   #",
+     "##  ####** ##",
+     " ####  $ *  #",
+     "    # ##    #",
+     "    #  ##   #",
+     "    # # $ ###",
+     "    #   # #",
+     "    ##    #",
+     "     ###  #",
+     "       ####"
+    ],
+    "sol": "RdrUruLdrrrrRRurrdLLLLLLLLLrrrrrrrrdddlluUdRdrUULuLLLLLLrrrrrrurrdLLdddddddlluuRlddrruUUUUdddlldlluuuurRR"
+   },
+   {
+    "tag": "17",
+    "name": "貌似容易 · #06",
+    "best": {
+     "pushes": 36,
+     "moves": 132,
+     "opt": false
+    },
+    "map": [
+     "   #######",
+     "   #    .#",
+     "#### ###$####",
+     "#    #      ##",
+     "#   .#      .#",
+     "## ###      ####",
+     " # #        $  #",
+     " # #        #  #",
+     " # #.       *  #",
+     " # ### $@$  #  #",
+     " #   ## $ ###  ##",
+     " #      .       #",
+     " #  ##########  #",
+     " ####        ####"
+    ],
+    "sol": "DrdLLLLLLdlUUUUUUUUrruuurrrrDDuulllldddllluRRlddddddddrrrrruUruLLLrruuuuuruulllldDuurrrrddlddrUUUddddddrrdLulDDrdrrrruuuuuLLdlUUluRR"
+   },
+   {
+    "tag": "18",
+    "name": "折磨 · #10",
+    "best": {
+     "pushes": 40,
+     "moves": 116,
+     "opt": false
+    },
+    "map": [
+     "######",
+     "#    ###########",
+     "#              #",
+     "#  ##########  #",
+     "#  #   #    # ##",
+     "#      #    # #",
+     "#  ###      # #",
+     "## # +*     # #",
+     " # #  **    # #",
+     " # #   **  ## #",
+     "## #    ** #  ##",
+     "#  #     **    #",
+     "#  ###### $#   #",
+     "#          #####",
+     "#  #########",
+     "####"
+    ],
+    "sol": "RDuurrdLrdLDLdlUUdddrrUURurrdLLDRDRUUUruLLulllullllddddddddrrrrrrrUUddrUUUUlldldRuuuruulDDDuurrrdLLulDrrdddRRdrruLLL"
+   },
+   {
+    "tag": "19",
+    "name": "教学示例 · Illustrative #04",
+    "best": {
+     "pushes": 46,
+     "moves": 110,
+     "opt": false
+    },
+    "map": [
+     "       ####",
+     "########  ##",
+     "#          ###",
+     "# @$$ ##   ..#",
+     "# $$   ##  ..#",
+     "#         ####",
+     "###########"
+    ],
+    "sol": "lddrUUluRRRRRRRurDldRRRlllullllllddRRlUluRRRRRRurDldRurDldRRlldllllluUluRRRRRurDldRurDldRldllllUUluRRRRurDldRR"
+   },
+   {
+    "tag": "20",
+    "name": "貌似容易 · #07",
+    "best": {
+     "pushes": 46,
+     "moves": 100,
+     "opt": false
+    },
+    "map": [
+     " ####     ####",
+     " #  #######  #",
+     " #           #",
+     " #  ##   ##  #",
+     " #  # $+$ #  ##",
+     " # ##  $  #   #",
+     "## #. # # .   #",
+     "#  #  $$$ #####",
+     "# .#   $    . #",
+     "####       ####",
+     "   #  . .  #",
+     "   #########"
+    ],
+    "sol": "uurrrrddddllulLLUUdlDDDDDldRuurRULLdlUrrrRlUUrrdDlDDuRRRlluuulUUluRRRRurDDDDrdLLuuuullllLLLLulDDDDDD"
+   },
+   {
+    "tag": "21",
+    "name": "折磨 · #02",
+    "best": {
+     "pushes": 47,
+     "moves": 96,
+     "opt": false
+    },
+    "map": [
+     " ########",
+     "##   #  #",
+     "#       #",
+     "#    #  ####",
+     "###  # ##  ####",
+     " #   # #      #",
+     " #   # #      #",
+     " # ### # ## ###",
+     " #  # $+* # #",
+     " #  ##   ## #",
+     "##   ##     ###",
+     "#             #",
+     "#   #######   #",
+     "#####     #####"
+    ],
+    "sol": "dlUUUUUUruLLLulDDDDrdLulDDDDDrddlluRRRRRRRRRRdrruLdlUUUUUUllldDDlddrruLdlUUruuurrrruLLulDrdLulDD"
+   },
+   {
+    "tag": "22",
+    "name": "貌似容易 · #03",
+    "best": {
+     "pushes": 48,
+     "moves": 111,
+     "opt": false
+    },
+    "map": [
+     " #########",
+     " #  #    #",
+     " #       #",
+     " # ## $ ####",
+     " #.# $@$ #.#",
+     "## #    ## #",
+     "#  ######  ##",
+     "#         . #",
+     "## ######  ##",
+     " ###    ####"
+    ],
+    "sol": "UruLLLLulDDDDDldRRRRRRRRdrUUUddlllllllluuuuurrrrdddrUUddllUUruLLLulDDDDDldRRRRRRRRllllllluuuuurrrrurrdLLLLLulDD"
+   },
+   {
+    "tag": "23",
+    "name": "貌似容易 · #08",
+    "best": {
+     "pushes": 81,
+     "moves": 196,
+     "opt": false
+    },
+    "map": [
+     "   #############",
+     "   #  . .#     #",
+     "   #     #     #",
+     "####     #     #",
+     "# .# $   #  .  #",
+     "#  # $@$ $ #   #",
+     "# .##$$$$   .  #",
+     "#   #       #  #",
+     "#   ####    #  #",
+     "#     .#. ###  #",
+     "#              #",
+     "#  ##########  #",
+     "####        ####"
+    ],
+    "sol": "urrdDDDDrdLLLLLLullddrUluRRRRdrrruuuuuulldRuullldRldRuurrrdDDDDDrdLLLLLLullddrUUUUUUdddddrrrrrruuulllUURDRluUUUllddRRRDrDDDDuuuuUUUdddRllldRlldRRuRRRRRurrddlUUruLullldDldRRlllDDrddLLLLLLullddrUUUU"
+   },
+   {
+    "tag": "24",
+    "name": "教学示例 · Illustrative #14",
+    "best": {
+     "pushes": 91,
+     "moves": 209,
+     "opt": false
+    },
+    "map": [
+     "  ########",
+     " ##      #",
+     " #       ###",
+     "##         #",
+     "#   #$$    #",
+     "# $$  $$   #",
+     "## $$  $$ ##",
+     " #  $$  $$#",
+     " ## .#.#. ##",
+     " # . . . . #",
+     " #  . + .  #",
+     " ##. . . .##",
+     "  #########"
+    ],
+    "sol": "rrruuULUUrDDDDrdLLLuluuuRRuruulDDDDDDDrdLuuuuLruuulDDlDRurDDuuurDDDDDuLuuullluRRuulDDldRRuRurDDDDuuulDDDDuuuuuulllllldDRDDDDldRRurDlluuuuuRRRRurDDDulllLDDuuulDDDDDuRuuurrdLulDDDluuuuuurrDDDrdLulDllUUluRurDDDDD"
+   }
+  ]
+ },
+ {
+  "id": "arcade",
+  "name": "街机版",
+  "hint": "Sokoban Deluxe · Namco 1990 · 48 关（原版 55，剔除 3 关损坏数据）",
+  "levels": [
+   {
+    "tag": "1-1",
+    "name": "1-1 初心者向け",
+    "best": {
+     "pushes": 8,
+     "moves": 22,
+     "opt": true
+    },
+    "map": [
+     "#######",
+     "#. $ .#",
+     "# $@$ #",
+     "#. $ .#",
+     "#######"
+    ],
+    "sol": "LRRLLDLURRRURDLDLLUURR"
+   },
+   {
+    "tag": "1-2",
+    "name": "1-2 初心者向け",
+    "best": {
+     "pushes": 6,
+     "moves": 33,
+     "opt": true
+    },
+    "map": [
+     "########",
+     "#  ..$ #",
+     "# $@ $ #",
+     "# $..  #",
+     "########"
+    ],
+    "sol": "DRRRULDLLUULLDDRURURDLLLURDRRRRUL"
+   },
+   {
+    "tag": "1-3",
+    "name": "1-3 初心者向け",
+    "best": {
+     "pushes": 6,
+     "moves": 32,
+     "opt": true
+    },
+    "map": [
+     " #######",
+     " #     #",
+     "## .$. #",
+     "#@ $ $ #",
+     "#  .$. #",
+     "##     #",
+     " #######"
+    ],
+    "sol": "RUURRRDLRRDDLULLRUULLDDRDRULLLDR"
+   },
+   {
+    "tag": "1-4",
+    "name": "1-4 初心者向け",
+    "best": {
+     "pushes": 11,
+     "moves": 72,
+     "opt": true
+    },
+    "map": [
+     " #####",
+     "##   ###",
+     "#  #   #",
+     "# #  # #",
+     "# $ $# #",
+     "#.#    #",
+     "#. @####",
+     "#####"
+    ],
+    "sol": "UULRURDLDDLLUURRURURRDDDLLULLLDDRRURULURUULLDLDDDUUURURRDDDLLRURUULLDLDD"
+   },
+   {
+    "tag": "1-5",
+    "name": "1-5 初心者向け",
+    "best": {
+     "pushes": 10,
+     "moves": 40,
+     "opt": true
+    },
+    "map": [
+     "########",
+     "# $. $.#",
+     "#@.$ $.#",
+     "# $. $.#",
+     "# .$ $.#",
+     "########"
+    ],
+    "sol": "RRDRRLLUURRLDLLLURDRRRLLLLDDRURURRDLDLRR"
+   },
+   {
+    "tag": "1-6",
+    "name": "1-6 初心者向け",
+    "best": {
+     "pushes": 24,
+     "moves": 108,
+     "opt": true
+    },
+    "map": [
+     "   #######",
+     "  ##  # @#",
+     "  #   #  #",
+     "  #$ $ $ #",
+     "  # $##  #",
+     "### $ # ##",
+     "#.....  #",
+     "#########"
+    ],
+    "sol": "DDDLULLULLDDDUUURRDLRRRDDDLLLLRRULDLLRRRRRUUULLLDLDURURRRDDDLLLLUURDUUULDRDDLDRUUULDURRRRRUULDRDLLLULDDLDURD"
+   },
+   {
+    "tag": "1-7",
+    "name": "1-7 初心者向け",
+    "best": {
+     "pushes": 11,
+     "moves": 41,
+     "opt": true
+    },
+    "map": [
+     "#########",
+     "#   *   #",
+     "# $.#.$ #",
+     "#  $.$  #",
+     "###.$.###",
+     "  ##@##",
+     "   ###"
+    ],
+    "sol": "URURRUULLDDUULLDDUURRRRDLULLLDDLLUURRLLDR"
+   },
+   {
+    "tag": "1-8",
+    "name": "1-8 初心者向け",
+    "best": {
+     "pushes": 8,
+     "moves": 33,
+     "opt": true
+    },
+    "map": [
+     "  #####",
+     "###   #",
+     "#@ .$.#",
+     "#  $ $#",
+     "###.$.#",
+     "  #   #",
+     "  #####"
+    ],
+    "sol": "DRRUURRDLLDDDRRUULRDDLLURUULDLLUR"
+   },
+   {
+    "tag": "1-9",
+    "name": "1-9 初心者向け",
+    "best": {
+     "pushes": 13,
+     "moves": 45,
+     "opt": true
+    },
+    "map": [
+     "  ####",
+     "  #  #",
+     "###  #####",
+     "#  ..$   #",
+     "#@$.. $  #",
+     "### $#####",
+     "  #  #",
+     "  ####"
+    ],
+    "sol": "URRDRRRULLDLDDRUULULLDRURRUULDRDDRRURRDLLLRUL"
+   },
+   {
+    "tag": "1-10",
+    "name": "1-10 初心者向け",
+    "best": {
+     "pushes": 26,
+     "moves": 146,
+     "opt": true
+    },
+    "map": [
+     " #########",
+     "##       #",
+     "#   #$#$ #",
+     "# $$  .$.#",
+     "# @###...#",
+     "#### #####"
+    ],
+    "sol": "ULURURRRRRRDDDLLULLLRRRDRRULRUULDDRDLUUULLLLLDLDDRURRRRRUULLLLLDLDRRRRRLLLLUURRRDULLLDDRRRUULLDURRRRDDUULLDDRLUULLDLDRUURRRRDRDUULLLDDRRUULLLLDDRR"
+   },
+   {
+    "tag": "1-11",
+    "name": "1-11 初心者向け",
+    "best": {
+     "pushes": 18,
+     "moves": 74,
+     "opt": true
+    },
+    "map": [
+     " ##########",
+     "##   #@   ##",
+     "# $ ....$  #",
+     "#  $#### $ #",
+     "#   #  #  ##",
+     "#####  ####"
+    ],
+    "sol": "RRRDLRRDLULLRRDDLURUULLDLURRRDLULLDLLULLDRRRLLLLDDRRUDLLUURRDDLURURLDLLURR"
+   },
+   {
+    "tag": "2-1",
+    "name": "2-1 経験者向け",
+    "best": {
+     "pushes": 17,
+     "moves": 76,
+     "opt": true
+    },
+    "map": [
+     "########",
+     "#    @ #",
+     "# $..  ##",
+     "###..#  #",
+     "  ##$$$ #",
+     "   #    #",
+     "   ######"
+    ],
+    "sol": "DRDRDDLUDLLUULURDDDRRULDLUULUURDURRDLLULDRRRDRDDLLULUDDRRRULLDLURRUUULLLLLDR"
+   },
+   {
+    "tag": "2-2",
+    "name": "2-2 経験者向け",
+    "best": {
+     "pushes": 16,
+     "moves": 62,
+     "opt": true
+    },
+    "map": [
+     "########",
+     "#   @  #",
+     "# $$#  #",
+     "##  $ ##",
+     " #.$  #",
+     " ##. ##",
+     "  #..#",
+     "  ####"
+    ],
+    "sol": "RDDLLDDUURRUULLDDDUUULLDRURDURRDDDLLLUDRRURUULLDDLDRUUULDDRRDD"
+   },
+   {
+    "tag": "2-3",
+    "name": "2-3 経験者向け",
+    "best": {
+     "pushes": 20,
+     "moves": 99,
+     "opt": true
+    },
+    "map": [
+     " ######",
+     " #. ..#",
+     " #. $.#",
+     "###  $##",
+     "# $  $ #",
+     "# #$## #",
+     "#   @  #",
+     "########"
+    ],
+    "sol": "LUURUULURDDDLUDDDRRRUULRDDLLLUUURUULLDRURDLDDDDLLUURLDDRRUUUURULDDDDDRRRUULUDLUDRRDDLLLUURUUDDLURUL"
+   },
+   {
+    "tag": "2-4",
+    "name": "2-4 経験者向け",
+    "best": {
+     "pushes": 12,
+     "moves": 55,
+     "opt": true
+    },
+    "map": [
+     " ######",
+     "## . @#",
+     "# $ $ #",
+     "#. * .#",
+     "# $ $ #",
+     "## . ##",
+     " #####"
+    ],
+    "sol": "DDDLDLLUDRRUUUDDDLLURDRURUULLDDLLUURLDDRRULRRLLUURDRRUL"
+   },
+   {
+    "tag": "2-5",
+    "name": "2-5 経験者向け",
+    "best": {
+     "pushes": 13,
+     "moves": 42,
+     "opt": true
+    },
+    "map": [
+     "  ######",
+     "  #    #",
+     "###$$$ #",
+     "#@ $.. #",
+     "# $...##",
+     "####  #",
+     "   ####"
+    ],
+    "sol": "DRRRURRUULLDDLDLLURRRUURRDDLRUULLLDURRDLLD"
+   },
+   {
+    "tag": "2-6",
+    "name": "2-6 経験者向け",
+    "best": {
+     "pushes": 26,
+     "moves": 95,
+     "opt": true
+    },
+    "map": [
+     "############",
+     "#    ... $ #",
+     "# $$$*** $@#",
+     "#    ... $ #",
+     "############"
+    ],
+    "sol": "ULLLRDDLURURRDLLDLLLLUDLLLUURRRDDRRRRURRDLLLLLLUULLLDDRRRUULDRDRRLLUULLLDDRRRLLLURRDRRLLUURDLDR"
+   },
+   {
+    "tag": "2-7",
+    "name": "2-7 経験者向け",
+    "best": {
+     "pushes": 15,
+     "moves": 59,
+     "opt": true
+    },
+    "map": [
+     "########",
+     "#  #   #",
+     "# $..$ #",
+     "#@$.* ##",
+     "# $..$ #",
+     "#  #   #",
+     "########"
+    ],
+    "sol": "URLDDRLUURDRRULRURRDLLDDDRRULULUURRDLDLLLLUURDLDRRLLDDRULUR"
+   },
+   {
+    "tag": "2-8",
+    "name": "2-8 経験者向け",
+    "best": {
+     "pushes": 25,
+     "moves": 124,
+     "opt": true
+    },
+    "map": [
+     "  #####",
+     "  #   #",
+     "###$.$#####",
+     "#   . $   #",
+     "# ##$## @ #",
+     "#   . #####",
+     "### . #",
+     "  #   #",
+     "  #####"
+    ],
+    "sol": "ULLLLUURDLDDDLLLUURRLLDDRRRUURUULDDLLLDDRRRRDLULLLUURRRDDUUUULDRDDDLLLUURRLLDDRRRUUDDRDDLLUDRRUULUULLLDDRRLLUURRRRRRDRRULLLL"
+   },
+   {
+    "tag": "2-9",
+    "name": "2-9 経験者向け",
+    "best": {
+     "pushes": 24,
+     "moves": 169,
+     "opt": true
+    },
+    "map": [
+     "   ########",
+     "####    . #",
+     "#  $ $ $. #",
+     "#  .####.##",
+     "# $.$ $ @#",
+     "#  .  ####",
+     "#######"
+    ],
+    "sol": "UUULLLLDLDDDRRULDLLLUURRURURRRRDDDLLLRRRUUULLDRULLLDRLLDLLDDRRRRURRRUULULLDRLLLDLLDDRRRRURRRUURULLRDDDLLLDLLLLUURRURRRRURDLLLURRDLLLLDLLURDLDDRRUDRRULDLLLUURDLDRUUURRRRR"
+   },
+   {
+    "tag": "2-10",
+    "name": "2-10 経験者向け",
+    "best": {
+     "pushes": 24,
+     "moves": 152,
+     "opt": true
+    },
+    "map": [
+     " #####",
+     " #   ###",
+     "##$#@ .#",
+     "#  $$#.#",
+     "# #$  .#",
+     "#     .#",
+     "########"
+    ],
+    "sol": "DURRDDDLLLLLUURRDRDRRUUULLDLLLDDRRUURUULLDURRDDLDDLLUURLDDRRRUDLLLUURUURRDRRDDDLRUUULLULLDDLDDRRURRDRUUDLLLDLLUURUURRDDUULLDDRDRRDRULLLULUURRDDLDRRLLDRR"
+   },
+   {
+    "tag": "2-11",
+    "name": "2-11 経験者向け",
+    "best": {
+     "pushes": 17,
+     "moves": 66,
+     "opt": true
+    },
+    "map": [
+     "   #####",
+     "####.  ##",
+     "# $.$.  #",
+     "#@$# #$ #",
+     "# $. .  #",
+     "####$#$ #",
+     "  #. .  #",
+     "  #######"
+    ],
+    "sol": "DRRRDUUURRRDDDDLLLUULLLUURRRDDLLULURDDRRDDRRRUULDULLRRRUULDRDLDRDL"
+   },
+   {
+    "tag": "3-1",
+    "name": "3-1 慣れた人向け",
+    "best": {
+     "pushes": 20,
+     "moves": 126,
+     "opt": true
+    },
+    "map": [
+     "###########",
+     "#    .   @#",
+     "#  * $ *  #",
+     "### ### ###",
+     "#  * $ *  #",
+     "#    .    #",
+     "###########"
+    ],
+    "sol": "LLLDRDDUUULLLDRURRDDDLDLLLUDRRRURUUULLLLLDRURRRRDDDLDLLULUDDRRRURRDLULLDLLUUULURDDDDRRURRDLULLRRRUUURRDLULDDUULLDLLULLDRURRDRR"
+   },
+   {
+    "tag": "3-2",
+    "name": "3-2 慣れた人向け",
+    "best": {
+     "pushes": 22,
+     "moves": 112,
+     "opt": true
+    },
+    "map": [
+     " ######",
+     "##    ##",
+     "# $ $$ #",
+     "#......#",
+     "# $$ $ #",
+     "### @###",
+     "  ####"
+    ],
+    "sol": "UULUULDURRRDLDDDLURUUULLDRLLDDRRULDRDRULULUURDURRDLULLDDDRRUDLLUUURRRDRDDLLURLLRRUULDULLDRURRDDDLDLURRUUULLDRURD"
+   },
+   {
+    "tag": "3-3",
+    "name": "3-3 慣れた人向け",
+    "best": {
+     "pushes": 20,
+     "moves": 69,
+     "opt": true
+    },
+    "map": [
+     "#######",
+     "#. . .#",
+     "# $$$ #",
+     "#.$@$.#",
+     "# $$$ #",
+     "#. . .#",
+     "#######"
+    ],
+    "sol": "LRRUDLLUDRRULULRDDLDLDRUURUULDLDDUURRDLDDRRUDLLUURDUURRULDLDDRRUULLDR"
+   },
+   {
+    "tag": "3-4",
+    "name": "3-4 慣れた人向け",
+    "best": {
+     "pushes": 20,
+     "moves": 157,
+     "opt": true
+    },
+    "map": [
+     " #####",
+     " #   ###",
+     " # # $ #",
+     "##$. . #",
+     "#   # ###",
+     "# #. .$ #",
+     "#  $ #  #",
+     "#### @ ##",
+     "   #####"
+    ],
+    "sol": "RURULLUULLDLLDDRRUUURUULLDDRDDDLLUURLDDRRUULUUURRDDRDDLRRDDLLUDRRUULUURULDDDRDDLLULLLUURURRLLUURRDULLDDDLDDRRURDLLLUURURDULUURRDRDLUULLDDDLDDRRRURUDLDDRRURUL"
+   },
+   {
+    "tag": "3-5",
+    "name": "3-5 慣れた人向け",
+    "best": {
+     "pushes": 25,
+     "moves": 133,
+     "opt": true
+    },
+    "map": [
+     "     #######",
+     "######   #@##",
+     "# * . *  ** #",
+     "#   #   #   #",
+     "##*   * #$# #",
+     " #  #####   #",
+     " ####   #####"
+    ],
+    "sol": "DLLULLDURRDLDDLLUURLDDRRULUURRDRRRDDDLLUDRRUUULLLULDRRRRDDDLLUUDDRRUUULLLULLDRRLLLLLDDRLUURRRDDRULULLLDDRRURULRURRDLRRDDDRRUULRDDLLUU"
+   },
+   {
+    "tag": "3-6",
+    "name": "3-6 慣れた人向け",
+    "best": {
+     "pushes": 8,
+     "moves": 48,
+     "opt": true
+    },
+    "map": [
+     "#########",
+     "#   *   #",
+     "# $ .$  #",
+     "#.***..*#",
+     "# $@* $ #",
+     "#   *   #",
+     "#########"
+    ],
+    "sol": "DLLUUUURRDRRDDDRULUUURRDLULDLLULLDRRLLDDDRRULDLU"
+   },
+   {
+    "tag": "3-7",
+    "name": "3-7 慣れた人向け",
+    "best": {
+     "pushes": 23,
+     "moves": 122,
+     "opt": true
+    },
+    "map": [
+     "     #####",
+     " #####   #",
+     " # .. $# #",
+     " # #.*   #",
+     "## *.#$ ##",
+     "# $  $  #",
+     "#   ## @#",
+     "#########"
+    ],
+    "sol": "UUULDURRUULLDLLLLDDRDDLLURDRURUDLLUUURRRRURRDDLDLUDRDDLULLUUDDRRRUULLULRDRRDDLUDLLUUDDLDLLURURLDDRURRRURULLRRRUULLDURRDDLL"
+   },
+   {
+    "tag": "3-8",
+    "name": "3-8 慣れた人向け",
+    "best": {
+     "pushes": 30,
+     "moves": 195,
+     "opt": true
+    },
+    "map": [
+     "      ####",
+     "#######  #",
+     "# $ $ $  #",
+     "# ......@#",
+     "#  $ $ $ #",
+     "#  #######",
+     "####"
+    ],
+    "sol": "LLLLDLURRRDLUURDLLLURDLLLURDRRRRRRDLULLDLURRRDLULLURDLLLURDRRRRRUULDRDDLLULLLLLDDRULUURRDRRURDLLDLURRRDLULLULLDRURRDRDRRRULLRRUULDLDDLLUULLDRURRRDDRRULRUULDLLLLDLLDDRULUURRRRRRRDDLLLLLUULLDRLDDRU"
+   },
+   {
+    "tag": "3-10",
+    "name": "3-10 慣れた人向け",
+    "best": {
+     "pushes": 44,
+     "moves": 143,
+     "opt": true
+    },
+    "map": [
+     "##########",
+     "#   @    #",
+     "# $$$$$$ #",
+     "#        #",
+     "#### #####",
+     "  #.  #",
+     "  #.  #",
+     "  #...#",
+     "  #.  #",
+     "  #####"
+    ],
+    "sol": "DDUULDRDDDRDLUUUUULLLDDRRURDDDRDDLLURUUUUURRDURRDDLLLRUULLDDDDDLDDRRULUUUURRULULLLDLDRUURRDDDDDDRDLUUUUUULLDRURDDDRDULDUUURRRRULULDRDLLULDDDRDL"
+   },
+   {
+    "tag": "3-11",
+    "name": "3-11 慣れた人向け",
+    "best": {
+     "pushes": 26,
+     "moves": 203,
+     "opt": true
+    },
+    "map": [
+     "  #####",
+     "### @ ####",
+     "#   #    #",
+     "# $#  $$ #",
+     "# $ $#$  #",
+     "###$...###",
+     "  # ....#",
+     "  #######"
+    ],
+    "sol": "RDDLDURUULLDLLDDRLUURRURRDRRDULLDRDDUUULULLDLLDDRRLLUURRURRDDRDDLDLLURDRRUUULLDDUURUULLDLLDDRRLLUURDURURRDDLDURURRRDDLRUULLDLLDLDDRLUURURURRDULLULLDLDLDRUURURRDDLDDUURUULLDLDDRLUURURRDDRDDUULLDURRRRDLULD"
+   },
+   {
+    "tag": "4-1",
+    "name": "4-1 自信家向け",
+    "best": {
+     "pushes": 16,
+     "moves": 76,
+     "opt": true
+    },
+    "map": [
+     "  #####",
+     "###   ###",
+     "# $.$.$ #",
+     "#  .*. @#",
+     "# $.$.$ #",
+     "###   ###",
+     "  #####"
+    ],
+    "sol": "LLUULLDDLLDRURUURRDDLLRRDDLURURRDLLUUULLDDRRUULDRDDRRUULRDLDLDLLURLLLUURDLDR"
+   },
+   {
+    "tag": "4-2",
+    "name": "4-2 自信家向け",
+    "best": {
+     "pushes": 14,
+     "moves": 96,
+     "opt": true
+    },
+    "map": [
+     " #######",
+     " #  . @#",
+     "##$$.$$##",
+     "# ..*.. #",
+     "# $$.$$ #",
+     "#   .   #",
+     "#########"
+    ],
+    "sol": "DULLDDLLLDDRRRRRRUULUULLLLDURRRRDDRDDLLLLUDRRRRUULUULLDDDUUULLDRURRRDDLURULDDRRDDLLUDRULLLDLLURR"
+   },
+   {
+    "tag": "4-3",
+    "name": "4-3 自信家向け",
+    "best": {
+     "pushes": 19,
+     "moves": 86,
+     "opt": true
+    },
+    "map": [
+     "#####",
+     "#   #",
+     "# $$#####",
+     "# $...$ #",
+     "# $...$ #",
+     "#  ...$ #",
+     "#####$$ #",
+     "    # @ #",
+     "    #####"
+    ],
+    "sol": "LUULLLLUUUURRDULLDRLDDRRLLUURDLDRURLUURDLDDDRRRDDRRUULRDLULRRUULRDDLLLRRRUULDRDLLRDDLU"
+   },
+   {
+    "tag": "4-4",
+    "name": "4-4 自信家向け",
+    "best": {
+     "pushes": 36,
+     "moves": 168,
+     "opt": true
+    },
+    "map": [
+     "    #####",
+     "#####   #",
+     "#   .$.$#####",
+     "#@$ * * $.$ #",
+     "##### .  .  #",
+     "    #   #####",
+     "    #####"
+    ],
+    "sol": "URRRRURRDLDLDDRRUULUULDRDRDRRULDRRRULDLLLDLLURRLUULDRDRRULDLULULLDRRRDDLURULDRRRULDLLUUURRDDRDLDLLUURLULLDRRUURRDLLDDDRRUUDDLLURURRDLULLUURRDULLDDDDRRURULUULLDDLLULLDRR"
+   },
+   {
+    "tag": "4-5",
+    "name": "4-5 自信家向け",
+    "best": {
+     "pushes": 46,
+     "moves": 221,
+     "opt": true
+    },
+    "map": [
+     "   #########",
+     "   #   #   #",
+     "   #       #",
+     "#####*### ##",
+     "#   ...   #",
+     "# # #*###$##",
+     "# $    $   #",
+     "#####@ #   #",
+     "    ########"
+    ],
+    "sol": "ULLUURRUDLLDDRRUDRRRLLLUUDDRRRDRRULLLLDLULLUURRRRRRDULLLLLLDDRRUDLLUURRLLLLDDRRUURRDDRRRDRRULLLLDLURRRRUULLLLLLDDRRUDLLUURRDDRRRDRRULUUUULLLULLDRDDLLDDRRUDRRRDRRULLLRRUUUULLLRRRDDDDLLLDLURRRRUUUULLLULDRRRRDDDDLLLLLLLLUURR"
+   },
+   {
+    "tag": "4-6",
+    "name": "4-6 自信家向け",
+    "best": {
+     "pushes": 12,
+     "moves": 48,
+     "opt": true
+    },
+    "map": [
+     "######",
+     "#    ##",
+     "#$$*  #",
+     "#..@..#",
+     "#  *$$#",
+     "##    #",
+     " ######"
+    ],
+    "sol": "RUULLLDURRDULLDRDRLUURRDLDLDDRUDRRULULUULLDRURRD"
+   },
+   {
+    "tag": "4-7",
+    "name": "4-7 自信家向け",
+    "best": {
+     "pushes": 27,
+     "moves": 92,
+     "opt": true
+    },
+    "map": [
+     "#####",
+     "#   ######",
+     "# $ .. $ #",
+     "##$ ..$$@#",
+     " #  .. $ #",
+     " #########"
+    ],
+    "sol": "ULRDDLLRRUULDLLULLDRULULLDRURDRDDLLURURRRDDLRURRDLLUULLLULLDRURDRRRDRRULLLLLULLDRRRLLDDRULUR"
+   },
+   {
+    "tag": "4-8",
+    "name": "4-8 自信家向け",
+    "best": {
+     "pushes": 16,
+     "moves": 61,
+     "opt": true
+    },
+    "map": [
+     "  #####",
+     "###   ####",
+     "#  * * . #",
+     "# * * *  #",
+     "#  * *   #",
+     "# @###$ ##",
+     "#### #  #",
+     "     ####"
+    ],
+    "sol": "ULUURRDRDRRULDLLUUURRDRLULLDLLDDRLUURRURRDLRRDDLURRRDLLRDDLUU"
+   },
+   {
+    "tag": "4-9",
+    "name": "4-9 自信家向け",
+    "best": {
+     "pushes": 15,
+     "moves": 68,
+     "opt": true
+    },
+    "map": [
+     " #####",
+     "##   ####",
+     "# .$. . #",
+     "# $.$.$ #",
+     "# .$.$.@#",
+     "# $.$ $ #",
+     "##   ####",
+     " #####"
+    ],
+    "sol": "UULLDLURRRDDLULLDRUULULLDRLLDDRUDRRULDDDRUDLLURUURRRRDDLLUDLDLLULUUR"
+   },
+   {
+    "tag": "4-10",
+    "name": "4-10 自信家向け",
+    "best": {
+     "pushes": 18,
+     "moves": 64,
+     "opt": true
+    },
+    "map": [
+     "#######",
+     "#  .$ ###",
+     "# .$.$  #",
+     "#*$.$.@ #",
+     "# .$.$ ##",
+     "#  .$  #",
+     "########"
+    ],
+    "sol": "LLULRDDLDRUUULDRRRULDLLUULLDDRRRRUULRDDLDDLLLUDRRURURURRDLDLRDLL"
+   },
+   {
+    "tag": "4-11",
+    "name": "4-11 自信家向け",
+    "best": {
+     "pushes": 29,
+     "moves": 181,
+     "opt": true
+    },
+    "map": [
+     "##### #######",
+     "#   ###  #  #",
+     "# $     $ @ #",
+     "## #$##.##  #",
+     " #  ...*. $ #",
+     " # $# #.# # #",
+     " ##    $    #",
+     "  #  ########",
+     "  ####"
+    ],
+    "sol": "LLULDRRRDRDDDLLLLRRRRUUUULLLLLLLLULLDRDDRRRDDLLUDRRUURRDDLRRRRRUUUULLLLDDUURRRDRDDDLLUULRDDLLLLRRRRRRUUUULLLLLLLLULLDRRRRRLLLLDDRRRDDLDLUULURRLLUURRDULLDDDRDRRRRRRRRUULUULLULDRRRDDL"
+   },
+   {
+    "tag": "5-2",
+    "name": "5-2 中毒患者向け",
+    "best": {
+     "pushes": 84,
+     "moves": 361,
+     "opt": true
+    },
+    "map": [
+     " ###########",
+     " #  #  #   #",
+     " #  *  # # #",
+     " #  #  #   #",
+     " #$ #.*#  ##",
+     "##  #*.# $#",
+     "#   #  #  #",
+     "# # #@ *  #",
+     "#   #  #  #",
+     "###########"
+    ],
+    "sol": "URUULUULLDLDDRDDDLLUURUUURURRDDRDDDRRURUDLDDRULUURUDLDDRUULUUUURRDDLRUULLDDDDRUDDDLLLUUULUURDULLLULDDURRRDRDUULLLDDDLDLDDRRUUUUULURRRURDLLLDLDDRDDDLLUURUUUURRRDDRDDLDRUUULUURDULLLDDDLDLDDRRUUUUULURRRDDDDUUURDULUURDDLDDDRDDLUUUUDDDRRRDRUUULDRDLLLULUUURULDDDDRDDLURRRUUUUUURRDDLRUULLDDDDRDDLLLLUDRRRRUULDRDLLLULUDRDDLURRRUURULUUURRDDLRUULLDDDDRDDLLLLUDRRRRUULDRDL"
+   },
+   {
+    "tag": "5-5",
+    "name": "5-5 中毒患者向け",
+    "best": {
+     "pushes": 23,
+     "moves": 67,
+     "opt": true
+    },
+    "map": [
+     "   #####",
+     "   # @ #",
+     "   # $ #",
+     "   #$.$#",
+     " ###.$.##",
+     "## .$.$.###",
+     "#  $.$.$  #",
+     "#    .    #",
+     "###########"
+    ],
+    "sol": "LDDRDRDDLUDDLLLUURRRRUULDDUULUURDURDDDLDLLLDDRUDRRURUDRDRRULDLLRRUL"
+   },
+   {
+    "tag": "5-6",
+    "name": "5-6 中毒患者向け",
+    "best": {
+     "pushes": 48,
+     "moves": 194,
+     "opt": true
+    },
+    "map": [
+     "#########",
+     "#   ##  #",
+     "# # $ $ #",
+     "#  *.#  #",
+     "## #.@.##",
+     "##$###*###",
+     "#        #",
+     "#   ## # #",
+     "######   #",
+     "     #####"
+    ],
+    "sol": "LULUULLDDRDDUULUURRDRDDRRURUULDLLDDRRDUURULDDDDRRDDLLUUUDLLLDLLURUUURLDDDRRLLUUULUURRDRDULULLDDRDDDRRRRDDRRUULLUUURUULDLRDULLRRDDDDRRDDLLUUUDLLLDLLURRRRLLLUUURLDDDRRRRDDRRUULRDDLLUULLLLUUULUURRD"
+   },
+   {
+    "tag": "5-8",
+    "name": "5-8 中毒患者向け",
+    "best": {
+     "pushes": 30,
+     "moves": 177,
+     "opt": true
+    },
+    "map": [
+     "#########",
+     "#       #",
+     "#  $ $ $#",
+     "## #$## #",
+     " # .. ..##",
+     " ##.. .. #",
+     "  # ##$# ##",
+     "  #$ $ $  #",
+     "  #      @#",
+     "  #########"
+    ],
+    "sol": "ULUULULLLLLUUURRRRRDDUULLLLLDDDRDRRRRRDDDLLUUDDLLLUDRRRRRUUULLULLLLUUURRDRURRDDDLDDDDRRULDLLLULUDDRRRUDLLULUUDDDRRRULRUDLLDLUUDRRRUULRDDRRUULUUUULLDRLLDUULLDRRRURRDDDUUULLDRURDD"
+   },
+   {
+    "tag": "5-9",
+    "name": "5-9 中毒患者向け",
+    "best": {
+     "pushes": 81,
+     "moves": 455,
+     "opt": true
+    },
+    "map": [
+     "#######",
+     "# @#  #####",
+     "# $$  $   #",
+     "#  #.##$# #",
+     "##$#...   #",
+     "## ...##$##",
+     "#  ##.##  #",
+     "#  $  $   #",
+     "#  #   #  #",
+     "###########"
+    ],
+    "sol": "LDDRDDRRURRRRRUULLLLULDRRRDULLLDURRRRRDDLLRDDRDDLULLDLUUULLLDLDDRURRRUULLLDLDRUUUULUURDDURLDDUURRDDUURRLLLLDDDUUURRRRRLLLLLDDDDUUUURRRRRDDRDDRDDLULLDLLURUULUUULLDDDDLDDRURRLLUDRRDRUUDLLLUUUULUURDRRRRRDDRDDRDDLULLDLULLLUUUULUURDRRRRRDDRDDRDLLLDLLULLUUUULURRLDDDDDRRDRRULLLRRRRRUUULUULLULDLLDDDDLDDRURRRRRRUUULUULLLDURRRDDRDDDLLLLLLUDRRRRRRUUULUULLLDDUURRRDDRDDDLLLLLLUUUULURRLDDDDDRRRRRRUUULUULLULDRRRDDRRUULRDDLDDDLLLLLLUUUUURRDULLDDDDDRRRRRRUUURUULLLLULD"
+   }
+  ]
+ }
+]

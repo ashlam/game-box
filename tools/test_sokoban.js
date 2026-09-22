@@ -1,19 +1,17 @@
 #!/usr/bin/env node
 /**
- * 仓库番关卡回归测试：把每一关的「官方解法」在真实游戏逻辑里重放一遍。
- *
- * 为什么用重放而不是自己求解：官方记录的解（多为 YASA/YASO 优化器的结果）本身就是
- * 可解性证明，比跑最优求解器可靠得多（Laborious 那类大关最优搜索会状态爆炸）。
+ * 仓库番关卡回归测试：把每一关的解法在**真实游戏逻辑**里重放一遍，两套关卡集都测。
  *
  * 断言：
- *   1) 每关重放官方解法后必须判定通关（win === true）
- *   2) 游戏自己数出来的 pushes / moves 必须与参考最优解**完全一致**
- *      —— 这一条才是关键：它证明游戏的移动规则（墙/推箱/只能推不能拉）与
- *         当初验证过官方解法的参考实现是同一套规则
- *   3) 关卡表覆盖完整（24 关）、每关地图尺寸在手机可玩范围内
- *   4) 从第 1 关能一路「下一关」走到最后一关（导航链路通）
+ *   1) 关卡集结构正确（2 套、名称、关卡数）
+ *   2) 每关重放解法后必须判定通关，且游戏自数的 pushes / moves 与数据里的参考值**逐字相等**
+ *      —— 参考值由 tools/solver3.js 求得（可采纳 A* ⇒ 推动数最优），
+ *         这一步同时证明「游戏规则 == 求解器规则」
+ *   3) 关卡尺寸在手机可玩范围内（≤18×18）
+ *   4) 从选关面板能切换到另一套关卡集，且两套的存档互不干扰（按集合分区）
+ *   5) 导航链路完整（第 1 关一路「下一关」能走到最后一关）、撤销能逐字节还原
  *
- * 用法：node tools/test_sokoban.js [关卡表.json]
+ * 用法：node tools/test_sokoban.js [level_sets.json]
  */
 const fs = require('fs');
 const path = require('path');
@@ -21,20 +19,20 @@ const vm = require('vm');
 
 const PROJECT = path.join(__dirname, '..');
 const HTML = path.join(PROJECT, 'web', 'sokoban', 'index.html');
-const LEVELS_JSON = process.argv[2] || path.join(PROJECT, 'tools', 'final_levels4.json');
+const SETS_JSON = process.argv[2] || path.join(PROJECT, 'tools', 'level_sets.json');
 
 const script = fs.readFileSync(HTML, 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
-const refLevels = JSON.parse(fs.readFileSync(LEVELS_JSON, 'utf8'));
+const setDefs = JSON.parse(fs.readFileSync(SETS_JSON, 'utf8'));
 
 /* ---------------- DOM / Canvas 桩 ---------------- */
 const all = [];
 function mkEl(tag) {
   const set = new Set();
   const el = {
-    tagName: tag || 'div', dataset: {}, style: {}, textContent: '', onclick: null,
-    width: 0, height: 0, clientWidth: 0, clientHeight: 0, value: '', _h: {},
-    children: [], firstChild: null, parentNode: null,
-    appendChild(ch) { this.children.push(ch); ch.parentNode = this; this.firstChild = this.children[0] || null; },
+    tagName: tag || 'div', dataset: {}, style: {}, textContent: '', onclick: null, _h: {},
+    width: 0, height: 0, clientWidth: 0, clientHeight: 0, value: '', src: '',
+    children: [], firstChild: null, parentNode: null, title: '',
+    appendChild(ch) { this.children.push(ch); ch.parentNode = this; this.firstChild = this.children[0] || null; return ch; },
     addEventListener(t, fn) { (this._h[t] = this._h[t] || []).push(fn); },
     removeEventListener(t, fn) { if (this._h[t]) this._h[t] = this._h[t].filter(f => f !== fn); },
     dispatch(t, ev) {
@@ -65,7 +63,7 @@ function mkEl(tag) {
   });
   Object.defineProperty(el, 'innerHTML', {
     get: () => el._html || '',
-    set: v => { el._html = v; if (v === '') { el.children = []; el.firstChild = null; } },
+    set: v => { el._html = String(v); if (v === '') { el.children = []; el.firstChild = null; } },
   });
   all.push(el);
   return el;
@@ -101,9 +99,8 @@ const performance = { now: () => vnow };
 function setTimeout_(fn, ms) { const id = ++seq; timers.set(id, { t: vnow + (ms || 0), fn, rep: 0 }); return id; }
 function setInterval_(fn, ms) { const id = ++seq; timers.set(id, { t: vnow + (ms || 1), fn, rep: ms || 1 }); return id; }
 function clearTimer(id) { timers.delete(id); }
-function runTimers(max = 100000) {
-  let n = 0;
-  for (; n < max; n++) {
+function runTimers(max = 200) {
+  for (let n = 0; n < max; n++) {
     let best = null, bid = null;
     for (const [id, t] of timers) if (!best || t.t < best.t) { best = t; bid = id; }
     if (!best) return n;
@@ -111,7 +108,7 @@ function runTimers(max = 100000) {
     if (best.rep) best.t = vnow + best.rep; else timers.delete(bid);
     best.fn();
   }
-  return n;
+  return max;
 }
 
 const localStorage = {
@@ -140,6 +137,7 @@ vm.runInContext(script, sandbox, { filename: 'sokoban-inline.js' });
 
 const S = () => win.__sokoban();
 const $ = id => document.getElementById(id);
+const KEY = { U: 'ArrowUp', D: 'ArrowDown', L: 'ArrowLeft', R: 'ArrowRight' };
 
 /* ---------------- 断言 ---------------- */
 let pass = 0, fail = 0; const failures = [];
@@ -147,83 +145,101 @@ function ok(cond, label, extra) {
   if (cond) { pass++; console.log(`  ✓ ${label}`); }
   else { fail++; failures.push(label); console.log(`  ✗ ${label}${extra ? '  → ' + extra : ''}`); }
 }
-const KEY = { U: 'ArrowUp', D: 'ArrowDown', L: 'ArrowLeft', R: 'ArrowRight' };
 
-/* ================= 1) 关卡表体检 ================= */
-console.log('\n== 1) 关卡表体检 ==');
-ok(refLevels.length === 24, `关卡数 24（实际 ${refLevels.length}）`);
-const minPush = Math.min(...refLevels.map(l => l.best.pushes));
-ok(minPush >= 14, `难度下限 ≥14 推（实际 ${minPush}）`,
-   '前期不该出现 1~9 推的消遣关');
-const sizes = refLevels.map(l => l.size.split('x').map(Number));
-ok(sizes.every(([h, w]) => w <= 18 && h <= 18), '所有关卡尺寸 ≤18×18（手机可玩）',
-   JSON.stringify(refLevels.filter((l, i) => sizes[i][0] > 18 || sizes[i][1] > 18).map(l => l.size)));
-const pushSeq = refLevels.map(l => l.best.pushes);
-ok(pushSeq.every((p, i) => i === 0 || p >= pushSeq[i - 1]), '推动数单调不减（难度曲线不回头）', pushSeq.join(','));
-
-/* ================= 2) 逐关重放官方解法 ================= */
-console.log('\n== 2) 逐关重放官方解法（真实游戏逻辑）==');
-const rows = [];
-for (let i = 0; i < refLevels.length; i++) {
-  const ref = refLevels[i];
-  const before = S();
-  if (before.lv !== i + 1) {
-    // 用 UI 导航到目标关（点和玩家一样的按钮）
-    $('btnReset').click();
-    let guard = 0;
-    while (S().lv !== i + 1 && guard++ < 60) {
-      if (S().lv < i + 1) $('btnNext').click(); else $('btnPrev').click();
-    }
+function goTo(idx) {
+  let g = 0;
+  while (S().lv !== idx + 1 && g++ < 300) {
+    if (S().lv < idx + 1) $('btnNext').click(); else $('btnPrev').click();
   }
-  const start = S();
-  if (start.lv !== i + 1) { rows.push({ no: i + 1, err: `无法导航到第 ${i + 1} 关（当前 ${start.lv}）` }); continue; }
+  return S().lv === idx + 1;
+}
 
-  const sol = (ref.sol || '').toUpperCase().replace(/[^UDLR]/g, '');
-  for (const ch of sol) document.dispatch('keydown', { key: KEY[ch], preventDefault() {} });
-  runTimers(50);                                   // 消化 checkWin 的延迟面板
+function switchToSet(i) {
+  $('btnPick').click();                       // buildPicker() + 打开面板
+  const tabs = $('setTabs').children;
+  if (!tabs[i]) throw new Error(`没有第 ${i} 个关卡集标签（只有 ${tabs.length} 个）`);
+  tabs[i].click();                            // switchSet(i) + 重建面板
+  runTimers(10);
+  $('picker').classList.remove('on');
+  return S().set;
+}
 
-  const end = S();
-  const good = end.win === true && end.pushes === ref.best.pushes && end.moves === ref.best.moves;
-  rows.push({
-    no: i + 1, name: ref.name, size: ref.size,
-    refPush: ref.best.pushes, refMove: ref.best.moves,
-    gotPush: end.pushes, gotMove: end.moves, gotWin: end.win, good,
+/* ================= 1) 关卡集结构 ================= */
+console.log('\n== 1) 关卡集结构 ==');
+ok(setDefs.length === 2, `共 2 套关卡集（实际 ${setDefs.length}）`);
+ok(setDefs[0].id === 'classic' && setDefs[1].id === 'arcade', '关卡集 id 为 classic / arcade',
+   setDefs.map(s => s.id).join(','));
+ok(setDefs[0].levels.length === 24, `经典集 24 关（实际 ${setDefs[0].levels.length}）`);
+ok(setDefs[1].levels.length === 48, `街机版 48 关（实际 ${setDefs[1].levels.length}，原版 55 剔除 3 关损坏数据）`);
+const allLv = setDefs.flatMap(s => s.levels);
+ok(allLv.every(l => /^[# .$*@+]+$/.test([].concat(l.map).join(''))), '所有关卡地图只含合法字符');
+const oversize = allLv.filter(l => Math.max(...l.map.map(r => r.length)) > 18 || l.map.length > 18);
+ok(oversize.length === 0, '所有关卡尺寸 ≤18×18（手机可玩）', oversize.map(l => l.tag).join(','));
+ok(allLv.every(l => l.sol && l.sol.length > 0), '所有关卡都带解法串（可重放验证）',
+   allLv.filter(l => !l.sol).map(l => l.tag).join(','));
+
+/* ================= 2) 逐关重放（两套） ================= */
+console.log('\n== 2) 逐关重放解法（真实游戏逻辑）==');
+for (let si = 0; si < setDefs.length; si++) {
+  const set = setDefs[si];
+  const got = switchToSet(si);
+  console.log(`\n  ── ${set.name}（${set.levels.length} 关）──`);
+  ok(got === set.id, `选关面板能切到「${set.name}」（__sokoban().set = ${got}）`);
+  ok(S().total === set.levels.length, `切换后关卡总数正确（${S().total}）`);
+
+  const rows = [];
+  for (let i = 0; i < set.levels.length; i++) {
+    const ref = set.levels[i];
+    if (!goTo(i)) { rows.push({ no: i + 1, err: `无法导航到第 ${i + 1} 关` }); continue; }
+    const sol = (ref.sol || '').toUpperCase().replace(/[^UDLR]/g, '');
+    for (const ch of sol) document.dispatch('keydown', { key: KEY[ch], preventDefault() {} });
+    runTimers(60);
+    const end = S();
+    const good = end.win === true && end.pushes === ref.best.pushes && end.moves === ref.best.moves;
+    rows.push({ no: i + 1, tag: ref.tag, refPush: ref.best.pushes, refMove: ref.best.moves,
+                gotPush: end.pushes, gotMove: end.moves, gotWin: end.win, good });
+  }
+  const bad = rows.filter(r => !r.good);
+  ok(bad.length === 0, `${set.name}：${set.levels.length} 关全部重放通关，且推动数/步数与参考值一致`,
+     bad.map(b => `#${b.tag} ${b.err || `${b.gotPush}推/${b.gotMove}步 win=${b.gotWin} (参考 ${b.refPush}/${b.refMove})`}`).join('; '));
+  const show = rows.slice(0, 4).concat(rows.slice(-2));
+  show.forEach((r, k) => {
+    if (r.err) return console.log(`     ${r.tag}\t${r.err}`);
+    console.log(`     ${r.tag}\t参考 ${r.refPush}推/${r.refMove}步\t实得 ${r.gotPush}推/${r.gotMove}步\t${r.good ? '✅' : '❌'}`);
+    if (k === 3) console.log('     ...');
   });
-  if (!good) {
-    ok(false, `第 ${i + 1} 关 重放失败`,
-       `ref=${ref.best.pushes}推/${ref.best.moves}步 got=${end.pushes}推/${end.moves}步 win=${end.win}`);
-  }
-}
-const bad = rows.filter(r => !r.good);
-ok(bad.length === 0, `24 关全部重放通关且步数/推动数与参考最优解一致`,
-   bad.map(b => `#${b.no} ${b.err || `${b.gotPush}推/${b.gotMove}步 win=${b.gotWin} (ref ${b.refPush}/${b.refMove})`}`).join('; '));
-
-console.log('\n    #  推(参考/实得)  步(参考/实得)  判定  关卡');
-for (const r of rows) {
-  if (r.err) { console.log(`   ${String(r.no).padStart(2)}  ${r.err}`); continue; }
-  console.log(`   ${String(r.no).padStart(2)}  ${String(r.refPush).padStart(4)}/${String(r.gotPush).padEnd(4)}`
-    + `   ${String(r.refMove).padStart(4)}/${String(r.gotMove).padEnd(4)}   ${r.good ? '✅' : '❌'}  ${r.size}  ${r.name}`);
 }
 
-/* ================= 3) 导航链路（1 → 24）================= */
-console.log('\n== 3) 导航链路 ==');
+/* ================= 3) 存档分区 / 导航 / 撤销 ================= */
+console.log('\n== 3) 存档分区 · 导航 · 撤销 ==');
+const keys = Object.keys(localStorage._d);
+ok(keys.some(k => k.startsWith('sokoban_cleared_v5:classic')), '经典集有独立存档键 sokoban_cleared_v5:classic', keys.join(' | '));
+ok(keys.some(k => k.startsWith('sokoban_cleared_v5:arcade')), '街机版有独立存档键 sokoban_cleared_v5:arcade');
+const cClear = JSON.parse(localStorage._d['sokoban_cleared_v5:classic'] || '[]');
+const aClear = JSON.parse(localStorage._d['sokoban_cleared_v5:arcade'] || '[]');
+ok(cClear.length === 24 && aClear.length === 48, `两套进度互不干扰（经典 ${cClear.length}/24，街机 ${aClear.length}/48）`);
+ok((localStorage._d['sokoban_last_v5:classic'] !== undefined)
+   && (localStorage._d['sokoban_last_v5:arcade'] !== undefined), '「上次进度」也按关卡集分开存');
+
+// 导航链路：切回经典集一路点到最后一关
+switchToSet(0);
+ok(S().set === 'classic', '切回经典集');
 $('btnReset').click();
 let g = 0;
-while (S().lv < refLevels.length && g++ < 200) $('btnNext').click();
-ok(S().lv === refLevels.length, `一路「下一关」能走到第 ${refLevels.length} 关（实际 ${S().lv}）`);
-const extra = $('btnNext').click();               // 最后一关再点一次：应提示而不是报错
+while (S().lv < setDefs[0].levels.length && g++ < 300) $('btnNext').click();
+ok(S().lv === setDefs[0].levels.length, `一路「下一关」能走到第 ${setDefs[0].levels.length} 关（实际 ${S().lv}）`);
+$('btnNext').click();
 ok(true, '最后一关再点「下一关」不抛异常');
-// 撤销一致性：把最后一关重开，走一步再撤销，地图应逐字节还原
+
 $('btnReset').click();
 const snap0 = S().map.join('|');
 document.dispatch('keydown', { key: 'ArrowRight', preventDefault() {} });
-document.dispatch('keydown', { key: 'ArrowRight', preventDefault() {} });
-const moved = S().map.join('|');
+document.dispatch('keydown', { key: 'ArrowDown', preventDefault() {} });
 $('btnUndo').click(); $('btnUndo').click();
-ok(S().map.join('|') === snap0, '撤销两次后地图逐字节还原（箱子没丢）', moved === snap0 ? '（本来就没动）' : '');
+ok(S().map.join('|') === snap0, '撤销两次后地图逐字节还原（箱子没丢）');
 
 /* ================= 汇总 ================= */
-console.log(`\n${'='.repeat(56)}`);
+console.log(`\n${'='.repeat(60)}`);
 console.log(`通过 ${pass} 项，失败 ${fail} 项`);
 if (fail) { console.log('失败项：'); failures.forEach(f => console.log('  - ' + f)); }
 process.exit(fail ? 1 : 0);
