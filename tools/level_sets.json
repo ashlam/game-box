@@ -2,15 +2,15 @@
  {
   "id": "classic",
   "name": "经典集",
-  "hint": "24 关 · 难度 14→91 推",
+  "hint": "24 关 · 难度 12→85 推",
   "levels": [
    {
     "tag": "1",
     "name": "教学示例 · Illustrative #13",
     "best": {
-     "pushes": 14,
-     "moves": 44,
-     "opt": false
+     "pushes": 12,
+     "moves": 70,
+     "opt": true
     },
     "map": [
      "#########",
@@ -23,15 +23,15 @@
      "#       #",
      "#########"
     ],
-    "sol": "RDrUllLDRddrrUruuuuLulldDulDDuuulldRldRlddrU"
+    "sol": "DRLUUDDRDLDLLLUUUUUURRDRDRDULUULLLDRURRRDURRDLULLLLDLDDRRLDLDDRRRRRRUL"
    },
    {
     "tag": "2",
     "name": "教学示例 · Illustrative #11",
     "best": {
      "pushes": 16,
-     "moves": 74,
-     "opt": false
+     "moves": 122,
+     "opt": true
     },
     "map": [
      "######",
@@ -48,15 +48,15 @@
      "#    #",
      "######"
     ],
-    "sol": "DuuulluullldddddrrrRDRUlULrRuullDRdddLullldddddrrruurrUdllURuullluuRlddddR"
+    "sol": "RDDLURUULULLUULLLDDDDDRRRRRLULDLLUUULUURRRDDDRDDRDRRUULDLLURDLLLLUURLDDDDDLDDRRRUURUUDDLDDLLLUUUUURRRRDLRDDLURUUURDLLLLDDR"
    },
    {
     "tag": "3",
     "name": "教学示例 · Illustrative #05",
     "best": {
      "pushes": 16,
-     "moves": 50,
-     "opt": false
+     "moves": 128,
+     "opt": true
     },
     "map": [
      "      #####",
@@ -73,15 +73,15 @@
      "  #####   #####",
      "      #####"
     ],
-    "sol": "UrrdrruuuulllldDDuuulllldddllldRRdrUUUUluRRRRurDDD"
+    "sol": "ULLDDDRRDDLLLLUUULLLURDRULURDRUUULURRRLLDDDDDDDDRRRRUURURURRUUUULLLLDDLDLDDDRRDDLLLLUUUUUUUURRRURDRRRRDDDDLLUULLDRRDRRUUUULLLLDD"
    },
    {
     "tag": "4",
     "name": "折磨 · #07",
     "best": {
      "pushes": 16,
-     "moves": 80,
-     "opt": false
+     "moves": 160,
+     "opt": true
     },
     "map": [
      "      #####",
@@ -99,15 +99,15 @@
      "     #        #",
      "     ##########"
     ],
-    "sol": "RDrruLurrrddddllddllluurUldddlllluullllluuuuuurruurrrrurrdddrdDLLLLLddlluuRRRRRR"
+    "sol": "DRDDLUDDDLLLLUULLLLLUUUUUURRUURRRRURRDDDRDDUUUULULLDLLLLDDLLDDDDDDRRRRRDDRRRRRRRUURRUUUULLDDLUURRRDDDDLLDDLLLLLLLUULLLLLUUUUUURRUURRRRURRDDDRDDLLLLLDDLLUURRRRRR"
    },
    {
     "tag": "5",
     "name": "折磨 · #06",
     "best": {
      "pushes": 17,
-     "moves": 111,
-     "opt": false
+     "moves": 243,
+     "opt": true
     },
     "map": [
      "      ########",
@@ -126,15 +126,15 @@
      "     #    ####",
      "     ######"
     ],
-    "sol": "RDLrrruLLdrrrrddlldddldlluuuuUdrUUrruuulllllddlllluurruurrrrDullllddllddrrrruurRRRurDDDldlddlddddrruruuurruulLL"
+    "sol": "RDRRUUULLLLLDDLLLLUURRUURRRRDULLLLDDLLDDRRRRUURRRRURDDULLLUUURRRRRDDDDRRDDDDDDLLDLLUUURRUULLLLLRRRRRDDLLDDDRRURRUUUUUULLUUUULLLLLDDDRRRDDUULLLUUURRRRRDDDDRRDDDDDDLLDLLUUURRUULLLRRRDDLLDDDLDLLUUUUUUDDDDDDRRURUUURRUULLLLRRULDRRRDDLLDDDLDLLUUUURU"
    },
    {
     "tag": "6",
     "name": "折磨 · #04",
     "best": {
      "pushes": 18,
-     "moves": 71,
-     "opt": false
+     "moves": 139,
+     "opt": true
     },
     "map": [
      "     ### #####",
@@ -151,15 +151,15 @@
      " ##### #",
      "     ###"
     ],
-    "sol": "rRRRRRRuurruullulldddlluullDDullulllddrddRRlddrddrrUUdrrurrrrrruuLLLLLL"
+    "sol": "RRRRRRRUURRUULLULLDDDLLUULLDLLULLLDDRDDRDDRDDRRURRURRRRRRUULLLRRRDDLLLLLLDLLUDDLLUULUULUULUURRRDRRDULLULLLDDRDDRRLDDRDDRRURRURRRRRRUULLLLLL"
    },
    {
     "tag": "7",
     "name": "貌似容易 · #01",
     "best": {
-     "pushes": 19,
-     "moves": 49,
-     "opt": false
+     "pushes": 17,
+     "moves": 67,
+     "opt": true
     },
     "map": [
      " ###  ####",
@@ -172,15 +172,15 @@
      "#.####      #",
      "###  ########"
     ],
-    "sol": "llllluuuRRRRRurDDDDllddrrUdrrruullLLLLLLulDrdLulD"
+    "sol": "LLLULLUURRRRDRRUULDLDRURDDUULLLLLLDDDRRRRDDRRRRRUULLLLLLLLULDRDLULD"
    },
    {
     "tag": "8",
     "name": "折磨 · #09",
     "best": {
-     "pushes": 19,
-     "moves": 96,
-     "opt": false
+     "pushes": 15,
+     "moves": 119,
+     "opt": true
     },
     "map": [
      "      #####",
@@ -200,15 +200,15 @@
      "    #     ##",
      "    #######"
     ],
-    "sol": "uUllddRlddrUluuurrdRDrruLrdddddddldllluuUUUddrRRllldddrrruruUUUUruLLrddddrrruuuuuuuulllluullddDD"
+    "sol": "RDDRRDDDDLDLLLUUUDDDRRRURUULLRRRRRUUUUUUUULLLLUULLDDDDLLDDRLDDRURLLUUURRRRDRDLRDDDDDDLDLLLUUUUULURDDDDDDRRRURUULLLDLUUU"
    },
    {
     "tag": "9",
     "name": "教学示例 · Illustrative #16",
     "best": {
      "pushes": 20,
-     "moves": 93,
-     "opt": false
+     "moves": 128,
+     "opt": true
     },
     "map": [
      "#####",
@@ -227,15 +227,15 @@
      "    ##   #",
      "     #####"
     ],
-    "sol": "rdddlluluuRuuluuurrdrddLULLullulluuuurrdrddLUddlluRdrUllddddrRURRdLdlUrrRdrUlddlddrUddrruLdlU"
+    "sol": "ULULUULLULULUUURRDRDDLUDDLLUURLDDRUDRDRRURRDRDDLULRDDLULLUURDLDRRDRULLUULLULLDRLDDRUDDRRULDLURRRRDRDRDDDLLULUURLDDRUDDRRUULRDDLU"
    },
    {
     "tag": "10",
     "name": "折磨 · #08",
     "best": {
-     "pushes": 20,
-     "moves": 91,
-     "opt": false
+     "pushes": 16,
+     "moves": 127,
+     "opt": true
     },
     "map": [
      " ####    #########",
@@ -250,15 +250,15 @@
      "      ##  ######",
      "       ####"
     ],
-    "sol": "UlDrrrrDullllLruLLrdddrUUluRllulldRRldRlllluuuurrrrrrrrurrrrrrdddddllddlLLLLdlUUdrrUdrruulL"
+    "sol": "ULLDLLLLLUUUURRRRRRRRURRRRRRDDDDDLLDDLLLLLLUULURDRRRRDULLLLDDRRUDLLUULLLURDLLLLUUUURRRRRRRRURRRRRRDDDDDLLDDLLUULLRRDDLLLDLUUDLU"
    },
    {
     "tag": "11",
     "name": "折磨 · #05",
     "best": {
-     "pushes": 20,
-     "moves": 60,
-     "opt": false
+     "pushes": 14,
+     "moves": 130,
+     "opt": true
     },
     "map": [
      "          #####",
@@ -275,15 +275,15 @@
      "  #       #",
      "  #########"
     ],
-    "sol": "RRddrrddrruuruulllLLrruuuullddlLLLLLulDDrdrrRlllLLdlluRRRRRR"
+    "sol": "LLDDDDLLUUUULLDDDDDDRRRRRRUUUURRUURRUUUULLDDLLLLLRRRRURURRDDDDLLDDLLDDDDLLLLLLUUUUUURUUURDLDDRRRLLLUURDLDRDDDDRRUUUURLDDDDLLUUUURR"
    },
    {
     "tag": "12",
     "name": "教学示例 · Illustrative #12",
     "best": {
-     "pushes": 22,
-     "moves": 91,
-     "opt": false
+     "pushes": 20,
+     "moves": 150,
+     "opt": true
     },
     "map": [
      "   ########",
@@ -298,15 +298,15 @@
      " ##      ####",
      "  ########"
     ],
-    "sol": "lldddrrrUUdllluuruUrrrrdddLuuuuulllDDDLddddrrrrUUdRurrddlUruLdlUdllllluuuruulDDuLDlluRRRurD"
+    "sol": "RDDUURRDLUUUULLLDRRRDDLLLLDDDDRRRRUUURUUULLLLDURRRDRDDLDLLLLUULURDDDRRRRURUUUULLLLLDDLDDDRRRRUDLDDRUULLLULUURULDLLUURDLDRURDURRRRRDRDDLDRURRDDLURULDLU"
    },
    {
     "tag": "13",
     "name": "教学示例 · Illustrative #09",
     "best": {
      "pushes": 27,
-     "moves": 81,
-     "opt": false
+     "moves": 93,
+     "opt": true
     },
     "map": [
      "####",
@@ -326,15 +326,15 @@
      "#    ###",
      "######"
     ],
-    "sol": "drUdrruulLdlluurDrdddddDDDDlldddrUUddrrULUUUUUUUUUdddddddrrrddLLdllluuuRdrUUUddrD"
+    "sol": "DRUDRRUULLDLLUURDRDDDDDDDDDRDLULLDDDRRUUUUUUUUUUDDDDDDDLLDRLDDRRUUUUUDDDDDRULUURRRDDLLRRUULLD"
    },
    {
     "tag": "14",
     "name": "貌似容易 · #02",
     "best": {
      "pushes": 30,
-     "moves": 69,
-     "opt": false
+     "moves": 109,
+     "opt": true
     },
     "map": [
      " #########",
@@ -348,15 +348,15 @@
      "## ######  ##",
      " ###    ####"
     ],
-    "sol": "drUUddllUUruLLLulDDDDDldRRRRRRRRdrUUUddlllllllluuuuurrrrurrdLLLLLulDD"
+    "sol": "DRUULUURRDLLLLLULDDDDDLDRRRRRRRRLLLLLLLUUUUURRRDRDDLURUULLLLDDDDDRRRRRRRDRUUUDDLLLLLLLLUUUUURRRRDDLURULLLULDD"
    },
    {
     "tag": "15",
     "name": "教学示例 · Illustrative #08",
     "best": {
      "pushes": 32,
-     "moves": 91,
-     "opt": false
+     "moves": 143,
+     "opt": true
     },
     "map": [
      "  ######",
@@ -372,15 +372,15 @@
      "#      #  #",
      "###########"
     ],
-    "sol": "dlllUluuuuuuurDDrdLulDDDDRRRurDlllddlluRuuuuurrrURRRurrdLLLLuLLulDrrrdrrdddddrddlUUUUUUruLL"
+    "sol": "UULLLLUUUUURRDDRDLULLDDDDDDRULURRRURDULLLLUUUUURRRDRRRURRDLLLLULLDDDLULDDDDUUUUUURRRRDLULLLDDDDDDRDDLLURUUUURRRULLLUURRRRDRRDDDDDRDDLUUUUUURULL"
    },
    {
     "tag": "16",
     "name": "教学示例 · Illustrative #07",
     "best": {
-     "pushes": 34,
-     "moves": 105,
-     "opt": false
+     "pushes": 30,
+     "moves": 145,
+     "opt": true
     },
     "map": [
      " ###### #####",
@@ -396,15 +396,15 @@
      "     ###  #",
      "       ####"
     ],
-    "sol": "RdrUruLdrrrrRRurrdLLLLLLLLLrrrrrrrrdddlluUdRdrUULuLLLLLLrrrrrrurrdLLdddddddlluuRlddrruUUUUdddlldlluuuurRR"
+    "sol": "RDRURRRRRRURRDLLLLLLLLLRRRRRRRRDDDLLUUDDRRUUULLLLLULLRRDLRRRRRRDLRDDLUDDDDDLLUURLDDRRUUURUUUULLLLLLLRRRRRRRDDLLUDRRDDLDLLDLLUUUURRLLDDDDRRURRUULU"
    },
    {
     "tag": "17",
     "name": "貌似容易 · #06",
     "best": {
-     "pushes": 36,
-     "moves": 132,
-     "opt": false
+     "pushes": 32,
+     "moves": 225,
+     "opt": true
     },
     "map": [
      "   #######",
@@ -422,15 +422,15 @@
      " #  ##########  #",
      " ####        ####"
     ],
-    "sol": "DrdLLLLLLdlUUUUUUUUrruuurrrrDDuulllldddllluRRlddddddddrrrrruUruLLLrruuuuuruulllldDuurrrrddlddrUUUddddddrrdLulDDrdrrrruuuuuLLdlUUluRR"
+    "sol": "DRDRRRRUUUUULRDDDDDLLLLULUUURRRUULURDDDDLLLDDLUDRRDLLUURULLLRRRRRDLDDLLLLLULLDDRULUUUUUUUURRUURRRRDULLLLDDDLLDDDDDDDRRULDLUUUUUUDDDDDDRRRRRUUUUUUURRULUULLLLDDLLLDRURRUURRRRDDDLLURDRUUDDDDDDLDDDLLLULLUUUUUURLDDDDDDDRRRRRUUURDD"
    },
    {
     "tag": "18",
     "name": "折磨 · #10",
     "best": {
-     "pushes": 40,
-     "moves": 116,
-     "opt": false
+     "pushes": 14,
+     "moves": 196,
+     "opt": true
     },
     "map": [
      "######",
@@ -450,15 +450,15 @@
      "#  #########",
      "####"
     ],
-    "sol": "RDuurrdLrdLDLdlUUdddrrUURurrdLLDRDRUUUruLLulllullllddddddddrrrrrrrUUddrUUUUlldldRuuuruulDDDuurrrdLLulDrrdddRRdrruLLL"
+    "sol": "RDUURRDDLLULLDDDRRRUDLLULUURRURRDDRDLUUULLDLLDDDDRRRRULLLULUURRURRDDRDRDLUUUULLLDLLDDRURUUULLLLDDDDDDDDRRRRRRRUULLULUDDRRRDDLLLLLLLUUUUUUUUUUURRRRRRRRRRRDDDDDDDDDLLLUUUULLLULULLLLDDDDDDDDRRRRRRRRU"
    },
    {
     "tag": "19",
     "name": "教学示例 · Illustrative #04",
     "best": {
      "pushes": 46,
-     "moves": 110,
-     "opt": false
+     "moves": 264,
+     "opt": true
     },
     "map": [
      "       ####",
@@ -469,14 +469,14 @@
      "#         ####",
      "###########"
     ],
-    "sol": "lddrUUluRRRRRRRurDldRRRlllullllllddRRlUluRRRRRRurDldRurDldRRlldllllluUluRRRRRurDldRurDldRldllllUUluRRRRurDldRR"
+    "sol": "URRRDDLUDDLLLUUURRRLLDRURRRLLLDRURRRRURDLLLLLDDRULURRLDDDRRRRURUULLDRDDLLLULUURRLLDDDLLUDLLUURRURRRRRURDLLLLLLDRURRRRRRDULLLLLLDDRUDDRRRRURUULLDRDRRLLUURDLDDLLLLLLLULURURRRRLLLLDRURRRRRLLLLLDRDRULURRLDDDRRRRUULUURDLDRDDLLLULUURRLLDDDRRRRURLURRLDLDLLLULUURRRURDLDRR"
    },
    {
     "tag": "20",
     "name": "貌似容易 · #07",
     "best": {
      "pushes": 46,
-     "moves": 100,
+     "moves": 240,
      "opt": false
     },
     "map": [
@@ -493,15 +493,15 @@
      "   #  . .  #",
      "   #########"
     ],
-    "sol": "uurrrrddddllulLLUUdlDDDDDldRuurRULLdlUrrrRlUUrrdDlDDuRRRlluuulUUluRRRRurDDDDrdLLuuuullllLLLLulDDDDDD"
+    "sol": "UURRRRDDDDLLDDDLLLULUUURUURULLLLULDDDUURRRRDDDRUUURRRRDDDDLLUULUULLLLLDDLDUUURRRRDDDRRURDULUULLLLLDDLDDDUUUUURRRRDDDLDDDDRRRULDLLUUUURRDDLRDULLDLURRRDDUULDLDDRRUULDUURUURRDDUULLDDDRRRRLLULDLUUDLLUUURRLDLDDRRUURUULURRRLLDDDRDRRUUURUULDDDDRDL"
    },
    {
     "tag": "21",
     "name": "折磨 · #02",
     "best": {
-     "pushes": 47,
-     "moves": 96,
-     "opt": false
+     "pushes": 45,
+     "moves": 137,
+     "opt": true
     },
     "map": [
      " ########",
@@ -519,15 +519,15 @@
      "#   #######   #",
      "#####     #####"
     ],
-    "sol": "dlUUUUUUruLLLulDDDDrdLulDDDDDrddlluRRRRRRRRRRdrruLdlUUUUUUllldDDlddrruLdlUUruuurrrruLLulDrdLulDD"
+    "sol": "DLUUUUUURULLLULDDDDRDLULDDDDDRDDLLURRRRRRRRRURUUUULLLDDLDDDRRRRDRRULDLUUUUUDDDLLLLUURUUURRRRDLLULLDDDDLDDRRULUUUUURRDLULDDURRRDDDDDLLLLUU"
    },
    {
     "tag": "22",
     "name": "貌似容易 · #03",
     "best": {
      "pushes": 48,
-     "moves": 111,
-     "opt": false
+     "moves": 141,
+     "opt": true
     },
     "map": [
      " #########",
@@ -541,7 +541,7 @@
      "## ######  ##",
      " ###    ####"
     ],
-    "sol": "UruLLLLulDDDDDldRRRRRRRRdrUUUddlllllllluuuuurrrrdddrUUddllUUruLLLulDDDDDldRRRRRRRRllllllluuuuurrrrurrdLLLLLulDD"
+    "sol": "URULLLLULDDDDDLDRRRRRRLLLLLUUUUURRRDRDDRUULULLLLDDDDDRRRRRRRDRUUUDDLLLLLLLLUUUUURRRURRRDLLLLLULDDDDDLDRRRRRRRRLLLLLLLUUUUURRRDRDDLUURULLLULDD"
    },
    {
     "tag": "23",
@@ -572,8 +572,8 @@
     "tag": "24",
     "name": "教学示例 · Illustrative #14",
     "best": {
-     "pushes": 91,
-     "moves": 209,
+     "pushes": 85,
+     "moves": 313,
      "opt": false
     },
     "map": [
@@ -591,7 +591,7 @@
      " ##. . . .##",
      "  #########"
     ],
-    "sol": "rrruuULUUrDDDDrdLLLuluuuRRuruulDDDDDDDrdLuuuuLruuulDDlDRurDDuuurDDDDDuLuuullluRRuulDDldRRuRurDDDDuuulDDDDuuuuuulllllldDRDDDDldRRurDlluuuuuRRRRurDDDulllLDDuuulDDDDDuRuuurrdLulDDDluuuuuurrDDDrdLulDllUUluRurDDDDD"
+    "sol": "ULLULULUULURURRRDULLLDDRDULUURDLDDRDULUURDDUUURRRRDRDRDDDLDLLUURRDRDDUULUURUULDDDLLURDRDDRDLULDULUUURURUULDDDURDDURDLDUULLDRURRDDLDURUULDUUUULLLDRURDLDURDLDURDLDRLDDRDLULDURUUULLDRURUULDUULLDDLDRUUURRDDDRDDDUUUUUULLLDDRRURDDDDUULLDRUULLLDRURRDRDLLDDUURUULDDULLDRDDDURRRLLLUUURRDLURRRRRDLLLULLDDLDRUUULDURRRDLULDLD"
    }
   ]
  },

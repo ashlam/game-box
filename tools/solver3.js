@@ -241,9 +241,10 @@ class Solver {
   regionContains(cell) { return this.curStamp[cell] === this.curMark; }
 
   solve(opts) {
-    // ★ maxStates 是内存闸门：每个状态在 bestG/parent 两个 Map 里各留一份，
-    //   实测 ~4e6 状态就会把 Node 默认堆（≈2GB）打爆。默认压到 1.2e6，
+    // ★ maxStates 是内存闸门：每个状态在 bestG / parent / hcache 里都留一份，
+    //   实测状态数上到百万级就会顶到 2GB 默认堆。默认 1.2e6；
     //   要啃更深的盘面就配 --max-old-space-size 并显式调大这个值。
+    //   注意闸门判的是 bestG.size（已记录状态数），不是弹出次数 —— 见下方注释。
     const { timeBudget = 0, maxStates = 1_200_000, weight = 1 } = opts || {};
     const t0 = Date.now();
     const L = this.L;
@@ -298,9 +299,13 @@ class Solver {
       const cur = pop();
       const knownG = bestG.get(cur.key);
       if (knownG === undefined || knownG < cur.g) continue;
-      if (++n > maxStates) return { status: 'timeout', states: n, secs: (Date.now() - t0) / 1000 };
+      // ★ 内存闸门必须看「已记录的状态数」而不是「弹出次数」：
+      //   每次展开最多推入 48 个候选，弹出数远小于状态数。
+      //   早期版本用弹出数判断，结果状态涨到上千万、堆被打爆（实测 OOM 两次）。
+      if (bestG.size > maxStates) return { status: 'overflow', states: bestG.size, secs: (Date.now() - t0) / 1000 };
+      if (++n > 40 * maxStates) return { status: 'timeout', states: bestG.size, secs: (Date.now() - t0) / 1000 };
       if (timeBudget && (n & 255) === 0 && (Date.now() - t0) / 1000 > timeBudget)
-        return { status: 'timeout', states: n, secs: (Date.now() - t0) / 1000 };
+        return { status: 'timeout', states: bestG.size, secs: (Date.now() - t0) / 1000 };
 
       const boxes = cur.boxes;
       // ★ 最优性要求「目标态被弹出」而不是「刚生成」就返回：
