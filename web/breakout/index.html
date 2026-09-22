@@ -14,11 +14,17 @@
   }
   @media (min-width:700px){ :root{ --mw:620px } }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+  html{height:100%}
   html,body{margin:0}
   body{
     background:radial-gradient(1200px 600px at 50% -10%,#1b2233 0%,var(--bg) 60%);
     color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
-    min-height:100vh;min-height:100dvh;              /* 整屏高度：信息区贴顶、操作区贴底 */
+    /* ★ 用 height:100% 而不是 100vh / 100dvh：
+       手机浏览器的 100vh 是「地址栏隐藏时」的高度，比当前可视高度大 ——
+       小米浏览器实测 100vh=754 而实际可视只有 730，凭空撑出 24px 溢出（页面能滚、底部贴边）；
+       100dvh 又要 Chrome 108+，而小米浏览器 UA 是 Chrome/100，直接无效。
+       height:100% 参照 html（已设 100%），永远等于当前可视高度，各浏览器一致。 */
+    height:100%;
     display:flex;flex-direction:column;align-items:center;
     /* 底部留 16px：真机（飞书内置浏览器）实测原来按钮行贴着屏幕下沿，下面还有飞书自己的工具栏 */
     padding:calc(env(safe-area-inset-top) + 6px) 4px calc(env(safe-area-inset-bottom) + 16px);   /* 左右只留 4px */
@@ -169,7 +175,11 @@
      而 H_MIN 一大，缩放比就只能按高度算 ⇒ 宽度白白浪费（实测横屏只占 58% 宽、两侧各空 193px）。
      按 H 等比算之后，矮场地自动用更薄的砖、更小的球，宽度就能吃满。 */
   const BRICK_TOP_R = 0.058, BRICK_H_R = 0.052, GAP_R = 0.010;
-  const BALL_R_R = 0.0155, PADDLE_H_R = 0.026, PADDLE_Y_R = 0.050;
+  const BALL_R_R = 0.0155, PADDLE_H_R = 0.026;
+  /* PADDLE_Y_R = 挡板离场地底边的距离（占 H 的比例）。
+     原来是 0.050（≈24 逻辑单位 / 30 屏幕像素）—— 手指一放就盖住挡板，这是用户的真实抱怨。
+     抬到 0.110 留出「拇指区」：指腹落在挡板下方，而不是压在挡板上。 */
+  const PADDLE_Y_R = 0.110;
 
   /* M 是砖墙左右两侧的留白。它必须大于球直径，否则球挤不进「砖墙边缘 ↔ 侧墙」那条缝，
      一旦碰到最外侧砖的侧面就会被法线推到墙外。
@@ -191,7 +201,7 @@
     M            = clamp(Math.round(H * 0.026), 12, 20);
     BALL_R       = clamp(H * BALL_R_R, 4, 7);
     PADDLE_H     = clamp(Math.round(H * PADDLE_H_R), 7, 12);
-    PADDLE_Y_OFF = clamp(Math.round(H * PADDLE_Y_R), 6, 24);
+    PADDLE_Y_OFF = clamp(Math.round(H * PADDLE_Y_R), 40, 90);
   }
 
   const cv = document.getElementById('cv');
@@ -356,11 +366,22 @@
     const scr = (window.screen && window.screen.width) ? (window.screen.width + '×' + window.screen.height) : '?';
     const st = $('stage');
     const pct = (a, b) => b ? (a / b * 100).toFixed(0) : '?';
+    // 高度探针：手机浏览器的 100vh 常与真实可视高度不一致，是布局溢出的头号嫌疑
+    let vh100 = '?';
+    try{
+      const pr = document.createElement('div');
+      pr.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:100vh;pointer-events:none';
+      document.body.appendChild(pr);
+      vh100 = Math.round(pr.getBoundingClientRect().height);
+      document.body.removeChild(pr);
+    }catch(e){}
+    const dvhOK = !!(window.CSS && window.CSS.supports && window.CSS.supports('height', '100dvh'));
     return [
       '【打砖块·诊断】' + new Date().toLocaleString('zh-CN'),
       '版本=默认版（列数随屏宽自适应 + 几何按场地高度等比）',
       '视口=' + window.innerWidth + '×' + window.innerHeight + '  朝向=' + ori
         + '  dpr=' + dpr + '  屏幕=' + scr,
+      '高度探针: 100vh=' + vh100 + '  与可视差=' + (vh100 === '?' ? '?' : (vh100 - window.innerHeight)) + 'px  dvh支持=' + dvhOK + ',',
       '画布=' + cw + '×' + ch + 'css  占屏=' + pct(cw, window.innerWidth) + '%宽 '
         + pct(ch, window.innerHeight) + '%高  左右留白=' + Math.round((window.innerWidth - cw) / 2) + 'px',
       '画布物理=' + cv.width + '×' + cv.height + '  逻辑=' + W + '×' + H + '  scale=' + scale.toFixed(3),
@@ -699,6 +720,24 @@
     ctx.lineWidth = 1;
     for(let gx = 0; gx <= W; gx += 32){ ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke(); }
     for(let gy = 0; gy <= H; gy += 32){ ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+
+    // 拇指区：挡板下方压暗 + 一条虚线，标示「这块是放手指的，不是可玩区」
+    const thumbTop = paddle ? (paddle.y + paddle.h + 6) : (H - PADDLE_Y_OFF + PADDLE_H + 6);
+    if(thumbTop < H - 4){
+      ctx.fillStyle = 'rgba(0,0,0,.30)';
+      ctx.fillRect(0, thumbTop, W, H - thumbTop);
+      ctx.strokeStyle = 'rgba(120,150,200,.22)';
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath(); ctx.moveTo(0, thumbTop); ctx.lineTo(W, thumbTop); ctx.stroke();
+      ctx.setLineDash([]);
+      if(level === 1 && lives === 3 && state === 'ready'){
+        ctx.fillStyle = 'rgba(160,180,210,.5)';
+        ctx.font = '10px -apple-system,"PingFang SC",sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('手指放这一带 · 拖动控制挡板', W / 2, (thumbTop + H) / 2 + 3);
+        ctx.textAlign = 'left';
+      }
+    }
 
     // 砖块
     for(const b of bricks){
