@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>打砖块 · 小游戏盒子</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#191d26; --card2:#202632; --line:#2b3242;
+    --txt:#e8ecf3; --dim:#8b95a7; --acc:#5b8cff; --acc2:#38d39f;
+    --mw:480px;                      /* 内容列宽：平板上放宽 */
+  }
+  @media (min-width:700px){ :root{ --mw:620px } }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+  html,body{margin:0}
+  body{
+    background:radial-gradient(1200px 600px at 50% -10%,#1b2233 0%,var(--bg) 60%);
+    color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    min-height:100vh;min-height:100dvh;              /* 整屏高度：信息区贴顶、操作区贴底 */
+    display:flex;flex-direction:column;align-items:center;
+    padding:calc(env(safe-area-inset-top) + 6px) 4px calc(env(safe-area-inset-bottom) + 6px);   /* 左右只留 4px */
+  }
+  .top{width:100%;max-width:var(--mw);display:flex;align-items:center;gap:8px;margin-bottom:10px;flex:0 0 auto}
+  .top a{color:var(--dim);text-decoration:none;font-size:20px;padding:6px 10px;border-radius:10px;background:var(--card);border:1px solid var(--line);line-height:1}
+  .top h1{font-size:18px;margin:0;flex:1;text-align:center;padding-right:38px}
+  .hud{width:100%;max-width:var(--mw);display:flex;gap:8px;margin-bottom:10px;flex:0 0 auto}
+  .hud div{flex:1;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 6px;text-align:center}
+  .hud .k{font-size:10.5px;color:var(--dim)}
+  .hud .v{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+  .hud .v.low{color:#ff6b6b}
+  #lives{letter-spacing:2px}
+
+  #stage{width:100%;max-width:var(--mw);flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;touch-action:none}
+  canvas{display:block;border-radius:14px;background:#12151c;border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.45);touch-action:none}
+
+  .bar{width:100%;max-width:var(--mw);display:flex;gap:8px;margin-top:12px;flex:0 0 auto}
+  .bar button{
+    flex:1;font-size:13.5px;padding:12px 6px;border-radius:12px;border:1px solid var(--line);
+    background:var(--card);color:var(--txt);font-family:inherit
+  }
+  .bar button:active{transform:scale(.97)}
+  .bar button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+
+  #toast{
+    position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 88px);transform:translate(-50%,-12px);
+    background:#20262ff2;border:1px solid var(--line);padding:11px 18px;border-radius:12px;font-size:13.5px;
+    opacity:0;pointer-events:none;transition:.2s;max-width:88vw;text-align:center;z-index:7
+  }
+  #toast.on{opacity:1;transform:translate(-50%,0)}
+
+  /* ?debug=1 时显示的一行诊断，用来在真机上直接读渲染参数 */
+  #dbg{position:fixed;left:6px;bottom:6px;z-index:60;display:none;font-size:10px;line-height:1.4;
+       color:#8b95a7;background:rgba(0,0,0,.72);border:1px solid var(--line);border-radius:7px;
+       padding:3px 7px;max-width:96vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+  #dbg.on{display:block}
+
+  /* 顶部压成一行（统计塞进标题那一行）、按钮压扁、宽度上限放开 —— 把屏幕尽量让给场地 */
+  body.v2{--mw:2400px}
+  body.v2 .top{margin-bottom:6px}
+  body.v2 .top a{font-size:18px;padding:4px 9px;border-radius:9px}
+  body.v2 .top h1{flex:1;text-align:left;padding-right:0;font-size:15px;color:var(--dim)}
+  body.v2 .hud{margin:0 0 0 auto;width:auto;gap:9px;align-items:center;
+               background:var(--card);border:1px solid var(--line);border-radius:11px;padding:5px 10px}
+  body.v2 .hud>div{background:none;border:0;border-radius:0;padding:0;display:flex;align-items:center;gap:5px}
+  body.v2 .hud .k{font-size:11.5px}
+  body.v2 .hud .v{font-size:14px}
+  body.v2 .bar{margin-top:8px}
+  body.v2 .bar button{font-size:13px;padding:9px 6px;border-radius:11px}
+  @media (max-height:700px){
+    body.v2 .bar button{padding:7px 6px;font-size:12px}
+    body.v2 .bar{margin-top:6px}
+  }
+  @media (orientation:landscape) and (max-height:600px){
+    body.v2 .top{margin-bottom:3px}
+    body.v2 .top h1{font-size:13px}
+    body.v2 .hud{padding:3px 8px;gap:7px}
+    body.v2 .bar{margin-top:5px}
+    body.v2 .bar button{padding:6px 6px;font-size:11.5px}
+  }
+
+  #over{position:fixed;inset:0;background:rgba(8,10,14,.84);backdrop-filter:blur(3px);display:none;
+        align-items:center;justify-content:center;padding:22px;z-index:9}
+  #over.on{display:flex}
+  .panel{width:100%;max-width:340px;background:var(--card);border:1px solid var(--line);border-radius:20px;
+         padding:24px 20px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.6)}
+  .panel h2{margin:0 0 8px;font-size:22px}
+  .panel p{color:var(--dim);font-size:13.5px;margin:0 0 18px;line-height:1.6;white-space:pre-line}
+  .panel button{width:100%;font-size:15px;padding:13px;border-radius:12px;border:1px solid var(--line);
+                background:var(--card2);color:var(--txt);font-family:inherit;margin-bottom:8px}
+  .panel button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+
+  @media (max-height: 700px){
+    .bar button{padding:9px 6px}
+    .hud div{padding:5px 4px}
+    .hud .v{font-size:14px}
+    .top{margin-bottom:6px}
+    .bar{margin-top:8px}
+  }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="../index.html">‹</a>
+  <h1>打砖块</h1>
+</div>
+
+<div class="hud">
+  <div><div class="k">分数</div><div class="v" id="hScore">0</div></div>
+  <div><div class="k">关卡</div><div class="v" id="hLevel">1</div></div>
+  <div><div class="k">剩余球</div><div class="v" id="lives">●●●</div></div>
+</div>
+
+<div id="stage"><canvas id="cv" tabindex="0"></canvas></div>
+
+<div class="bar">
+  <button id="btnPause">暂停</button>
+  <button id="btnSound">音效：开</button>
+  <button id="btnRetry">重开</button>
+</div>
+
+<div id="toast"></div>
+<div id="dbg"></div>
+
+<div id="over"><div class="panel">
+  <h2 id="overTitle">第 1 关</h2>
+  <p id="overText"></p>
+  <button class="pri" id="overNext">继续</button>
+  <button id="overRetry">重开</button>
+</div></div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ================= 逻辑坐标系（跟屏幕无关，绘制时统一缩放） ================= */
+  const W = 320;                 // 逻辑宽度固定
+  let   H = 440;                 // 逻辑高度按屏幕比例动态算（见 layout），不然手机上画布上下会各空一大块
+  const H_MIN = 180, H_MAX = 800, H_REF = 440;   // 夹取范围放宽：矮屏/横屏若还硬撑最小值，画布会被压得极小
+
+  /* ================= 兼容版核心：列数随屏幕宽度反推 =================
+     原理（整件事的关键）：
+       「单块砖占屏宽的百分比 ≈ 100 / 列数」
+       推导：砖宽 × scale / 可用宽
+             = [(W - 2M - (COLS-1)GAP)/COLS] × (可用宽/W) / 可用宽
+             ≈ 1 / COLS                    ← 逻辑宽 W 被约掉了
+     也就是：画面「缩放」唯一的控制量是【列数】，改逻辑尺寸 / scale / DPR 都没用。
+
+     把列数写成全局常量，必然只能讨好一种屏幕：
+       · 按大屏调 8 列 → 手机上每块砖只有 38×15px（"太小了"）
+       · 按手机调 4 列 → 1276px 的桌面上变成 4 块 315px 的巨砖（"不伦不类"）
+
+     所以让列数跟着可用宽度走，使单块砖在任何设备上都落在 ~84~103px：
+       手机 382px → 4 列(84px)   平板 759px → 8 列(87px)   桌面 1276px → 12 列(103px)
+     ================================================================ */
+  const COLS_TARGET_PX = 92;       // 每块砖的目标屏幕宽度
+  const BRICK_TOP = 26;
+  const MAX_LEVEL = 8;
+
+  let M = 12, GAP = 5, BRICK_H = 26;
+  let COLS = 8, BRICK_W = 0;       // 真实列数在 layout() 里按可用宽度反推
+
+  function recomputeBrickW(){ BRICK_W = (W - 2 * M - (COLS - 1) * GAP) / COLS; }
+  function computeCols(availW){ return clamp(Math.round(availW / COLS_TARGET_PX), 4, 12); }
+  function maxRows(){ return clamp(Math.floor((H - 140) / (BRICK_H + GAP)), 3, 7); }
+
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const $ = id => document.getElementById(id);
+
+  /* ================= 音效：Web Audio 现场合成（零依赖、无音频文件、可静音） ================= */
+  const SKEY = 'breakout_sound';
+  let soundOn = localStorage.getItem(SKEY) !== '0';
+  let actx = null, soundCount = 0;
+
+  function ac(){
+    if(actx === null){
+      const C = window.AudioContext || window.webkitAudioContext;
+      try{ actx = C ? new C() : false; }catch(e){ actx = false; }
+    }
+    if(actx && actx.state === 'suspended'){ try{ actx.resume(); }catch(e){} }
+    return actx || null;
+  }
+  function tone(freq, dur, opt){
+    const o = opt || {};
+    if(!soundOn) return;
+    const c = ac(); if(!c) return;
+    const t0 = c.currentTime + (o.at || 0);
+    const osc = c.createOscillator(), g = c.createGain();
+    osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    if(o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t0 + dur);
+    const vol = (o.gain === undefined ? 0.12 : o.gain);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);      // 极短起音 = 敲击感
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g); g.connect(c.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+    soundCount++;
+  }
+  /* 每种事件一个音色，闭眼也能听出发生了什么 */
+  const sndWall    = () => tone(210, 0.045, {type:'sine',     gain:0.055});
+  const sndPaddle  = () => { tone(300, 0.09, {type:'triangle', gain:0.14, to:240}); tone(620, 0.04, {type:'square', gain:0.035}); };
+  const sndBrick   = row => tone(520 + row * 62, 0.07, {type:'triangle', gain:0.13, to: 380 + row * 40});
+  const sndHard    = row => { tone(330 + row * 40, 0.06, {type:'square', gain:0.06}); sndBrick(row); };  // 硬砖没碎
+  const sndLaunch  = () => { tone(340, 0.1, {type:'square', gain:0.1, to:700}); };
+  const sndLost    = () => { tone(400, 0.5, {type:'sawtooth', gain:0.11, to:110}); tone(200, 0.55, {type:'sine', gain:0.09, to:70, at:0.06}); };
+  const sndClear   = () => { [523,659,784,1047].forEach((f,i)=>tone(f, 0.16, {type:'triangle', gain:0.11, at:i*0.085})); };
+  const sndWin     = () => { [523,659,784,1047,1319].forEach((f,i)=>tone(f, 0.22, {type:'triangle', gain:0.11, at:i*0.11})); };
+  const sndOver    = () => { [392,330,262,196].forEach((f,i)=>tone(f, 0.26, {type:'sawtooth', gain:0.09, at:i*0.13})); };
+
+  /* ================= 状态 ================= */
+  const BKEY = 'breakout_best';
+  let best = 0;
+  try{ best = parseInt(localStorage.getItem(BKEY) || '0', 10) || 0; }catch(e){ best = 0; }
+
+  let level, score, lives, bricks, alive, state, ball, paddle, particles, shakeT, flashT;
+  let cfg = null, overTimer = null, loopT = 0, lastT = 0, sinceBreak = 0;
+
+  const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+
+  /* 反弹方向约束。为什么必须有：纯竖直的球在清空它所在那一列之后，会在顶墙和挡板之间
+     永远上下弹，再也碰不到别的砖 —— 游戏就永远打不完了（实测跑 3200 秒虚拟时间仍卡在第 1 关）。
+     MIN_VY 保证球总要上下走，MIN_VX 保证球总要横向换列；两者都在保持速率不变的前提下夹。 */
+  const MIN_VY = 0.40, MIN_VX = 0.17;
+  const STALL_S = 12;               // 连续这么久没碰到砖 ⇒ 认为进了周期轨道，微调方向打破
+
+  function enforceAngles(sp, px){
+    let vx = ball.vx, vy = ball.vy;
+    const s = Math.hypot(vx, vy) || sp || 1;
+    if(Math.abs(vy) < s * MIN_VY) vy = (vy <= 0 ? -1 : 1) * s * MIN_VY;
+    if(Math.abs(vx) < s * MIN_VX){
+      const dir = Math.abs(px || 0) > 1 ? Math.sign(px) : (Math.random() < 0.5 ? -1 : 1);
+      vx = dir * s * MIN_VX;
+    }
+    const k = s / (Math.hypot(vx, vy) || 1);
+    ball.vx = vx * k; ball.vy = vy * k;
+  }
+
+  function levelCfg(n){
+    return {
+      // 砖块总数从 ~24 起（列数越多、行数越少），不随屏幕变宽而暴涨
+      rows:  Math.min(maxRows(), clamp(Math.round(24 / COLS), 2, 7) + Math.floor((n - 1) / 2)),
+      hard:  2, hardRows: n >= 4 ? 1 : 0,                // 第 4 关起最上面一行要打两下
+      speedBase: Math.min(460, 300 + (n - 1) * 24),      // 球速要够快，否则来回一趟太久
+      paddleW: Math.max(50, 76 - (n - 1) * 3)
+    };
+  }
+
+  /* 场地变高 ⇒ 来回距离变长，球速按同比例放大，每关耗时才不会随设备变来变去 */
+  function applySpeed(){
+    if(cfg) cfg.speed = clamp(cfg.speedBase * (H / H_REF), 150, 480);
+  }
+
+  /* 逻辑高度变了（旋转屏幕 / 换设备）⇒ 挡板位置和球的位置都得跟着挪，否则会卡在场地外 */
+  function onFieldResize(){
+    if(!paddle || !ball) return;
+    paddle.y = H - 24;
+    ball.y = ball.stuck ? paddle.y - ball.r - 1 : clamp(ball.y, ball.r + 0.5, H - ball.r - 0.5);
+  }
+
+  function makeBricks(){
+    const arr = [];
+    for(let r = 0; r < cfg.rows; r++){
+      for(let c = 0; c < COLS; c++){
+        const hp = r < cfg.hardRows ? cfg.hard : 1;
+        arr.push({
+          x: M + c * (BRICK_W + GAP),
+          y: BRICK_TOP + r * (BRICK_H + GAP),
+          w: BRICK_W, h: BRICK_H,
+          row: r, hp: hp, max: hp, hit: 0
+        });
+      }
+    }
+    return arr;
+  }
+
+  function resetBall(stuck){
+    ball.x = paddle.x;
+    ball.y = (stuck ? paddle.y - ball.r - 1 : H * 0.62);
+    ball.vx = 0; ball.vy = 0;
+    ball.stuck = !!stuck;
+    ball.trail.length = 0;
+    sinceBreak = 0;
+  }
+
+  function startLevel(n, keepScore){
+    level = n; cfg = levelCfg(n);
+    applySpeed();
+    if(!keepScore) score = 0;
+    lives = 3;
+    bricks = makeBricks(); alive = bricks.length;
+    paddle = {x: W / 2, y: H - 24, w: cfg.paddleW, h: 12, vx: 0, target: W / 2};
+    ball = {x: W / 2, y: 0, r: 7, vx: 0, vy: 0, stuck: true, trail: []};
+    particles = []; shakeT = 0; flashT = 0;
+    state = 'ready';                       // ready -> play -> pause -> lost/clear/over
+    resetBall(true);
+    syncHud();
+  }
+
+  function syncHud(){
+    $('hScore').textContent = score;
+    $('hLevel').textContent = level + (state === 'over' ? '' : ' / ' + MAX_LEVEL);
+    const lv = $('lives');
+    lv.textContent = '●'.repeat(Math.max(0, lives)) + '○'.repeat(Math.max(0, 3 - lives));
+    lv.classList.toggle('low', lives <= 1);
+  }
+
+  function toast(msg){
+    const t = $('toast');
+    t.textContent = msg; t.classList.add('on');
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 1600);
+  }
+
+  /* ================= 布局：把逻辑坐标等比缩放到 #stage ================= */
+  function layout(){
+    const stageEl = $('stage');
+    const mw = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--mw')) || 480;
+    const availW = Math.min(window.innerWidth - 8, 2400);   // 8 = body 左右各 4px
+    const availH = (stageEl && stageEl.clientHeight) ? stageEl.clientHeight : Math.max(200, window.innerHeight - 300);
+    // ★ 列数随可用宽度反推：这是唯一能真正控制画面缩放的量（见文件头注释）
+    const want = computeCols(availW);
+    if(want !== COLS){ COLS = want; recomputeBrickW(); startLevel(level, true); }
+    // 逻辑高度跟着 stage 的宽高比走 ⇒ 画布正好把 stage 填满，不留上下两块空白
+    const targetH = clamp(Math.round(W * availH / availW), H_MIN, H_MAX);
+    if(targetH !== H){ H = targetH; onFieldResize(); applySpeed(); }
+    let S = Math.min(availW / W, availH / H);
+    // 兜底：整页仍放不下就继续缩（不牺牲可用性）
+    let guard = 0;
+    const apply = s => {
+      cv.style.width  = (W * s) + 'px';
+      cv.style.height = (H * s) + 'px';
+      const dpr = window.devicePixelRatio || 1;
+      cv.width  = Math.round(W * s * dpr);
+      cv.height = Math.round(H * s * dpr);
+      ctx.setTransform(s * dpr, 0, 0, s * dpr, 0, 0);
+      scale = s;
+    };
+    apply(S);
+    while(document.documentElement.scrollHeight > window.innerHeight + 1 && guard++ < 30){
+      S *= 0.965; apply(S);
+    }
+    draw();
+    if(/[?&]debug/.test(location.search)){
+      const el = $('dbg');
+      el.classList.add('on');
+      el.textContent = `兼容版 · 视口 ${window.innerWidth}×${window.innerHeight}`
+        + ` · 画布 ${Math.round(W * S)}×${Math.round(H * S)} · 逻辑 ${W}×${H} · scale ${S.toFixed(2)}`
+        + ` · 砖 ${Math.round(BRICK_W * S)}×${Math.round(BRICK_H * S)}px`
+        + ` · ${COLS}列 ${cfg ? cfg.rows : '?'}行 · 挡板 ${Math.round((cfg ? cfg.paddleW : 0) * S)}px`;
+    }
+  }
+  let scale = 1;
+
+  /* ================= 输入 ================= */
+  function stageX(clientX){
+    const r = cv.getBoundingClientRect();
+    return clamp((clientX - r.left) / (r.width || 1) * W, 0, W);
+  }
+  function movePaddleTo(x){
+    paddle.target = clamp(x, paddle.w / 2, W - paddle.w / 2);
+  }
+
+  cv.addEventListener('touchstart', e => {
+    e.preventDefault();
+    ac();
+    movePaddleTo(stageX(e.touches[0].clientX));
+    if(state === 'ready') launch();
+  }, {passive:false});
+  cv.addEventListener('touchmove', e => {
+    e.preventDefault();
+    movePaddleTo(stageX(e.touches[0].clientX));
+  }, {passive:false});
+
+  cv.addEventListener('mousemove', e => { if(state !== 'over') movePaddleTo(stageX(e.clientX)); });
+  cv.addEventListener('mousedown', e => { ac(); if(state === 'ready') launch(); });
+
+  document.addEventListener('keydown', e => {
+    if(e.key === 'ArrowLeft' || e.key === 'a'){ e.preventDefault(); movePaddleTo(paddle.target - 26); }
+    else if(e.key === 'ArrowRight' || e.key === 'd'){ e.preventDefault(); movePaddleTo(paddle.target + 26); }
+    else if(e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); if(state === 'ready') launch(); else if(state === 'play') pause(); }
+    else if(e.key === 'p'){ e.preventDefault(); state === 'play' ? pause() : resume(); }
+    else if(e.key === 'r'){ e.preventDefault(); startLevel(1, false); }
+  });
+
+  function launch(){
+    if(state !== 'ready' || !ball.stuck) return;
+    const sp = cfg.speed;
+    const ang = (Math.random() * 0.9 - 0.45);          // ±26°，别一上来就是死角度
+    ball.vx = Math.sin(ang) * sp;
+    ball.vy = -Math.cos(ang) * sp;
+    ball.stuck = false;
+    state = 'play';
+    sndLaunch();
+  }
+
+  function pause(){ if(state !== 'play') return; state = 'pause'; $('btnPause').textContent = '继续'; toast('已暂停'); }
+  function resume(){ if(state !== 'pause') return; state = 'play'; $('btnPause').textContent = '暂停'; toast('继续'); }
+
+  /* ================= 物理 ================= */
+  function step(dt){
+    if(state !== 'play') return;
+
+    // 挡板：向手指/按键目标位平滑靠拢（直接瞬移会有生硬的撕裂感）
+    const prevX = paddle.x;
+    paddle.x += (paddle.target - paddle.x) * Math.min(1, dt * 22);
+    paddle.x = clamp(paddle.x, paddle.w / 2, W - paddle.w / 2);
+    paddle.vx = dt > 0 ? (paddle.x - prevX) / dt : 0;
+
+    if(ball.stuck){ ball.x = paddle.x; ball.y = paddle.y - ball.r - 1; return; }
+
+    sinceBreak += dt;
+    const speed = Math.hypot(ball.vx, ball.vy);
+    const steps = clamp(Math.ceil(speed * dt / (ball.r * 0.7)), 1, 10);   // 子步进，防穿砖
+    for(let i = 0; i < steps && state === 'play'; i++) substep(dt / steps);
+
+    // 兜底：太久没碰到砖 = 多半进了角度刚好闭合的周期轨道，微调一下方向打破它
+    if(state === 'play' && sinceBreak > STALL_S){
+      sinceBreak = 0;
+      const s = Math.hypot(ball.vx, ball.vy) || 1;
+      const a = Math.atan2(ball.vy, ball.vx) + (Math.random() * 0.9 - 0.45);
+      ball.vx = Math.cos(a) * s; ball.vy = Math.sin(a) * s;
+      enforceAngles(s, 0);
+    }
+
+    // 拖尾
+    ball.trail.push({x: ball.x, y: ball.y});
+    if(ball.trail.length > 9) ball.trail.shift();
+
+    if(shakeT > 0) shakeT = Math.max(0, shakeT - dt);
+    if(flashT > 0) flashT = Math.max(0, flashT - dt);
+    for(let i = particles.length - 1; i >= 0; i--){
+      const p = particles[i];
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 210 * dt; p.life -= dt;
+      if(p.life <= 0) particles.splice(i, 1);
+    }
+  }
+
+  function substep(dt){
+    ball.x += ball.vx * dt;
+    ball.y += ball.vy * dt;
+
+    // 左右墙 / 顶墙
+    let bounced = false;
+    if(ball.x - ball.r < 0){ ball.x = ball.r; ball.vx = Math.abs(ball.vx); sndWall(); bounced = true; }
+    if(ball.x + ball.r > W){ ball.x = W - ball.r; ball.vx = -Math.abs(ball.vx); sndWall(); bounced = true; }
+    if(ball.y - ball.r < 0){ ball.y = ball.r; ball.vy = Math.abs(ball.vy); sndWall(); bounced = true; }
+    if(bounced) enforceAngles(Math.hypot(ball.vx, ball.vy), paddle.vx);
+
+    // 挡板
+    const py = paddle.y, half = paddle.w / 2;
+    if(ball.vy > 0 && ball.y + ball.r >= py && ball.y - ball.r <= py + paddle.h &&
+       ball.x >= paddle.x - half - ball.r && ball.x <= paddle.x + half + ball.r){
+      const rel = clamp((ball.x - paddle.x) / half, -1, 1);
+      const ang = rel * (Math.PI / 3);                       // 命中点越靠边，反弹角越大（±60°）
+      let sp = Math.hypot(ball.vx, ball.vy);
+      sp = clamp(sp + Math.abs(paddle.vx) * 0.06, 0, 430);    // 挡板甩动带一点加速
+      ball.vx = Math.sin(ang) * sp + paddle.vx * 0.12;        // 「搓球」：挡板横向速度带一点侧旋
+      ball.vy = -Math.abs(Math.cos(ang) * sp);
+      enforceAngles(sp, paddle.vx);                           // 夹掉「贴地横飞」和「纯竖直死循环」两种退化
+      ball.y = py - ball.r - 0.01;
+      sndPaddle();
+    }
+
+    // 砖块：圆 vs 矩形，取最近点求法线
+    for(let i = 0; i < bricks.length; i++){
+      const b = bricks[i];
+      if(b.hp <= 0) continue;
+      const nx = clamp(ball.x, b.x, b.x + b.w);
+      const ny = clamp(ball.y, b.y, b.y + b.h);
+      let dx = ball.x - nx, dy = ball.y - ny;
+      let d2 = dx * dx + dy * dy;
+      if(d2 > ball.r * ball.r) continue;
+
+      let d = Math.sqrt(d2);
+      if(d < 1e-6){                       // 球心陷在砖里：按最浅穿透轴推出
+        const l = ball.x - b.x, r2 = b.x + b.w - ball.x;
+        const t = ball.y - b.y, bo = b.y + b.h - ball.y;
+        const m = Math.min(l, r2, t, bo);
+        dx = (m === l) ? -1 : (m === r2 ? 1 : 0);
+        dy = (m === t) ? -1 : (m === bo ? 1 : 0);
+        d = 1;
+      }
+      const ux = dx / d, uy = dy / d;
+      // 推出重叠
+      ball.x = nx + ux * (ball.r + 0.01);
+      ball.y = ny + uy * (ball.r + 0.01);
+      // 反射
+      const dot = ball.vx * ux + ball.vy * uy;
+      if(dot < 0){ ball.vx -= 2 * dot * ux; ball.vy -= 2 * dot * uy; }
+
+      b.hp -= 1; b.hit = 0.16;
+      sinceBreak = 0;
+      if(b.hp <= 0){
+        alive--;
+        score += (b.max > 1 ? 25 : 10);
+        spawnParticles(nx, ny, b.row);
+        shakeT = Math.max(shakeT, 0.10);
+        sndBrick(b.row);
+      }else{
+        sndHard(b.row);
+      }
+      flashT = 0.06;
+      syncHud();
+      break;                              // 一步只处理一块，避免同帧反复反射
+    }
+
+    // 掉出底部
+    if(ball.y - ball.r > H){
+      lives--;
+      syncHud();
+      sndLost();
+      shakeT = 0.25;
+      if(lives <= 0){
+        state = 'over';
+        if(score > best){ best = score; try{ localStorage.setItem(BKEY, String(best)); }catch(e){} }
+        sndOver();
+        showPanel('gameover');
+        return;
+      }
+      state = 'ready';
+      resetBall(true);
+      toast('还剩 ' + lives + ' 个球');
+      return;
+    }
+
+    // 过关
+    if(alive <= 0){
+      const bonus = 100 + lives * 50;
+      score += bonus;
+      syncHud();
+      sndClear();
+      if(level >= MAX_LEVEL){
+        state = 'over';
+        if(score > best){ best = score; try{ localStorage.setItem(BKEY, String(best)); }catch(e){} }
+        sndWin();
+        showPanel('win', bonus);
+      }else{
+        state = 'clear';
+        showPanel('clear', bonus);
+      }
+    }
+  }
+
+  function spawnParticles(x, y, row){
+    const hue = [ '#5b8cff', '#38d39f', '#ffd54a', '#ff8a5b', '#c37bff', '#4fd1ff', '#ff6b9d' ][row % 7];
+    for(let i = 0; i < 7; i++){
+      particles.push({
+        x: x, y: y,
+        vx: (Math.random() - 0.5) * 150,
+        vy: (Math.random() - 0.5) * 150 - 40,
+        life: 0.32 + Math.random() * 0.22,
+        max: 0.54, c: hue
+      });
+    }
+    if(particles.length > 160) particles.splice(0, particles.length - 160);
+  }
+
+  /* ================= 绘制 ================= */
+  const ROW_C = ['#5b8cff', '#38d39f', '#ffd54a', '#ff8a5b', '#c37bff', '#4fd1ff', '#ff6b9d'];
+
+  function rr(x, y, w, h, r){
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function draw(){
+    ctx.save();
+    if(shakeT > 0){
+      const k = shakeT * 26;
+      ctx.translate((Math.random() - 0.5) * k, (Math.random() - 0.5) * k);
+    }
+    // 背景 + 细网格
+    ctx.fillStyle = '#12151c';
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(255,255,255,.035)';
+    ctx.lineWidth = 1;
+    for(let gx = 0; gx <= W; gx += 32){ ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke(); }
+    for(let gy = 0; gy <= H; gy += 32){ ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+
+    // 砖块
+    for(const b of bricks){
+      if(b.hp <= 0) continue;
+      const col = ROW_C[b.row % 7];
+      const a = b.max > 1 && b.hp < b.max ? 0.55 : 1;      // 硬砖裂开后变暗
+      ctx.globalAlpha = a;
+      const g = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
+      g.addColorStop(0, col);
+      g.addColorStop(1, 'rgba(0,0,0,.35)');
+      ctx.fillStyle = g;
+      rr(b.x, b.y, b.w, b.h, 3.5); ctx.fill();
+      ctx.globalAlpha = 1;
+      // 高光
+      ctx.fillStyle = 'rgba(255,255,255,.18)';
+      rr(b.x + 2, b.y + 1.5, b.w - 4, 2.5, 1.2); ctx.fill();
+      // 命中闪白
+      if(b.hit > 0){
+        ctx.globalAlpha = b.hit / 0.16 * 0.75;
+        ctx.fillStyle = '#fff';
+        rr(b.x, b.y, b.w, b.h, 3.5); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      // 硬砖（2 血）右上角一个小三角标记
+      if(b.max > 1){
+        ctx.fillStyle = 'rgba(255,255,255,.55)';
+        ctx.beginPath();
+        ctx.moveTo(b.x + b.w - 5, b.y + 2.5);
+        ctx.lineTo(b.x + b.w - 2, b.y + 2.5);
+        ctx.lineTo(b.x + b.w - 2, b.y + 5.5);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+
+    // 粒子
+    for(const p of particles){
+      ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
+      ctx.fillStyle = p.c;
+      ctx.fillRect(p.x - 1.6, p.y - 1.6, 3.2, 3.2);
+    }
+    ctx.globalAlpha = 1;
+
+    // 挡板
+    const pg = ctx.createLinearGradient(0, paddle.y, 0, paddle.y + paddle.h);
+    pg.addColorStop(0, '#8fb0ff'); pg.addColorStop(1, '#3f63c9');
+    ctx.fillStyle = pg;
+    rr(paddle.x - paddle.w / 2, paddle.y, paddle.w, paddle.h, paddle.h / 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.35)';
+    rr(paddle.x - paddle.w / 2 + 3, paddle.y + 1.5, paddle.w - 6, 2, 1); ctx.fill();
+
+    // 球拖尾
+    for(let i = 0; i < ball.trail.length; i++){
+      const t = ball.trail[i], k = (i + 1) / ball.trail.length;
+      ctx.globalAlpha = k * 0.30;
+      ctx.fillStyle = '#e8ecf3';
+      ctx.beginPath(); ctx.arc(t.x, t.y, ball.r * k * 0.85, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // 球
+    ctx.shadowColor = 'rgba(232,236,243,.85)';
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, 7); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // 发球提示
+    if(ball.stuck && (state === 'ready' || state === 'pause')){
+      ctx.globalAlpha = 0.55 + 0.35 * Math.sin(now * 0.005);
+      ctx.strokeStyle = '#ffd54a'; ctx.lineWidth = 1.4;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(ball.x, ball.y - 10); ctx.lineTo(ball.x, ball.y - 26); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(ball.x - 4, ball.y - 26); ctx.lineTo(ball.x + 4, ball.y - 26); ctx.lineTo(ball.x, ball.y - 32);
+      ctx.closePath(); ctx.fillStyle = '#ffd54a'; ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'rgba(255,213,74,.9)';
+      ctx.font = '600 11px -apple-system,"PingFang SC",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('拖动挡板 · 点一下发球', W / 2, H - 58);
+    }
+
+    // 命中时全屏轻闪
+    if(flashT > 0){
+      ctx.globalAlpha = flashT / 0.06 * 0.06;
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+
+    // 暂停遮罩
+    if(state === 'pause'){
+      ctx.fillStyle = 'rgba(8,10,14,.62)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#e8ecf3';
+      ctx.font = '700 20px -apple-system,"PingFang SC",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('已暂停', W / 2, H / 2);
+      ctx.font = '400 12px -apple-system,"PingFang SC",sans-serif';
+      ctx.fillStyle = '#8b95a7';
+      ctx.fillText('点「继续」回到游戏', W / 2, H / 2 + 24);
+    }
+  }
+
+  /* ================= 主循环 ================= */
+  let now = 0;
+  function frame(ts){
+    if(!lastT) lastT = ts;
+    let dt = (ts - lastT) / 1000;
+    lastT = ts;
+    now = ts;
+    if(dt > 0.05) dt = 0.05;              // 切回前台/卡顿时别让球瞬移穿墙
+    if(dt < 0) dt = 0;
+    step(dt);
+    // 命中动效衰减
+    for(const b of bricks) if(b.hit > 0) b.hit = Math.max(0, b.hit - dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  /* ================= 面板 ================= */
+  function showPanel(kind, bonus){
+    clearTimeout(overTimer);
+    const t = $('overTitle'), p = $('overText'), next = $('overNext');
+    if(kind === 'clear'){
+      t.textContent = '第 ' + level + ' 关通过！';
+      p.textContent = '过关奖励 +' + bonus + '\n剩余球 ' + lives + ' 个（每个 +50）\n总分 ' + score;
+      next.textContent = '进入第 ' + (level + 1) + ' 关';
+      next.onclick = () => { $('over').classList.remove('on'); startLevel(level + 1, true); };
+    }else if(kind === 'win'){
+      t.textContent = '🏆 全部 ' + MAX_LEVEL + ' 关通关！';
+      p.textContent = '最终得分 ' + score + '\n历史最高 ' + best;
+      next.textContent = '再玩一次';
+      next.onclick = () => { $('over').classList.remove('on'); startLevel(1, false); };
+    }else{
+      t.textContent = '游戏结束';
+      p.textContent = '到了第 ' + level + ' 关　本次得分 ' + score + '\n历史最高 ' + best;
+      next.textContent = '重试第 ' + level + ' 关';          // 别打回第 1 关，一关一分钟，重头来太挫败
+      next.onclick = () => { $('over').classList.remove('on'); startLevel(level, true); };
+      $('overRetry').textContent = '从第 1 关重来';
+    }
+    overTimer = setTimeout(() => $('over').classList.add('on'), 420);   // 让爆炸动效先演完
+  }
+
+  $('overRetry').onclick = () => { $('over').classList.remove('on'); startLevel(1, false); };
+  $('btnRetry').onclick = () => { $('over').classList.remove('on'); startLevel(1, false); };
+  $('btnPause').onclick = () => { if(state === 'play') pause(); else resume(); };
+  $('btnSound').onclick = () => {
+    soundOn = !soundOn;
+    try{ localStorage.setItem(SKEY, soundOn ? '1' : '0'); }catch(e){}
+    $('btnSound').textContent = '音效：' + (soundOn ? '开' : '关');
+    if(soundOn){ ac(); tone(660, 0.08, {type:'triangle', gain:0.1}); }
+    toast(soundOn ? '音效已开' : '音效已关');
+  };
+  $('btnSound').textContent = '音效：' + (soundOn ? '开' : '关');
+
+  // 切到后台自动暂停，回来不被打个措手不及
+  document.addEventListener('visibilitychange', () => { if(document.hidden) pause(); });
+
+  /* ================= 启动 ================= */
+  // 兼容版：给 body 打标（CSS 覆盖用），并把统计塞进标题那一行 ⇒ 顶部只占一行
+  document.body.classList.add('v2');
+  (function(){
+    const topEl = document.querySelector('.top'), hudEl = document.querySelector('.hud');
+    if(topEl && hudEl) topEl.appendChild(hudEl);
+  })();
+  // 先按窗口宽度估一次列数，免得 startLevel 建一次又被 layout 重建
+  COLS = computeCols(Math.min(window.innerWidth - 8, 2400));
+  recomputeBrickW();
+
+  startLevel(1, false);
+  layout();
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', () => setTimeout(layout, 120));
+  requestAnimationFrame(frame);
+
+  /* 只读调试钩子（对玩家不可见）：给 Node 测试桩读状态用。
+     注意 browser_console 里读 localStorage 会被当敏感原语拦截，所以状态要从这里拿。 */
+  window.__breakout = () => ({
+    W, H, level, score, lives, state, alive, best, soundOn, sounds: soundCount,
+    rows: cfg.rows, hard: cfg.hard, speed: cfg.speed, paddleW: cfg.paddleW,
+    ball: {x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, r: ball.r, stuck: ball.stuck},
+    paddle: {x: paddle.x, w: paddle.w, y: paddle.y},
+    bricks: bricks.map(b => b.hp),
+    particles: particles.length, panel: $('over').classList.contains('on')
+  });
+})();
+</script>
+</body>
+</html>
