@@ -78,6 +78,10 @@ def main():
         "levels": a_lvls,
     })
 
+    # 街机版难度更低（6→84 推）且关卡更多，放前面作为默认关卡集
+    order = {"arcade": 0, "classic": 1}
+    sets.sort(key=lambda s: order.get(s["id"], 99))
+
     OUT.write_text(json.dumps(sets, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"已写出 {OUT.name}")
     for s in sets:

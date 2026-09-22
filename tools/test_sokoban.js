@@ -167,10 +167,13 @@ function switchToSet(i) {
 /* ================= 1) 关卡集结构 ================= */
 console.log('\n== 1) 关卡集结构 ==');
 ok(setDefs.length === 2, `共 2 套关卡集（实际 ${setDefs.length}）`);
-ok(setDefs[0].id === 'classic' && setDefs[1].id === 'arcade', '关卡集 id 为 classic / arcade',
-   setDefs.map(s => s.id).join(','));
-ok(setDefs[0].levels.length === 24, `经典集 24 关（实际 ${setDefs[0].levels.length}）`);
-ok(setDefs[1].levels.length === 48, `街机版 48 关（实际 ${setDefs[1].levels.length}，原版 55 剔除 3 关损坏数据）`);
+ok(setDefs.map(s => s.id).join(',') === 'arcade,classic',
+   '关卡集顺序：街机版在前（默认）、经典集在后', setDefs.map(s => s.id).join(','));
+// 按 id 取用，避免断言和展示顺序耦合
+const setById = Object.fromEntries(setDefs.map(s => [s.id, s]));
+const idxOfSet = id => setDefs.findIndex(s => s.id === id);
+ok(setById.classic.levels.length === 24, `经典集 24 关（实际 ${setById.classic.levels.length}）`);
+ok(setById.arcade.levels.length === 48, `街机版 48 关（实际 ${setById.arcade.levels.length}，原版 55 剔除 3 关损坏数据）`);
 const allLv = setDefs.flatMap(s => s.levels);
 ok(allLv.every(l => /^[# .$*@+]+$/.test([].concat(l.map).join(''))), '所有关卡地图只含合法字符');
 const oversize = allLv.filter(l => Math.max(...l.map.map(r => r.length)) > 18 || l.map.length > 18);
@@ -222,12 +225,13 @@ ok((localStorage._d['sokoban_last_v5:classic'] !== undefined)
    && (localStorage._d['sokoban_last_v5:arcade'] !== undefined), '「上次进度」也按关卡集分开存');
 
 // 导航链路：切回经典集一路点到最后一关
-switchToSet(0);
+switchToSet(idxOfSet('classic'));
 ok(S().set === 'classic', '切回经典集');
 $('btnReset').click();
+const cLen = setById.classic.levels.length;
 let g = 0;
-while (S().lv < setDefs[0].levels.length && g++ < 300) $('btnNext').click();
-ok(S().lv === setDefs[0].levels.length, `一路「下一关」能走到第 ${setDefs[0].levels.length} 关（实际 ${S().lv}）`);
+while (S().lv < cLen && g++ < 300) $('btnNext').click();
+ok(S().lv === cLen, `一路「下一关」能走到第 ${cLen} 关（实际 ${S().lv}）`);
 $('btnNext').click();
 ok(true, '最后一关再点「下一关」不抛异常');
 
