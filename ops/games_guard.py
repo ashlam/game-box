@@ -6,7 +6,8 @@
 
 路径说明（相对本文件位置推导，不写死）：
   PROJECT —— 项目根（本文件位于 <PROJECT>/ops/）
-  ROOT    —— 站点根 = <PROJECT>/web，即 http.server 的 --directory
+  ROOT    —— 站点根 = <PROJECT>/web，即静态服务的根目录
+             （服务本体是同目录的 serve_site.py：给 HTML 加 no-store 防浏览器缓存旧页）
   LOGDIR  —— 守护/服务日志 = <PROJECT>/ops/logs
              （刻意放在站点根之外，避免串口日志被公开访问）
 
@@ -67,8 +68,10 @@ def alive():
 def start_service():
     os.makedirs(LOGDIR, exist_ok=True)
     with open(LOG, "a") as lf:
+        # 用自带的 serve_site.py 而不是 `-m http.server`：前者会给 HTML 加 no-store，
+        # 避免手机浏览器缓存旧页面（2026-09-22 踩过：服务器上是新版，用户刷新还是旧版）
         p = subprocess.Popen(
-            [sys.executable, "-m", "http.server", str(PORT), "--directory", ROOT, "--bind", "0.0.0.0"],
+            [sys.executable, os.path.join(PROJECT, "ops", "serve_site.py"), str(PORT), ROOT],
             stdout=lf, stderr=subprocess.STDOUT, start_new_session=True)
     log(f"service not running -> restarted, pid={p.pid}, root={ROOT}")
     return p
