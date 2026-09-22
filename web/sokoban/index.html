@@ -71,6 +71,26 @@
   .panel{width:100%;max-width:340px;background:var(--card);border:1px solid var(--line);border-radius:20px;
          padding:24px 20px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.6)}
   .panel h2{margin:0 0 8px;font-size:22px}
+  /* 过关成绩对比表：把「你的实际」和「理论最优」明确分两行，并给出差距。
+     原来是一行「你用 X 步 / 推动 Y 次」+ 一行「参考 Y 推 / X 步」，字段顺序还是反的，
+     数字对不上眼 —— 用户反馈「理论和实际的区分不够明显」。 */
+  .lvcap{font-size:11.5px;color:var(--dim);margin:0 0 9px;letter-spacing:.4px}
+  .cmp{display:grid;grid-template-columns:auto 1fr 1fr;gap:7px 10px;align-items:center;
+        background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:14px;
+        padding:12px 14px;margin:0 0 12px}
+  .cmp .h{font-size:10.5px;color:var(--dim);letter-spacing:.6px;text-align:right}
+  .cmp .k{font-size:12.5px;color:var(--dim);text-align:left;white-space:nowrap}
+  .cmp .k.you{color:var(--txt)}
+  .cmp .k.ref{color:#ffc857}
+  .cmp .v{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;text-align:right;line-height:1.15}
+  .cmp .v.you{color:var(--acc)}
+  .cmp .v.ref{color:#ffc857;font-weight:600}
+  .cmp .v.d{font-size:14px;color:var(--dim);font-weight:600}
+  .cmp .eq{font-size:12px;color:#5dd39e;font-weight:600}
+  .cmp .up{color:#ffa94d}                 /* 比理论最优多用了 */
+  .cmp .dn{color:#5dd39e}                 /* 比参考解的步位还少（步数可能发生） */
+  .panel .note{font-size:11px;color:var(--dim);margin:0 0 11px;line-height:1.55;white-space:normal}
+  .panel .note.rec{color:#5dd39e;font-size:12.5px}
   .panel p{color:var(--dim);font-size:13.5px;margin:0 0 18px;line-height:1.6;white-space:pre-line}
   .panel button{width:100%;font-size:15px;padding:13px;border-radius:12px;border:1px solid var(--line);
                 background:var(--card2);color:var(--txt);font-family:inherit;margin-bottom:8px}
@@ -151,7 +171,7 @@
 
 <div id="over"><div class="panel">
   <h2 id="overTitle">过关！</h2>
-  <p id="overText"></p>
+  <div id="overStats"></div>
   <button class="pri" id="overNext">下一关</button>
   <button id="overRetry">再玩一次</button>
 </div></div>
@@ -428,6 +448,42 @@
     draw(); hud();
   }
 
+  /* 过关成绩对比：明确分「你的实际 / 理论最优 / 差距」三行 × 「推动数 / 步数」两列。
+     ★ 两个数字的口径必须说清楚，否则会误导：
+       - 推动数：hasRef 时理论列是**已证明的最少推动次数**（可采纳 A* 得出）。
+       - 步数：理论列取「那条最少推动解」的最短走位；它不是全局最少步数
+         （用更多推动换更少走位在数学上可能更省步，只是这里没有为步数单独求最优）。
+       所以注释里明确写「步数为该解的最短走位」，不谎称是理论最少步。 */
+  function statsHtml(s){
+    const r = s.ref;
+    const v = (x, cls) => '<div class="v ' + cls + '">' + x + '</div>';
+    const diff = (a, b) => {
+      const d = a - b;
+      if(d === 0) return '<span class="eq">持平</span>';
+      return '<span class="' + (d > 0 ? 'up' : 'dn') + '">' + (d > 0 ? '+' + d : d) + '</span>';
+    };
+    let h = '<div class="lvcap">第 ' + s.no + ' 关</div>';
+    h += '<div class="cmp">'
+       + '<div class="h"></div><div class="h">推动数</div><div class="h">步数</div>'
+       + '<div class="k you">你的实际</div>' + v(s.pushes, 'you') + v(s.moves, 'you');
+    if(r){
+      h += '<div class="k ref">' + (r.opt ? '理论最优' : '参考解') + '</div>'
+         + v(r.pushes, 'ref') + v(r.moves, 'ref')
+         + '<div class="k d">差距</div>'
+         + v(diff(s.pushes, r.pushes), 'd') + v(diff(s.moves, r.moves), 'd');
+    }
+    h += '</div>';
+    h += '<p class="note">'
+      + (r ? (r.opt ? '理论最优：推动次数已证明为最少；步数取该解的最短走位。'
+                    : '参考解：推动次数尚未证明为最少。')
+           : '本关没有参考解数据。')
+      + (s.pushes === (r ? r.pushes : -1) && r ? '你的推动次数已达最少。' : '')
+      + '</p>';
+    if(s.prev && s.isNew) h += '<p class="note rec">🏅 刷新了你的纪录</p>';
+    else if(s.prev) h += '<p class="note">你的最好成绩：' + s.prev.moves + ' 步 / ' + s.prev.pushes + ' 推</p>';
+    return h;
+  }
+
   function checkWin(){
     const [d, t] = boxCount();
     if(d === t && t > 0){
@@ -448,12 +504,7 @@
       clearTimeout(overTimer);
       overTimer = setTimeout(() => {
         $('overTitle').textContent = snap.last ? '🏆 全部通关！' : '🎉 过关！';
-        let txt = `第 ${snap.no} 关　你用 ${snap.moves} 步 / 推动 ${snap.pushes} 次`;
-        if(snap.ref) txt += `\n参考 ${snap.ref.pushes} 推 / ${snap.ref.moves} 步`
-                            + (snap.ref.opt ? '（推动数最优）' : '（参考解，未证最优）');
-        if(snap.prev && snap.isNew) txt += '\n🏅 刷新了你的纪录';
-        else if(snap.prev) txt += `\n你的最好成绩 ${snap.prev.moves} 步`;
-        $('overText').textContent = txt;
+        $('overStats').innerHTML = statsHtml(snap);
         $('overNext').style.display = snap.last ? 'none' : 'block';
         $('over').classList.add('on');
       }, 180);
