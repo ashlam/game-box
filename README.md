@@ -99,6 +99,9 @@ bash android/build_apk.sh --genkey     # 密钥丢失时先生成一把新的
 
 ```bash
 python3 tools/verify_by_solution.py     # 重放官方解法，验证关卡集可解性
+python3 tools/select4.py                # 按难度下限重新选关（丢掉 <14 推的消遣关）-> final_levels4.json
+python3 tools/inject4.py                # 把关卡表注入 sokoban/index.html（顺带换代存档键）
+node   tools/test_sokoban.js            # 仓库番：逐关重放官方解法，断言通关且步数/推动数吻合
 node   tools/test_othello.js            # 黑白棋整局对局 + 计时断言
 node   tools/test_breakout.js           # 打砖块：完美挡板能否打通 8 关 / 边界不变量 / 计分一致性 / 音效
 node   tools/hunt_stall.js              # 卡死猎手

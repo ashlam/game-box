@@ -1,0 +1,615 @@
+[
+ {
+  "no": 1,
+  "name": "教学示例 · Illustrative #13",
+  "map": [
+   "#########",
+   "#       #",
+   "# $. .$ #",
+   "# **$*. #",
+   "#  $+$  #",
+   "#  *$*. #",
+   "# *. .$ #",
+   "#       #",
+   "#########"
+  ],
+  "best": {
+   "pushes": 14,
+   "moves": 44
+  },
+  "sol": "RDrUllLDRddrrUruuuuLulldDulDDuuulldRldRlddrU",
+  "boxes": 13,
+  "size": "9x9"
+ },
+ {
+  "no": 2,
+  "name": "教学示例 · Illustrative #11",
+  "map": [
+   "######",
+   "#    #",
+   "# ## ###",
+   "#  #   ##",
+   "#  $* . ##",
+   "#  .*$@. #",
+   "#    $$  #",
+   "#  .*$.. #",
+   "#  $* * ##",
+   "#  #   ##",
+   "# ## ###",
+   "#    #",
+   "######"
+  ],
+  "best": {
+   "pushes": 16,
+   "moves": 74
+  },
+  "sol": "DuuulluullldddddrrrRDRUlULrRuullDRdddLullldddddrrruurrUdllURuullluuRlddddR",
+  "boxes": 11,
+  "size": "13x10"
+ },
+ {
+  "no": 3,
+  "name": "教学示例 · Illustrative #05",
+  "map": [
+   "      #####",
+   "  #####   #####",
+   "  #           #",
+   "  #  ### ###  #",
+   "#### #     # ####",
+   "#    #  *  #    #",
+   "# $  # *+*      #",
+   "#    #  *  #    #",
+   "#### #     # ####",
+   "  #  ### ###  #",
+   "  #           #",
+   "  #####   #####",
+   "      #####"
+  ],
+  "best": {
+   "pushes": 16,
+   "moves": 50
+  },
+  "sol": "UrrdrruuuulllldDDuuulllldddllldRRdrUUUUluRRRRurDDD",
+  "boxes": 5,
+  "size": "13x17"
+ },
+ {
+  "no": 4,
+  "name": "折磨 · #07",
+  "map": [
+   "      #####",
+   "  #####   ##",
+   "  #     #  #",
+   "### #####  #",
+   "#   #   #  #",
+   "# ######## ######",
+   "# #      $*#    #",
+   "# # # ###*+*  # #",
+   "# #      ***  # #",
+   "# ########  ### #",
+   "#      #    #   #",
+   "###### # # ## ###",
+   "     #        #",
+   "     ##########"
+  ],
+  "best": {
+   "pushes": 16,
+   "moves": 80
+  },
+  "sol": "RDrruLurrrddddllddllluurUldddlllluullllluuuuuurruurrrrurrdddrdDLLLLLddlluuRRRRRR",
+  "boxes": 7,
+  "size": "14x17"
+ },
+ {
+  "no": 5,
+  "name": "折磨 · #06",
+  "map": [
+   "      ########",
+   "  #####      #",
+   "  #     #### #",
+   "### ###$#  # #",
+   "#   #      # ###",
+   "# ### #### #   #",
+   "#     *+*  ### #",
+   "###  #.**    # #",
+   "  #### $ ### # #",
+   "     ##  #   # #",
+   "     #  ## ### #",
+   "     #  ## #   #",
+   "     #  #    ###",
+   "     #    ####",
+   "     ######"
+  ],
+  "best": {
+   "pushes": 17,
+   "moves": 111
+  },
+  "sol": "RDLrrruLLdrrrrddlldddldlluuuuUdrUUrruuulllllddlllluurruurrrrDullllddllddrrrruurRRRurDDDldlddlddddrruruuurruulLL",
+  "boxes": 6,
+  "size": "15x16"
+ },
+ {
+  "no": 6,
+  "name": "折磨 · #04",
+  "map": [
+   "     ### #####",
+   "###### ###   ###",
+   "#    #   # #   #",
+   "# ##  $# # ### #",
+   "#  # # #   #   #",
+   "## ###.##### ###",
+   "#  $ + *       #",
+   "### ##.####### #",
+   " #   # #       #",
+   " # # #$  #######",
+   " #     ###",
+   " ##### #",
+   "     ###"
+  ],
+  "best": {
+   "pushes": 18,
+   "moves": 71
+  },
+  "sol": "rRRRRRRuurruullulldddlluullDDullulllddrddRRlddrddrrUUdrrurrrrrruuLLLLLL",
+  "boxes": 4,
+  "size": "13x16"
+ },
+ {
+  "no": 7,
+  "name": "貌似容易 · #01",
+  "map": [
+   " ###  ####",
+   " # ####  #",
+   " # $     #",
+   " # ###   #",
+   "##   ### ####",
+   "#      @    #",
+   "#   ## # ## #",
+   "#.####      #",
+   "###  ########"
+  ],
+  "best": {
+   "pushes": 19,
+   "moves": 49
+  },
+  "sol": "llllluuuRRRRRurDDDDllddrrUdrrruullLLLLLLulDrdLulD",
+  "boxes": 1,
+  "size": "9x13"
+ },
+ {
+  "no": 8,
+  "name": "折磨 · #09",
+  "map": [
+   "      #####",
+   "      #   #",
+   "####### # #####",
+   "#       #     #",
+   "# ##### ##### #",
+   "# #    $    # #",
+   "# #   *.*   # #",
+   "# #   *+*   # #",
+   "# #   **.#  # #",
+   "# #    #    # #",
+   "# #### ### ## #",
+   "#     $ $     #",
+   "#####   ## ####",
+   "    ## ##  #",
+   "    #     ##",
+   "    #######"
+  ],
+  "best": {
+   "pushes": 19,
+   "moves": 96
+  },
+  "sol": "uUllddRlddrUluuurrdRDrruLrdddddddldllluuUUUddrRRllldddrrruruUUUUruLLrddddrrruuuuuuuulllluullddDD",
+  "boxes": 9,
+  "size": "16x15"
+ },
+ {
+  "no": 9,
+  "name": "教学示例 · Illustrative #16",
+  "map": [
+   "#####",
+   "#   ##",
+   "# *. #",
+   "# ** #",
+   "#  $ ####",
+   "#   #   ##",
+   "# *.  *. #",
+   "# **  ** #",
+   "#  $   $ #",
+   "##   #  ##",
+   " #### *+ #",
+   "    # ** #",
+   "    #  $ #",
+   "    ##   #",
+   "     #####"
+  ],
+  "best": {
+   "pushes": 20,
+   "moves": 93
+  },
+  "sol": "rdddlluluuRuuluuurrdrddLULLullulluuuurrdrddLUddlluRdrUllddddrRURRdLdlUrrRdrUlddlddrUddrruLdlU",
+  "boxes": 16,
+  "size": "15x10"
+ },
+ {
+  "no": 10,
+  "name": "折磨 · #08",
+  "map": [
+   " ####    #########",
+   " #  ######       #",
+   " #         ##### #",
+   " # ##### ###   # #",
+   "## #   **.     # #",
+   "#  #   * *###### #",
+   "#      **+   #   #",
+   "#######  #$#$# ###",
+   "      #        #",
+   "      ##  ######",
+   "       ####"
+  ],
+  "best": {
+   "pushes": 20,
+   "moves": 91
+  },
+  "sol": "UlDrrrrDullllLruLLrdddrUUluRllulldRRldRlllluuuurrrrrrrrurrrrrrdddddllddlLLLLdlUUdrrUdrruulL",
+  "boxes": 8,
+  "size": "11x18"
+ },
+ {
+  "no": 11,
+  "name": "折磨 · #05",
+  "map": [
+   "          #####",
+   "   ########   #",
+   "   #  #  #  # #",
+   "   #     $  # #",
+   "####  ###*### ####",
+   "#       *+*      #",
+   "#   # # #*# #### #",
+   "### # # #     #  #",
+   "  # # # # ### #  #",
+   "  # #   #   #   ##",
+   "  # ##### #######",
+   "  #       #",
+   "  #########"
+  ],
+  "best": {
+   "pushes": 20,
+   "moves": 60
+  },
+  "sol": "RRddrrddrruuruulllLLrruuuullddlLLLLLulDDrdrrRlllLLdlluRRRRRR",
+  "boxes": 5,
+  "size": "13x18"
+ },
+ {
+  "no": 12,
+  "name": "教学示例 · Illustrative #12",
+  "map": [
+   "   ########",
+   "####      ##",
+   "#  #       #",
+   "#  $$$     #",
+   "#   $.**   #",
+   "###...@...###",
+   " #   **.$   #",
+   " #     $$$  #",
+   " #       #  #",
+   " ##      ####",
+   "  ########"
+  ],
+  "best": {
+   "pushes": 22,
+   "moves": 91
+  },
+  "sol": "lldddrrrUUdllluuruUrrrrdddLuuuuulllDDDLddddrrrrUUdRurrddlUruLdlUdllllluuuruulDDuLDlluRRRurD",
+  "boxes": 12,
+  "size": "11x13"
+ },
+ {
+  "no": 13,
+  "name": "教学示例 · Illustrative #09",
+  "map": [
+   "####",
+   "#  ####",
+   "#     #",
+   "# +** #",
+   "#     #",
+   "### ###",
+   " #    #",
+   "##    #",
+   "# ***##",
+   "#    #",
+   "### ####",
+   "#      #",
+   "#    # #",
+   "# ***$ #",
+   "#    ###",
+   "######"
+  ],
+  "best": {
+   "pushes": 27,
+   "moves": 81
+  },
+  "sol": "drUdrruulLdlluurDrdddddDDDDlldddrUUddrrULUUUUUUUUUdddddddrrrddLLdllluuuRdrUUUddrD",
+  "boxes": 9,
+  "size": "16x8"
+ },
+ {
+  "no": 14,
+  "name": "貌似容易 · #02",
+  "map": [
+   " #########",
+   " #  #    #",
+   " #       #",
+   " # ##   ####",
+   " #.# $@$ #.#",
+   "## #    ## #",
+   "#  ######  ##",
+   "#           #",
+   "## ######  ##",
+   " ###    ####"
+  ],
+  "best": {
+   "pushes": 30,
+   "moves": 69
+  },
+  "sol": "drUUddllUUruLLLulDDDDDldRRRRRRRRdrUUUddlllllllluuuuurrrrurrdLLLLLulDD",
+  "boxes": 2,
+  "size": "10x13"
+ },
+ {
+  "no": 15,
+  "name": "教学示例 · Illustrative #08",
+  "map": [
+   "  ######",
+   " ##    #####",
+   " #     #   #",
+   " # ****    #",
+   " #    ##  ##",
+   " #     # ##",
+   " # ##### #",
+   " #     # ##",
+   "##     #  #",
+   "#  ***+#$ #",
+   "#      #  #",
+   "###########"
+  ],
+  "best": {
+   "pushes": 32,
+   "moves": 91
+  },
+  "sol": "dlllUluuuuuuurDDrdLulDDDDRRRurDlllddlluRuuuuurrrURRRurrdLLLLuLLulDrrrdrrdddddrddlUUUUUUruLL",
+  "boxes": 8,
+  "size": "12x12"
+ },
+ {
+  "no": 16,
+  "name": "教学示例 · Illustrative #07",
+  "map": [
+   " ###### #####",
+   "##.   ###   #",
+   "#+*     *   #",
+   "##  ####** ##",
+   " ####  $ *  #",
+   "    # ##    #",
+   "    #  ##   #",
+   "    # # $ ###",
+   "    #   # #",
+   "    ##    #",
+   "     ###  #",
+   "       ####"
+  ],
+  "best": {
+   "pushes": 34,
+   "moves": 105
+  },
+  "sol": "RdrUruLdrrrrRRurrdLLLLLLLLLrrrrrrrrdddlluUdRdrUULuLLLLLLrrrrrrurrdLLdddddddlluuRlddrruUUUUdddlldlluuuurRR",
+  "boxes": 7,
+  "size": "12x13"
+ },
+ {
+  "no": 17,
+  "name": "貌似容易 · #06",
+  "map": [
+   "   #######",
+   "   #    .#",
+   "#### ###$####",
+   "#    #      ##",
+   "#   .#      .#",
+   "## ###      ####",
+   " # #        $  #",
+   " # #        #  #",
+   " # #.       *  #",
+   " # ### $@$  #  #",
+   " #   ## $ ###  ##",
+   " #      .       #",
+   " #  ##########  #",
+   " ####        ####"
+  ],
+  "best": {
+   "pushes": 36,
+   "moves": 132
+  },
+  "sol": "DrdLLLLLLdlUUUUUUUUrruuurrrrDDuulllldddllluRRlddddddddrrrrruUruLLLrruuuuuruulllldDuurrrrddlddrUUUddddddrrdLulDDrdrrrruuuuuLLdlUUluRR",
+  "boxes": 6,
+  "size": "14x17"
+ },
+ {
+  "no": 18,
+  "name": "折磨 · #10",
+  "map": [
+   "######",
+   "#    ###########",
+   "#              #",
+   "#  ##########  #",
+   "#  #   #    # ##",
+   "#      #    # #",
+   "#  ###      # #",
+   "## # +*     # #",
+   " # #  **    # #",
+   " # #   **  ## #",
+   "## #    ** #  ##",
+   "#  #     **    #",
+   "#  ###### $#   #",
+   "#          #####",
+   "#  #########",
+   "####"
+  ],
+  "best": {
+   "pushes": 40,
+   "moves": 116
+  },
+  "sol": "RDuurrdLrdLDLdlUUdddrrUURurrdLLDRDRUUUruLLulllullllddddddddrrrrrrrUUddrUUUUlldldRuuuruulDDDuurrrdLLulDrrdddRRdrruLLL",
+  "boxes": 10,
+  "size": "16x16"
+ },
+ {
+  "no": 19,
+  "name": "教学示例 · Illustrative #04",
+  "map": [
+   "       ####",
+   "########  ##",
+   "#          ###",
+   "# @$$ ##   ..#",
+   "# $$   ##  ..#",
+   "#         ####",
+   "###########"
+  ],
+  "best": {
+   "pushes": 46,
+   "moves": 110
+  },
+  "sol": "lddrUUluRRRRRRRurDldRRRlllullllllddRRlUluRRRRRRurDldRurDldRRlldllllluUluRRRRRurDldRurDldRldllllUUluRRRRurDldRR",
+  "boxes": 4,
+  "size": "7x14"
+ },
+ {
+  "no": 20,
+  "name": "貌似容易 · #07",
+  "map": [
+   " ####     ####",
+   " #  #######  #",
+   " #           #",
+   " #  ##   ##  #",
+   " #  # $+$ #  ##",
+   " # ##  $  #   #",
+   "## #. # # .   #",
+   "#  #  $$$ #####",
+   "# .#   $    . #",
+   "####       ####",
+   "   #  . .  #",
+   "   #########"
+  ],
+  "best": {
+   "pushes": 46,
+   "moves": 100
+  },
+  "sol": "uurrrrddddllulLLUUdlDDDDDldRuurRULLdlUrrrRlUUrrdDlDDuRRRlluuulUUluRRRRurDDDDrdLLuuuullllLLLLulDDDDDD",
+  "boxes": 7,
+  "size": "12x15"
+ },
+ {
+  "no": 21,
+  "name": "折磨 · #02",
+  "map": [
+   " ########",
+   "##   #  #",
+   "#       #",
+   "#    #  ####",
+   "###  # ##  ####",
+   " #   # #      #",
+   " #   # #      #",
+   " # ### # ## ###",
+   " #  # $+* # #",
+   " #  ##   ## #",
+   "##   ##     ###",
+   "#             #",
+   "#   #######   #",
+   "#####     #####"
+  ],
+  "best": {
+   "pushes": 47,
+   "moves": 96
+  },
+  "sol": "dlUUUUUUruLLLulDDDDrdLulDDDDDrddlluRRRRRRRRRRdrruLdlUUUUUUllldDDlddrruLdlUUruuurrrruLLulDrdLulDD",
+  "boxes": 2,
+  "size": "14x15"
+ },
+ {
+  "no": 22,
+  "name": "貌似容易 · #03",
+  "map": [
+   " #########",
+   " #  #    #",
+   " #       #",
+   " # ## $ ####",
+   " #.# $@$ #.#",
+   "## #    ## #",
+   "#  ######  ##",
+   "#         . #",
+   "## ######  ##",
+   " ###    ####"
+  ],
+  "best": {
+   "pushes": 48,
+   "moves": 111
+  },
+  "sol": "UruLLLLulDDDDDldRRRRRRRRdrUUUddlllllllluuuuurrrrdddrUUddllUUruLLLulDDDDDldRRRRRRRRllllllluuuuurrrrurrdLLLLLulDD",
+  "boxes": 3,
+  "size": "10x13"
+ },
+ {
+  "no": 23,
+  "name": "貌似容易 · #08",
+  "map": [
+   "   #############",
+   "   #  . .#     #",
+   "   #     #     #",
+   "####     #     #",
+   "# .# $   #  .  #",
+   "#  # $@$ $ #   #",
+   "# .##$$$$   .  #",
+   "#   #       #  #",
+   "#   ####    #  #",
+   "#     .#. ###  #",
+   "#              #",
+   "#  ##########  #",
+   "####        ####"
+  ],
+  "best": {
+   "pushes": 81,
+   "moves": 196
+  },
+  "sol": "urrdDDDDrdLLLLLLullddrUluRRRRdrrruuuuuulldRuullldRldRuurrrdDDDDDrdLLLLLLullddrUUUUUUdddddrrrrrruuulllUURDRluUUUllddRRRDrDDDDuuuuUUUdddRllldRlldRRuRRRRRurrddlUUruLullldDldRRlllDDrddLLLLLLullddrUUUU",
+  "boxes": 8,
+  "size": "13x16"
+ },
+ {
+  "no": 24,
+  "name": "教学示例 · Illustrative #14",
+  "map": [
+   "  ########",
+   " ##      #",
+   " #       ###",
+   "##         #",
+   "#   #$$    #",
+   "# $$  $$   #",
+   "## $$  $$ ##",
+   " #  $$  $$#",
+   " ## .#.#. ##",
+   " # . . . . #",
+   " #  . + .  #",
+   " ##. . . .##",
+   "  #########"
+  ],
+  "best": {
+   "pushes": 91,
+   "moves": 209
+  },
+  "sol": "rrruuULUUrDDDDrdLLLuluuuRRuruulDDDDDDDrdLuuuuLruuulDDlDRurDDuuurDDDDDuLuuullluRRuulDDldRRuRurDDDDuuulDDDDuuuuuulllllldDRDDDDldRRurDlluuuuuRRRRurDDDulllLDDuuulDDDDDuRuuurrdLulDDDluuuuuurrDDDrdLulDllUUluRurDDDDD",
+  "boxes": 14,
+  "size": "13x12"
+ }
+]
