@@ -51,9 +51,12 @@
   #toast.on{opacity:1;transform:translate(-50%,0)}
 
   /* ?debug=1 时显示的一行诊断，用来在真机上直接读渲染参数 */
-  #dbg{position:fixed;left:6px;bottom:6px;z-index:60;display:none;font-size:10px;line-height:1.4;
-       color:#8b95a7;background:rgba(0,0,0,.72);border:1px solid var(--line);border-radius:7px;
-       padding:3px 7px;max-width:96vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+  /* 诊断条：做成「点一下即复制」的小卡片（用户不必念数字，粘贴即可） */
+  #dbg{position:fixed;left:6px;right:6px;bottom:6px;z-index:60;display:none;font-size:10px;line-height:1.45;
+    font-family:ui-monospace,Menlo,Consolas,monospace;color:#a8b8cf;background:rgba(8,10,14,.88);
+    border:1px solid rgba(120,150,200,.24);border-radius:8px;padding:7px 9px;
+    white-space:pre-wrap;word-break:break-all;cursor:pointer;
+    -webkit-user-select:text;user-select:text;-webkit-tap-highlight-color:rgba(255,255,255,.08)}
   #dbg.on{display:block}
 
   /* 顶部压成一行（统计塞进标题那一行）、按钮压扁、宽度上限放开 —— 把屏幕尽量让给场地 */
@@ -119,6 +122,7 @@
   <button id="btnPause">暂停</button>
   <button id="btnSound">音效：开</button>
   <button id="btnRetry">重开</button>
+  <button id="btnDiag" title="复制诊断信息">诊断</button>
 </div>
 
 <div id="toast"></div>
@@ -339,6 +343,73 @@
     clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 1600);
   }
 
+  /* ================= 诊断信息：一键复制（用户不必念数字，粘贴即可） =================
+     为什么不用 navigator.clipboard 就完事：http://192.168.x.x 属非安全上下文，
+     安卓 Chrome / 小米浏览器上 navigator.clipboard 直接是 undefined。
+     所以三级兜底：① clipboard API（https 或 localhost 才有）→ ② execCommand('copy')
+     → ③ 全失败就把文字选中，提示用户长按「复制」。 */
+  function dbgText(){
+    const dpr = window.devicePixelRatio || 1;
+    const cw = Math.round(W * scale), ch = Math.round(H * scale);
+    const ori = window.innerWidth >= window.innerHeight ? '横屏' : '竖屏';
+    const scr = (window.screen && window.screen.width) ? (window.screen.width + '×' + window.screen.height) : '?';
+    const st = $('stage');
+    const pct = (a, b) => b ? (a / b * 100).toFixed(0) : '?';
+    return [
+      '【打砖块·诊断】' + new Date().toLocaleString('zh-CN'),
+      '版本=默认版（列数随屏宽自适应 + 几何按场地高度等比）',
+      '视口=' + window.innerWidth + '×' + window.innerHeight + '  朝向=' + ori
+        + '  dpr=' + dpr + '  屏幕=' + scr,
+      '画布=' + cw + '×' + ch + 'css  占屏=' + pct(cw, window.innerWidth) + '%宽 '
+        + pct(ch, window.innerHeight) + '%高  左右留白=' + Math.round((window.innerWidth - cw) / 2) + 'px',
+      '画布物理=' + cv.width + '×' + cv.height + '  逻辑=' + W + '×' + H + '  scale=' + scale.toFixed(3),
+      '砖=' + Math.round(BRICK_W * scale) + '×' + Math.round(BRICK_H * scale) + 'px  '
+        + COLS + '列' + (cfg ? cfg.rows : '?') + '行  砖墙边距=' + Math.round(M * scale) + 'px',
+      '挡板=' + Math.round((cfg ? cfg.paddleW : 0) * scale) + '×' + Math.round(PADDLE_H * scale)
+        + 'px  球r=' + Math.round(BALL_R * scale) + 'px',
+      'stage高=' + Math.round((st && st.clientHeight) || 0) + '  页面总高='
+        + document.documentElement.scrollHeight + '/' + window.innerHeight,
+      'UA=' + navigator.userAgent,
+    ].join('\n');
+  }
+
+  function copyText(txt){
+    let done = false;
+    try{
+      if(navigator.clipboard && window.isSecureContext && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(txt); done = true;
+      }
+    }catch(e){ done = false; }
+    if(!done){
+      try{
+        const ta = document.createElement('textarea');
+        ta.value = txt;
+        ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+        document.body.appendChild(ta);
+        ta.select();
+        if(ta.setSelectionRange) ta.setSelectionRange(0, txt.length);
+        done = document.execCommand('copy');
+        document.body.removeChild(ta);
+      }catch(e){ done = false; }
+    }
+    if(!done){
+      try{
+        const rg = document.createRange(); rg.selectNodeContents($('dbg'));
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg);
+      }catch(e){}
+    }
+    toast(done ? '诊断信息已复制 ✓ 直接粘给开发者' : '已选中，长按选择「复制」');
+    return done;
+  }
+
+  function showDbg(){
+    const el = $('dbg');
+    el.classList.add('on');
+    el.textContent = dbgText();
+    return el.textContent;
+  }
+
   /* ================= 布局：把逻辑坐标等比缩放到 #stage ================= */
   function layout(){
     const stageEl = $('stage');
@@ -373,14 +444,7 @@
       S *= 0.965; apply(S);
     }
     draw();
-    if(/[?&]debug/.test(location.search)){
-      const el = $('dbg');
-      el.classList.add('on');
-      el.textContent = `兼容版 · 视口 ${window.innerWidth}×${window.innerHeight}`
-        + ` · 画布 ${Math.round(W * S)}×${Math.round(H * S)} · 逻辑 ${W}×${H} · scale ${S.toFixed(2)}`
-        + ` · 砖 ${Math.round(BRICK_W * S)}×${Math.round(BRICK_H * S)}px`
-        + ` · ${COLS}列 ${cfg ? cfg.rows : '?'}行 · 挡板 ${Math.round((cfg ? cfg.paddleW : 0) * S)}px`;
-    }
+    if(/[?&]debug/.test(location.search)) showDbg();
   }
   let scale = 1;
 
@@ -786,6 +850,10 @@
     const topEl = document.querySelector('.top'), hudEl = document.querySelector('.hud');
     if(topEl && hudEl) topEl.appendChild(hudEl);
   })();
+  // 「诊断」按钮：点一下显示诊断条并复制到剪贴板，用户直接粘贴即可
+  $('btnDiag').addEventListener('click', e => { e.stopPropagation(); copyText(showDbg()); });
+  $('dbg').addEventListener('click', e => { e.stopPropagation(); copyText(showDbg()); });
+
   // 先按窗口宽度估一次列数，免得 startLevel 建一次又被 layout 重建
   applyGeometry();
   COLS = computeCols(Math.min(window.innerWidth - 8, 2400));
