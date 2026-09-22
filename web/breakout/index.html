@@ -20,7 +20,8 @@
     color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
     min-height:100vh;min-height:100dvh;              /* 整屏高度：信息区贴顶、操作区贴底 */
     display:flex;flex-direction:column;align-items:center;
-    padding:calc(env(safe-area-inset-top) + 6px) 4px calc(env(safe-area-inset-bottom) + 6px);   /* 左右只留 4px */
+    /* 底部留 16px：真机（飞书内置浏览器）实测原来按钮行贴着屏幕下沿，下面还有飞书自己的工具栏 */
+    padding:calc(env(safe-area-inset-top) + 6px) 4px calc(env(safe-area-inset-bottom) + 16px);   /* 左右只留 4px */
   }
   .top{width:100%;max-width:var(--mw);display:flex;align-items:center;gap:8px;margin-bottom:10px;flex:0 0 auto}
   .top a{color:var(--dim);text-decoration:none;font-size:20px;padding:6px 10px;border-radius:10px;background:var(--card);border:1px solid var(--line);line-height:1}
@@ -446,12 +447,17 @@
       scale = s;
     };
     apply(S);
-    // ★ 目标不是「刚好不溢出」而是「留出底部余量」：
-    //   真机实测（飞书内置浏览器 · 视口 411×740）出现 741/740 的 1px 溢出，
-    //   底部按钮行贴着屏幕下沿、下面还有飞书自己的工具栏，手感很挤。
-    //   所以这里要求整页比视口矮 10px 以上，宁可画布小 1~2%。
-    while(document.documentElement.scrollHeight > window.innerHeight - 10 && guard++ < 40){
+    // 兜底：整页仍溢出就略微缩小画布。
+    // ⚠️ 必须判断「缩小到底有没有用」——场地是 flex:1 撑满的，页面总高由 body 的
+    //    min-height:100dvh 决定，缩画布并不一定会降低页面高度。曾经只看 scrollHeight
+    //    就循环，结果在真机视口（411×740）上连缩 40 次，把画布缩成 220×328（54%×44%）。
+    //    所以每缩一次都重新量：一旦「没变矮」就立刻停手。
+    let prevH = document.documentElement.scrollHeight;
+    while(prevH > window.innerHeight + 1 && guard++ < 10){
       S *= 0.985; apply(S);
+      const nh = document.documentElement.scrollHeight;
+      if(nh >= prevH) break;
+      prevH = nh;
     }
     draw();
     if(/[?&]debug/.test(location.search)) showDbg();
