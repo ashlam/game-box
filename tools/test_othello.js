@@ -282,7 +282,29 @@ res.undo = undoDuringCount();
 res.countInterval = measureCountInterval(10);
 res.countIntervalOk = res.countInterval.deltas.length >= 5 &&
                       res.countInterval.deltas.every(d => Math.abs(d - 150) <= 15);   // 每枚 0.15 秒
-res.audio = { oscStarted: FakeCtx.started };
+/* ── 音效：一次落子必须同时有「落子音」和「翻子音」 ──
+   落子 = 2 个音（低音「嗒」+ 高频脆点）+ 翻子 k 个（k = min(8, max(2, 翻子数)))
+   ⇒ 任何一次合法落子至少 4 个音频节点；只有 2 个就说明翻子音没响 */
+res.sfx = (() => {
+  const nb = el('btnNew');
+  if (nb.click) nb.click(); else if (nb.onclick) nb.onclick();
+  runTimers(40);
+  const deltas = []; let n = 0, guard = 0;
+  while (n < 6 && guard++ < 6000 && !win.__othello().over) {
+    const can = cellsWith('.cell.can');
+    if (can.length && !win.__othello().busy) {
+      const before = FakeCtx.started;
+      el('board').dispatch('click', { target: can[0] });
+      runTimers(2);
+      deltas.push(FakeCtx.started - before);
+      n++;
+    }
+    runTimers(1);
+    let g = 0; while (win.__othello().busy && g++ < 3000) runTimers(1);   // 等电脑回完
+  }
+  return { sampled: n, deltas, min: deltas.length ? Math.min(...deltas) : 0 };
+})();
+res.audio = { oscStarted: FakeCtx.started, sfx: res.sfx };
 res.verdict = {
   gameFinished: g1.over === true,
   discsAddTo64: (g1.finalB + g1.finalW) === 64,
@@ -298,6 +320,7 @@ res.verdict = {
   delayInRange: res.delaysInRange,
   undoCancels: res.undo.stopped && res.undo.restored,
   soundFired: FakeCtx.started > 0,
+  soundPerMoveHasFlip: res.sfx.min >= 4,   // 落子 2 + 翻子 ≥2
 };
 res.verdict.allPass = Object.values(res.verdict).every(Boolean);
 console.log(JSON.stringify(res, null, 1));

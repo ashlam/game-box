@@ -229,10 +229,12 @@
   }
   // 落子：「嗒」一下 + 被翻的棋子一串碎响（谁落子音高不同，听得出）
   function sndPlace(who, nFlip){
-    tone(who === HUMAN ? 220 : 168, 0.15, {type:'sine', gain:0.16, to: who === HUMAN ? 150 : 115});
-    tone(who === HUMAN ? 640 : 540, 0.05, {type:'triangle', gain:0.05});
-    const k = Math.min(6, Math.max(2, nFlip || 0));
-    for(let i=0;i<k;i++) tone(780 + i*70, 0.035, {type:'triangle', gain:0.04, at: 0.035 + i*0.03});
+    // 落子：低音「嗒」 + 高频脆点（谁落子音高不同，听得出是玩家还是电脑）
+    tone(who === HUMAN ? 220 : 168, 0.17, {type:'sine', gain:0.24, to: who === HUMAN ? 150 : 115});
+    tone(who === HUMAN ? 640 : 540, 0.055, {type:'triangle', gain:0.11});
+    // 翻子：一串上行碎响，翻得越多响得越多（原来是 0.04 音量、35ms，轻到几乎听不见）
+    const k = Math.min(8, Math.max(2, nFlip || 0));
+    for(let i = 0; i < k; i++) tone(780 + i * 70, 0.05, {type:'triangle', gain:0.085, at: 0.04 + i * 0.036});
   }
   function sndWin(){ [523,659,784,1047].forEach((f,i)=> tone(f, 0.22, {type:'sine', gain:0.13, at:i*0.11})); }
   function sndLose(){ [392,330,262].forEach((f,i)=> tone(f, 0.28, {type:'sine', gain:0.12, at:i*0.13})); }
@@ -318,7 +320,7 @@
       $('cntB').textContent = nb; $('cntW').textContent = nw;    // 对应一方比分 +1
       setTally(nb / total * 100, nw / total * 100);              // 计票条跟着长
       const now = performance.now();
-      if(soundOn && now - lastTick > 30){ lastTick = now; tone(v === HUMAN ? 700 : 560, 0.026, {type:'triangle', gain:0.026}); }
+      if(soundOn && now - lastTick > 30){ lastTick = now; tone(v === HUMAN ? 700 : 560, 0.032, {type:'triangle', gain:0.055}); }
       countTimer = setTimeout(oneByOne, step);
     };
     countTimer = setTimeout(oneByOne, step);

@@ -115,7 +115,23 @@ const localStorage = {
   _d: {}, getItem(k) { return k in this._d ? this._d[k] : null; },
   setItem(k, v) { this._d[k] = String(v); }, removeItem(k) { delete this._d[k]; },
 };
-const win = { devicePixelRatio: 1, innerWidth: 390, innerHeight: 844, addEventListener() {}, removeEventListener() {} };
+/* 音效计数桩：统计真正 start() 过的音频节点。
+   ★ 必须在游戏跑起来之前装 —— 游戏里 ac() 第一次调用的结果会缓存：
+     没有 AudioContext 时缓存成 false 就再也不生效了。 */
+let sndNodes = 0;
+class FakeCtx {
+  constructor(){ this.state='suspended'; this.currentTime=0; this.sampleRate=44100; this.destination={}; }
+  createOscillator(){ return { type:'', frequency:{ setValueAtTime(){}, exponentialRampToValueAtTime(){}, value:0 },
+                               connect(){}, start(){ sndNodes++; }, stop(){} }; }
+  createGain(){ return { gain:{ setValueAtTime(){}, exponentialRampToValueAtTime(){}, value:0 }, connect(){} }; }
+  createBuffer(ch, len){ return { getChannelData: () => new Float32Array(len) }; }
+  createBufferSource(){ return { buffer:null, connect(){}, start(){ sndNodes++; } }; }
+  createBiquadFilter(){ return { type:'', frequency:{ value:0, setTargetAtTime(){} }, Q:{ value:0 }, connect(){} }; }
+  resume(){ this.state='running'; return Promise.resolve(); }
+}
+
+const win = { devicePixelRatio: 1, innerWidth: 390, innerHeight: 844, AudioContext: FakeCtx,
+              addEventListener() {}, removeEventListener() {} };
 
 const sandbox = {
   document, localStorage, performance,
@@ -243,6 +259,61 @@ $('btnUndo').click(); $('btnUndo').click();
 ok(S().map.join('|') === snap0, '撤销两次后地图逐字节还原（箱子没丢）');
 
 /* ================= 汇总 ================= */
+/* ================= 9) 音效触发 ================= */
+console.log('\n== 9) 音效触发（移动 / 推箱 / 落点 / 撤销 / 过关）==');
+{
+  const KEY2 = { U:'ArrowUp', D:'ArrowDown', L:'ArrowLeft', R:'ArrowRight' };
+  const press = ch => document.dispatch('keydown', { key: KEY2[ch], preventDefault(){} });
+  const goalBoxes = () => (S().map.join('').match(/\*/g) || []).length;   // '*' = 箱子已在目标点上
+
+  switchToSet(0); goTo(0);
+  $('btnReset').click();
+  runTimers(60);
+  const sol = (setDefs[0].levels[0].sol || '').toUpperCase().replace(/[^UDLR]/g, '');
+  const firstMove = sol[0] || 'R';
+
+  // 静音开关必须在「还没过关」时测：过关后 move() 会被 win 直接拦住，等于没测
+  $('btnSound').click(); runTimers(4);                 // 关
+  const afterMute = sndNodes;
+  press(firstMove); runTimers(4);
+  ok(sndNodes === afterMute, '关掉音效后完全不再发声');
+  $('btnSound').click(); runTimers(4);                 // 开回来
+  $('btnReset').click(); runTimers(20);                // 复位，保证下面这步合法
+  const beforeOn = sndNodes;
+  press(firstMove); runTimers(4);
+  ok(sndNodes > beforeOn, '重新打开后又能发声');
+
+  // 重放解法，逐步统计
+  $('btnReset').click(); runTimers(20);
+  let silentMoves = 0, pushTooQuiet = 0, goalTooQuiet = 0, pushes = 0, goalLands = 0, winDelta = 0;
+  let prevPushes = S().pushes, prevGoals = goalBoxes();
+  for (const ch of sol){
+    const before = sndNodes;
+    press(ch);
+    runTimers(4);
+    const d = sndNodes - before, st = S();
+    const isPush = st.pushes > prevPushes, landed = goalBoxes() > prevGoals;
+    if (d < 1) silentMoves++;
+    if (isPush) pushes++;
+    if (isPush && !landed && d < 2) pushTooQuiet++;
+    if (landed) goalLands++;
+    if (landed && d < 3) goalTooQuiet++;
+    prevPushes = st.pushes; prevGoals = goalBoxes();
+    if (st.win) { winDelta = d; break; }               // 过关音与最后一步同帧发出，必须在这一步量
+  }
+
+  ok(silentMoves === 0, `每一步都有音效（共 ${sol.length} 步，静音 0 步）`);
+  ok(pushes > 0, `这一关有推箱（${pushes} 次）`);
+  ok(pushTooQuiet === 0, `每次推箱都有独立「推动」音（${pushes} 次全部达标）`);
+  ok(goalLands > 0, `这一关有箱子落到目标点（${goalLands} 次）`);
+  ok(goalTooQuiet === 0, `每次落点都有「清脆两声」（${goalLands} 次全部达标）`);
+  ok(S().win === true && winDelta >= 5, `过关那一步含 4 音琶音（该步共 ${winDelta} 个音 = 该步动作音 + 过关琶音 4）`);
+
+  const beforeUndo = sndNodes;
+  $('btnUndo').click(); runTimers(10);
+  ok(sndNodes - beforeUndo >= 1, '撤销有音效');
+}
+
 console.log(`\n${'='.repeat(60)}`);
 console.log(`通过 ${pass} 项，失败 ${fail} 项`);
 if (fail) { console.log('失败项：'); failures.forEach(f => console.log('  - ' + f)); }

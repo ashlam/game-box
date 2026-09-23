@@ -143,6 +143,7 @@
 <div class="top">
   <a href="/">‹</a>
   <h1>仓库番</h1>
+  <button class="menubtn" id="btnSound" aria-label="音效开关">🔊 音效</button>
   <button class="menubtn" id="btnMenu" aria-label="操作菜单">☰ 菜单</button>
 </div>
 
@@ -307,6 +308,78 @@
   let lv = 0;            // 关卡索引
   let map, rows, cols, cell, moves, pushes, hist, win, reach, overTimer = null;
 
+  /* ---------- 音效：Web Audio 现场合成（零依赖、无音频文件、可静音） ----------
+     三种动作音各有辨识度：
+       移动  → 短促「哒」（音高下滑，像鞋底落地）
+       推箱  → 噪声带通做「摩擦/拖动」感 + 低音垫底
+       落点  → 清脆两声上行（箱子卡进目标点，给正反馈）
+     另外撤销是下滑音、过关是四音琶音。 */
+  const SKEY = 'sokoban_sound';
+  let soundOn = localStorage.getItem(SKEY) !== '0';
+  let actx = null, soundCount = 0;
+
+  function ac(){
+    if(actx === null){
+      const C = window.AudioContext || window.webkitAudioContext;
+      try{ actx = C ? new C() : false; }catch(e){ actx = false; }
+    }
+    if(actx && actx.state === 'suspended'){ try{ actx.resume(); }catch(e){} }
+    return actx || null;
+  }
+  function tone(freq, dur, opt){
+    const o = opt || {};
+    if(!soundOn) return;
+    const c = ac(); if(!c) return;
+    const t0 = c.currentTime + (o.at || 0);
+    const osc = c.createOscillator(), g = c.createGain();
+    osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    if(o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t0 + dur);
+    const vol = (o.gain === undefined ? 0.12 : o.gain);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g); g.connect(c.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+    soundCount++;
+  }
+  /** 噪声（推箱/摩擦类音色） */
+  function noise(dur, opt){
+    const o = opt || {};
+    if(!soundOn) return;
+    const c = ac(); if(!c) return;
+    const t0 = c.currentTime + (o.at || 0);
+    const len = Math.max(1, Math.floor(c.sampleRate * dur));
+    const buf = c.createBuffer(1, len, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, o.decay || 1.6);
+    const src = c.createBufferSource(); src.buffer = buf;
+    const f = c.createBiquadFilter();
+    f.type = o.type || 'bandpass';
+    f.frequency.value = o.freq || 500; f.Q.value = o.q || 1;
+    const g = c.createGain(); g.gain.value = (o.gain === undefined ? 0.1 : o.gain);
+    src.connect(f); f.connect(g); g.connect(c.destination); src.start(t0);
+    soundCount++;
+  }
+  function sndStep(){ tone(196, 0.06, {type:'triangle', gain:0.11, to:148}); }
+  function sndPush(){ noise(0.14, {gain:0.11, freq:420, q:1.1, decay:1.4}); tone(148, 0.11, {type:'triangle', gain:0.08, to:118, at:0.01}); }
+  function sndOnGoal(){ noise(0.06, {gain:0.07, freq:900, q:1.4}); tone(880, 0.08, {type:'sine', gain:0.14, at:0.01}); tone(1320, 0.17, {type:'sine', gain:0.11, at:0.07}); }
+  function sndOffGoal(){ tone(600, 0.1, {type:'sine', gain:0.09, to:380}); }   // 箱子被推离目标点
+  function sndUndo(){ tone(320, 0.08, {type:'sine', gain:0.09, to:205}); }
+  function sndWin(){ [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.22, {type:'sine', gain:0.13, at: i * 0.11})); }
+  function setSoundLabel(){ const b = $('btnSound'); if(b) b.textContent = soundOn ? '🔊 音效' : '🔇 音效'; }
+
+  // 移动端解锁音频：首次触摸/点击必须 resume（iOS 要求）
+  const unlockAudio = () => {
+    const c = ac();
+    if(c && c.state === 'running'){
+      document.removeEventListener('touchend', unlockAudio);
+      document.removeEventListener('click', unlockAudio);
+    }
+  };
+  document.addEventListener('touchend', unlockAudio, {passive:true});
+  document.addEventListener('click', unlockAudio);
+
   /* ---------- 解析关卡 ---------- */
   function load(idx){
     lv = Math.max(0, Math.min(levels().length - 1, idx));
@@ -424,13 +497,15 @@
     if(nr < 0 || nr >= rows || nc < 0 || nc >= cols) return;
     const t = map[nr][nc];
     if(t === WALL) return;
-    let pushed = false;
+    let pushed = false, ontoGoal = false, offGoal = false;
     if(t === BOX || t === BOXG){
       const br = nr + d[0], bc = nc + d[1];
       if(br < 0 || br >= rows || bc < 0 || bc >= cols) return;
       const bt = map[br][bc];
       if(bt === WALL || bt === BOX || bt === BOXG) return;
-      map[br][bc] = (bt === GOAL) ? BOXG : BOX;
+      ontoGoal = (bt === GOAL);        // 箱子推进了目标点
+      offGoal  = (t === BOXG);         // 箱子原来在目标点上，被推走了
+      map[br][bc] = ontoGoal ? BOXG : BOX;
       pushed = true;
     }
     // 记录历史（用于撤销）
@@ -438,6 +513,12 @@
     map[r][c] = (map[r][c] === MANG) ? GOAL : FLOOR;
     map[nr][nc] = (map[nr][nc] === BOXG || map[nr][nc] === GOAL) ? MANG : MAN;
     moves++; if(pushed) pushes++;
+    ac();                                   // 用户手势里解锁音频（移动端必须）
+    // 音效优先级：落到目标点 > 推箱 > 普通移动
+    if(pushed && ontoGoal) sndOnGoal();
+    else if(pushed) sndPush();
+    else sndStep();
+    if(pushed && offGoal) sndOffGoal();     // 把箱子从目标点上推走：给一声"离开"的提示
     draw(); hud();
     checkWin();
   }
@@ -455,6 +536,8 @@
     }
     map[h.r][h.c] = (map[h.r][h.c] === GOAL) ? MANG : MAN;
     moves--; if(h.pushed) pushes--;
+    ac();
+    sndUndo();
     draw(); hud();
   }
 
@@ -498,6 +581,7 @@
     const [d, t] = boxCount();
     if(d === t && t > 0){
       win = true;
+      sndWin();
       cleared.add(lv + 1);
       localStorage.setItem(sk('cleared'), JSON.stringify([...cleared]));
       // 记录本关最好成绩
@@ -613,6 +697,15 @@
   $('btnPick').onclick = () => { buildPicker(); $('picker').classList.add('on'); };
   $('picker').onclick = e => { if(e.target === $('picker')) $('picker').classList.remove('on'); };
   // 顶部「菜单」：点开/点空白或点条目后关闭（事件对象可能为空 —— 测试桩里合成点击不传参）
+  $('btnSound').onclick = () => {
+    soundOn = !soundOn;
+    try{ localStorage.setItem(SKEY, soundOn ? '1' : '0'); }catch(e){}
+    setSoundLabel();
+    ac(); sndStep();                      // 开关时给一声反馈
+    toast(soundOn ? '音效已开' : '音效已关');
+  };
+  setSoundLabel();
+
   $('btnMenu').onclick = () => { $('menu').classList.add('on'); };
   $('menu').onclick = e => {
     if(!e || e.target === $('menu') || e.target.tagName === 'BUTTON') $('menu').classList.remove('on');
