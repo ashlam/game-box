@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>青蛙过河 · 小游戏盒子</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#191d26; --card2:#202632; --line:#2b3242;
+    --txt:#e8ecf3; --dim:#8b95a7; --acc:#5b8cff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+  html{height:100%}
+  html,body{margin:0}
+  body{
+    background:radial-gradient(1200px 600px at 50% -10%,#1b2233 0%,var(--bg) 60%);
+    color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    /* ★ height:100%（不是 100vh/100dvh）：手机浏览器 100vh 是「地址栏隐藏时」的高度，比可视高，会凭空溢出 */
+    height:100%;display:flex;flex-direction:column;align-items:center;
+    padding:calc(env(safe-area-inset-top) + 6px) 4px calc(env(safe-area-inset-bottom) + 16px);
+    overflow:hidden;
+  }
+  .top{width:100%;display:flex;align-items:center;gap:7px;margin-bottom:6px;flex:0 0 auto}
+  .top a{color:var(--dim);text-decoration:none;font-size:18px;padding:5px 9px;border-radius:9px;
+          background:var(--card);border:1px solid var(--line);line-height:1}
+  .top h1{font-size:15px;margin:0;color:var(--dim);font-weight:600;white-space:nowrap;flex:1}
+  .top button{font-size:11.5px;padding:6px 8px;border-radius:9px;border:1px solid var(--line);
+               background:var(--card);color:var(--txt);font-family:inherit;line-height:1;white-space:nowrap}
+  .top button:active{background:var(--acc);border-color:var(--acc);color:#fff}
+
+  #stage{width:100%;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;touch-action:none}
+  canvas{display:block;border-radius:14px;border:1px solid var(--line);touch-action:none;
+          box-shadow:0 10px 30px rgba(0,0,0,.45)}
+
+  /* 结算面板用「宣纸」配色，和游戏里的古风画面连成一体（盒子其余页面是深色面板） */
+  #over{position:fixed;inset:0;background:rgba(24,20,16,.72);backdrop-filter:blur(3px);display:none;
+         align-items:center;justify-content:center;padding:22px;z-index:9}
+  #over.on{display:flex}
+  .panel{position:relative;width:100%;max-width:330px;background:#f7efe3;border:1px solid #cbb9a1;
+          border-radius:18px;padding:24px 20px 16px;text-align:center;color:#4a3f34;
+          box-shadow:0 20px 50px rgba(0,0,0,.5);font-family:"STKaiti","KaiTi","Noto Serif SC",serif}
+  .panel::after{content:"蛙";position:absolute;right:14px;top:12px;width:26px;height:26px;
+                 background:#a33a2c;color:#f7efe3;font-size:15px;line-height:26px;border-radius:4px;
+                 transform:rotate(4deg);opacity:.88}
+  .panel h2{margin:0 0 6px;font-size:22px;color:#6d4c33;letter-spacing:2px}
+  .panel .big{font-size:42px;font-weight:800;color:#a33a2c;font-variant-numeric:tabular-nums;line-height:1.1;margin:6px 0 2px}
+  .panel .unit{font-size:13px;color:#8a7a63;font-weight:600;letter-spacing:3px}
+  .panel p{color:#7a6a58;font-size:12.5px;margin:10px 0 16px;line-height:1.7}
+  .panel p.rec{color:#a33a2c}
+  .panel button{width:100%;font-size:15px;padding:13px;border-radius:12px;border:1px solid #c2ae94;
+                 background:#efe4d2;color:#5a4c3d;font-family:inherit;margin-bottom:8px;letter-spacing:4px}
+  .panel button.pri{background:#8c5a3b;border-color:#8c5a3b;color:#f7efe3;font-weight:600}
+  .panel button:active{filter:brightness(.94)}
+
+  #toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 84px);transform:translate(-50%,-12px);
+          background:#20262ff2;border:1px solid var(--line);padding:11px 18px;border-radius:12px;font-size:13.5px;
+          opacity:0;transition:.22s;pointer-events:none;z-index:70;max-width:86vw;text-align:center}
+  #toast.on{opacity:1;transform:translate(-50%,0)}
+
+  #dbg{position:fixed;left:6px;right:6px;bottom:calc(env(safe-area-inset-bottom) + 8px);z-index:60;display:none;
+        font-size:10px;line-height:1.45;font-family:ui-monospace,Menlo,Consolas,monospace;color:#a8b8cf;
+        background:rgba(8,10,14,.88);border:1px solid rgba(120,150,200,.24);border-radius:8px;padding:7px 9px;
+        white-space:pre-wrap;word-break:break-all;cursor:pointer;
+        -webkit-user-select:text;user-select:text}
+  #dbg.on{display:block}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="../index.html">‹</a>
+  <h1>青蛙过河</h1>
+  <button id="btnSound">🔊 音效</button>
+  <button id="btnDiag" title="复制诊断信息">诊断</button>
+</div>
+
+<div id="stage"><canvas id="cv"></canvas></div>
+
+<div id="toast"></div>
+<div id="dbg"></div>
+
+<div id="over"><div class="panel">
+  <h2 id="overTitle">噗通落水</h2>
+  <div class="big" id="overScore">0</div>
+  <div class="unit">分</div>
+  <p id="overText"></p>
+  <button class="pri" id="overRetry">再来一次</button>
+</div></div>
+
+<script>
+(function(){
+  'use strict';
+  /* ============================================================
+     青蛙过河 · 古风蓄力跳跃
+
+     玩法（用户定的）：
+       按住蓄力 → 松手起跳 → 蓄力程度决定跳远距离 → 落在踏脚石上继续，
+       落水即结束。落点正中石心算「正中」，连击加分。
+
+     美术：水墨山水 + 宣纸底（参考用户给的实拍图）——
+       远山墨色、秋树红叶、灰蓝踏脚石、芦苇前景、朱红印章式 UI。
+
+     数值基准：逻辑宽 360（各设备相对尺寸一致），所有长度都在这套坐标里给。
+     ============================================================ */
+
+  const $ = id => document.getElementById(id);
+  const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const cv = $('cv'), ctx = cv.getContext('2d');
+  const KAI = '"STKaiti","KaiTi","Noto Serif SC","Noto Serif CJK SC",serif';
+
+  /* ---------- 坐标系 ---------- */
+  const W = 360;                 // 逻辑宽固定
+  let H = 640, S = 1;            // H 由画布比例反推
+  let waterY = 280, surfY = 266; // 水面线 / 可站立面（石头顶统一高度）
+  function refit(){
+    waterY = Math.round(H * 0.44);
+    surfY = waterY - 14;         // 石头顶比水面高 14（露出水面）
+  }
+
+  /* ---------- 手感常数 ---------- */
+  const MINJ = 78, MAXJ = 252;        // 蓄力 0% / 100% 对应的跳跃距离（线性映射）
+  const GAP_CAP = 200;                // 下一块中心距上限（保证落点在屏幕内可见）
+  const FAD = 6;                      // 走位余量
+  const CHARGE_T = 1.15;              // 满蓄力所需秒数
+  const FROG_W = 26, FROG_H = 18;     // 机身尺寸
+  const ANCHOR = 0.30;                // 相机把青蛙放在屏宽 30% 处（右边留出视野看目标）
+  const PSTORE = [50, 96];            // 石台宽度范围
+
+  /* ---------- 状态 ---------- */
+  let state = 'ready';            // ready | play | over
+  let frog, platforms, camX, score, best, combo, stamps, parts, floats, seal, hintT, shakeT;
+  let bankRight = 104, rng, overTimer = null, lastTs = 0, raf = null;
+  let soundOn = true, bgmOn = false;
+
+  best = parseInt(localStorage.getItem('frog_best') || '0', 10) || 0;
+
+  function mulberry32(a){
+    return function(){
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  function reset(seed){
+    rng = mulberry32(seed === undefined ? (Math.random() * 1e9) | 0 : seed);
+    frog = { x: 62, mode: 'idle', sx: 0, dist: 0, jt: 0, dur: 0.4, apex: 40,
+             arc: 0, rot: 0, charge: 0, charging: false, landAnim: 0, sink: 1 };
+    platforms = [];
+    camX = 0; score = 0; combo = 0; stamps = 0;
+    parts = []; floats = []; seal = null;
+    hintT = 1; shakeT = 0;
+    state = 'ready';
+    clearTimeout(overTimer); overTimer = null;
+    $('over').classList.remove('on');
+    // 第一块：从岸边出发，落点区间要同时满足「跳得到」和「不撞岸」
+    const t0 = pickType(), w0 = Math.round(clamp(88 * typeScale(t0) + (rng() * 12 - 6), PSTORE[0], PSTORE[1]));
+    const h1 = w0 / 2;
+    const [lo1, hi1] = gapRange(0, h1, true);
+    const gap1 = Math.round(lo1 + rng() * Math.max(0, hi1 - lo1));
+    platforms.push({ x: 62 + Math.round(gap1), w: w0, type: t0, seed: (rng() * 1e9) | 0, glow: 0 });
+    refill();
+  }
+
+  /* ---------- 世界生成：每一块都要「从任意落点都能跳到下一块」 ---------- */
+  function pickType(){
+    const r = rng();
+    return r < 0.5 ? 'stone' : (r < 0.8 ? 'stump' : 'lily');
+  }
+  function typeScale(t){ return t === 'stone' ? 1 : (t === 'stump' ? 0.9 : 0.82); }
+  function diff(){ return clamp(score / 320, 0, 1); }     // 难度 0→1（只改大小与间距，不改跳跃能力）
+
+  /** 生成下一块时的合法间距区间。推导见 tools/test_frog.js 的公平性断言：
+   *  从当前石台**最右**落点起跳不能越过下一块（否则最小跳都躲不开）→ gap ≥ MINJ + h0 - h1 + FAD
+   *  从**最左**落点起跳必须够得到下一块左缘（否则最大跳也够不着）→ gap ≤ MAXJ - h0 + h1 - FAD
+   *  另外要求两块之间留出可见水面、且落点中心在屏幕内（≤ GAP_CAP）。 */
+  function gapRange(h0, h1, first){
+    if(first){
+      // 从岸边固定点起跳：下限保证石台完全在水里不压岸，上限保证最大蓄力也够得到
+      return [Math.max(MINJ - h1 + FAD, h1 + 44, 92), Math.min(MAXJ - h1 + FAD, GAP_CAP)];
+    }
+    const lo = Math.max(MINJ + h0 - h1 + FAD, h0 + h1 + 12);
+    const hi = Math.min(MAXJ - h0 + h1 - FAD, GAP_CAP);
+    return [lo, Math.max(lo, hi)];
+  }
+  function refill(){
+    while(platforms[platforms.length - 1].x < camX + W * 2 + 300){
+      const prev = platforms[platforms.length - 1];
+      const d = diff();
+      const type = pickType();
+      const w = Math.round(clamp(lerp(88, 62, d) * typeScale(type) + (rng() * 12 - 6), PSTORE[0], PSTORE[1]));
+      const h1 = w / 2, h0 = prev.w / 2;
+      const [lo, hi] = gapRange(h0, h1, false);
+      // 难度低时只给短跳（区间上半段留到分数高了才出现）
+      const span = lo + (hi - lo) * lerp(0.45, 1, d);
+      const gap = Math.round(lo + rng() * Math.max(0, span - lo));
+      platforms.push({ x: prev.x + gap, w, type, seed: (rng() * 1e9) | 0, glow: 0 });
+    }
+    // 回收身后的（相机走远后就不再需要）
+    while(platforms.length > 3 && platforms[0].x < camX - 340) platforms.shift();
+  }
+
+  /* ============================================================
+     音效：Web Audio 现场合成（零依赖、可静音）
+     ============================================================ */
+  let ac = null, chargeOsc = null, chargeGain = null;
+  let bgmGain = null, bgmTimer = null, bgmNext = 0, bgmStep = 0;
+  function audio(){
+    if(ac === null){
+      const C = window.AudioContext || window.webkitAudioContext;
+      try{ ac = C ? new C() : false; }catch(e){ ac = false; }
+    }
+    if(ac && ac.state === 'suspended'){ try{ ac.resume(); }catch(e){} }
+    return ac || null;
+  }
+  function tone(freq, dur, opt){
+    const o = opt || {};
+    if(!soundOn) return;
+    const c = audio(); if(!c) return;
+    const t0 = c.currentTime + (o.at || 0);
+    const osc = c.createOscillator(), g = c.createGain();
+    osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    if(o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, o.to), t0 + dur);
+    const vol = (o.gain === undefined ? 0.12 : o.gain);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g); g.connect(c.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+  }
+  function noiseBurst(dur, opt){
+    const o = opt || {};
+    if(!soundOn) return;
+    const c = audio(); if(!c) return;
+    const t0 = c.currentTime + (o.at || 0);
+    const len = Math.max(1, Math.floor(c.sampleRate * dur));
+    const buf = c.createBuffer(1, len, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, o.decay || 2);
+    const src = c.createBufferSource(); src.buffer = buf;
+    const f = c.createBiquadFilter(); f.type = o.type || 'lowpass';
+    f.frequency.setValueAtTime(o.freq || 900, t0);
+    if(o.to) f.frequency.exponentialRampToValueAtTime(Math.max(40, o.to), t0 + dur);
+    const g = c.createGain(); g.gain.value = (o.gain === undefined ? 0.1 : o.gain);
+    src.connect(f); f.connect(g); g.connect(c.destination);
+    src.start(t0);
+  }
+  // 蓄力：一条随蓄力升高的持续音
+  function chargeOn(){
+    if(!soundOn) return;
+    const c = audio(); if(!c || chargeOsc) return;
+    chargeOsc = c.createOscillator(); chargeGain = c.createGain();
+    chargeOsc.type = 'triangle';
+    chargeOsc.frequency.setValueAtTime(180, c.currentTime);
+    chargeGain.gain.setValueAtTime(0.04, c.currentTime);
+    chargeOsc.connect(chargeGain); chargeGain.connect(c.destination);
+    chargeOsc.start();
+  }
+  function chargeUpdate(c){
+    if(!ac || !chargeOsc) return;
+    chargeOsc.frequency.setTargetAtTime(180 + 520 * c, ac.currentTime, 0.03);
+  }
+  function chargeOff(){
+    if(!ac || !chargeOsc) return;
+    try{ chargeGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.03); chargeOsc.stop(ac.currentTime + 0.08); }catch(e){}
+    chargeOsc = null; chargeGain = null;
+  }
+  function sndJump(){                                    // 起跳：弹性下滑 + 一口气
+    tone(430, 0.16, { type:'triangle', to:170, gain:0.14 });
+    noiseBurst(0.12, { type:'bandpass', freq:1400, to:500, gain:0.05, decay:3 });
+  }
+  function sndLand(type){                                // 落石/落桩：木石「咚」；荷叶：水「噗」
+    if(type === 'lily'){
+      tone(300, 0.12, { type:'sine', to:170, gain:0.13 });
+      noiseBurst(0.07, { type:'lowpass', freq:1200, gain:0.05, decay:4 });
+    }else{
+      tone(150, 0.1, { type:'sine', to:95, gain:0.16 });
+      noiseBurst(0.05, { type:'lowpass', freq:2400, gain:0.07, decay:6 });
+    }
+  }
+  function sndPerfect(){                                 // 正中：双音小钟 + 余韵（古风）
+    tone(988, 0.14, { type:'sine', gain:0.12, at:0 });
+    tone(1319, 0.16, { type:'sine', gain:0.10, at:0.07 });
+    tone(660, 0.5, { type:'sine', gain:0.045, at:0.05 });
+  }
+  function sndSplash(){                                  // 落水
+    noiseBurst(0.4, { type:'lowpass', freq:2000, to:300, gain:0.2, decay:2.2 });
+    tone(620, 0.28, { type:'sine', to:110, gain:0.13 });
+  }
+  function sndOver(){ [69, 67, 64].forEach((f, i) => tone(f, 0.26, { type:'sine', gain:0.1, at: i * 0.15 })); }
+  function sndRecord(){ [60, 64, 67, 72].forEach((f, i) => tone(f + 12, 0.2, { type:'triangle', gain:0.1, at: i * 0.09 })); }
+
+  /* ---------- BGM：原创五声调式轻音循环（A 羽调 · 84 BPM） ----------
+     与游戏同为古风：三角波拨弦 + 低音铺底，音量很低，不抢蓄力音。 */
+  const BPM = 84, ST = 60 / BPM / 2;
+  const mhz = n => 440 * Math.pow(2, (n - 69) / 12);
+  // 0 = 休止（数组里不能写裸 '-'）
+  const LEAD = [69, 0, 67, 0, 64, 0, 62, 0, 60, 0, 62, 0, 64, 0, 0, 0,
+                67, 0, 69, 0, 72, 0, 69, 0, 67, 0, 64, 0, 62, 0, 0, 0];
+  const BASS = [45, 0, 0, 0, 0, 0, 45, 0, 52, 0, 0, 0, 0, 0, 52, 0,
+                45, 0, 0, 0, 0, 0, 45, 0, 43, 0, 0, 0, 0, 0, 0, 0];
+  function pluck(f, at, dur, vol){
+    const c = ac;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(f * 1.015, at);            // 起音微降 = 拨弦的「劲」
+    o.frequency.exponentialRampToValueAtTime(f, at + 0.05);
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    o.connect(g); g.connect(bgmGain); o.start(at); o.stop(at + dur + 0.03);
+  }
+  function bgmTick(){
+    if(!ac || !bgmGain) return;
+    while(bgmNext < ac.currentTime + 0.18){
+      const i = bgmStep % LEAD.length;
+      if(LEAD[i] > 0) pluck(mhz(LEAD[i]), bgmNext, ST * 2.4, 0.05);
+      if(BASS[i] > 0) pluck(mhz(BASS[i]), bgmNext, ST * 4, 0.055);
+      bgmNext += ST; bgmStep++;
+    }
+  }
+  function startBgm(){
+    const c = audio(); if(!c || bgmTimer) return;
+    if(!bgmGain){ bgmGain = c.createGain(); bgmGain.connect(c.destination); }
+    bgmGain.gain.value = soundOn ? 0.8 : 0;
+    bgmNext = c.currentTime + 0.08; bgmStep = 0;
+    bgmTick(); bgmTimer = setInterval(bgmTick, 50);
+  }
+  function stopBgm(){ if(bgmTimer){ clearInterval(bgmTimer); bgmTimer = null; } }
+
+  /* ============================================================
+     输入：按住蓄力，松手起跳（触屏 / 鼠标 / 空格键）
+     ============================================================ */
+  function pressStart(){
+    if(state === 'over' || frog.mode === 'jump') return;
+    if(state === 'ready'){
+      state = 'play'; hintT = 0;
+      audio(); startBgm(); bgmOn = true;
+    }
+    if(!frog.charging){
+      frog.charging = true; frog.charge = 0;
+      chargeOn();
+    }
+  }
+  function pressEnd(){
+    if(!frog.charging) return;
+    frog.charging = false;
+    chargeOff();
+    if(state !== 'play'){ frog.charge = 0; return; }
+    launch(frog.charge);
+    frog.charge = 0;
+  }
+  function launch(c){
+    frog.mode = 'jump';
+    frog.sx = frog.x;
+    frog.dist = MINJ + c * (MAXJ - MINJ);
+    frog.jt = 0;
+    frog.dur = 0.36 + 0.30 * c;
+    frog.apex = 32 + 42 * c;
+    sndJump();
+  }
+
+  cv.addEventListener('touchstart', e => { e.preventDefault(); pressStart(); }, { passive:false });
+  cv.addEventListener('touchend',   e => { e.preventDefault(); pressEnd(); },   { passive:false });
+  cv.addEventListener('touchcancel', e => { pressEnd(); }, { passive:true });
+  cv.addEventListener('mousedown', e => { e.preventDefault(); pressStart(); });
+  window.addEventListener('mouseup', () => pressEnd());
+  document.addEventListener('keydown', e => {
+    if(e.code === 'Space' || e.key === ' '){
+      e.preventDefault();
+      if(!e.repeat) pressStart();
+    }
+    if(e.key === 'r' || e.key === 'R'){ chargeOff(); reset(); }
+  });
+  document.addEventListener('keyup', e => {
+    if(e.code === 'Space' || e.key === ' ') { e.preventDefault(); pressEnd(); }
+  });
+
+  /* ============================================================
+     逻辑步进
+     ============================================================ */
+  function step(dt){
+    tGlobal += dt;
+    if(hintT > 0 && state === 'ready') hintT = Math.min(1, hintT + dt);   // 就绪时提示常驻
+    if(shakeT > 0) shakeT = Math.max(0, shakeT - dt);
+
+    if(state === 'play' || state === 'over'){
+      // 蓄力
+      if(frog.charging && frog.mode === 'idle'){
+        frog.charge = Math.min(1, frog.charge + dt / CHARGE_T);
+        chargeUpdate(frog.charge);
+      }
+      // 起跳：抛物线
+      if(frog.mode === 'jump'){
+        frog.jt += dt / frog.dur;
+        const t = Math.min(1, frog.jt);
+        const e = 1 - (1 - t) * (1 - t);                       // ease-out：起跳快、落点收
+        frog.x = frog.sx + frog.dist * e;
+        frog.arc = -frog.apex * Math.sin(Math.PI * t);
+        frog.rot = lerp(-0.55, 0.6, t) * (0.55 + 0.45 * frog.dist / MAXJ);
+        // 相机跟着飞（落点永远在屏 30% 附近，玩家全程看得到落点）
+        followCam(dt, true);
+        if(frog.jt >= 1) resolveLanding();
+      }else{
+        frog.arc += (0 - frog.arc) * Math.min(1, dt * 12);
+        frog.rot += (0 - frog.rot) * Math.min(1, dt * 12);
+        frog.landAnim = Math.max(0, frog.landAnim - dt * 3);
+        followCam(dt, false);
+      }
+      // 落水后的下沉
+      if(state === 'over'){
+        frog.arc = Math.min((frog.arc || 0) + 40 * dt, 26);
+        frog.sink = Math.max(0, frog.sink - dt * 1.6);
+      }
+      refill();
+    }
+
+    // 特效
+    for(let i = parts.length - 1; i >= 0; i--){
+      const p = parts[i];
+      p.t += dt;
+      if(p.kind === 'drop'){
+        p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 620 * dt;
+        if(p.y > waterY + 6 && !p.plopped){ p.plopped = true; addRipple(p.x, 0.5); }
+      }
+      if(p.t > p.life) parts.splice(i, 1);
+    }
+    for(let i = floats.length - 1; i >= 0; i--){
+      floats[i].t += dt; floats[i].y -= 26 * dt;
+      if(floats[i].t > 0.95) floats.splice(i, 1);
+    }
+    if(seal){ seal.t += dt; if(seal.t > 0.85) seal = null; }
+  }
+
+  function followCam(dt, fast){
+    const target = Math.max(0, frog.x - ANCHOR * W);
+    const k = Math.min(1, dt * (fast ? 12 : 7));
+    if(Math.abs(target - camX) > 1.5) camX += (target - camX) * k;
+  }
+
+  function resolveLanding(){
+    const lx = frog.x;
+    const hit = platforms.find(p => Math.abs(lx - p.x) <= p.w / 2 - 2);
+    frog.mode = 'idle';
+    frog.arc = 0; frog.rot = 0; frog.landAnim = 1;
+    if(!hit){ fallIn(); return; }
+    frog.x = clamp(lx, hit.x - hit.w / 2 + 3, hit.x + hit.w / 2 - 3);
+    const perfect = Math.abs(lx - hit.x) <= hit.w * 0.16;
+    sndLand(hit.type);
+    if(perfect){
+      combo++; stamps++;
+      const gain = 30;
+      score += gain;
+      sndPerfect();
+      seal = { x: frog.x, y: surfY - 34, t: 0 };
+      floats.push({ x: frog.x, y: surfY - 18, t: 0, txt: '+' + gain, color: '#a33a2c' });
+      addPuff(frog.x, surfY, 10, '#efe4d2');
+    }else{
+      combo = 0;
+      score += 10;
+      floats.push({ x: frog.x, y: surfY - 18, t: 0, txt: '+10', color: '#4a4038' });
+      addPuff(frog.x, surfY, 6, '#e3d6c2');
+    }
+    // 找下一块做高亮提示
+    const nx = platforms.find(p => p.x > frog.x + 10);
+    if(nx) nx.glow = 1;
+  }
+
+  function fallIn(){
+    state = 'over';
+    frog.charging = false; chargeOff();
+    shakeT = 0.35;
+    sndSplash();
+    stopBgm(); bgmOn = false;
+    addSplash(frog.x, surfY + 12);
+    addRipple(frog.x, 1);
+    const m = score;
+    const isNew = m > best;
+    if(isNew){ best = m; try{ localStorage.setItem('frog_best', String(best)); }catch(e){} sndRecord(); }
+    overTimer = setTimeout(() => {
+      $('overTitle').textContent = isNew ? '破纪录了' : '噗通落水';
+      $('overScore').textContent = m;
+      $('overText').textContent = isNew
+        ? ('新纪录 · 本局印章 +' + stamps)
+        : ('最高 ' + best + ' 分 · 本局印章 +' + stamps + (best > m ? ' · 差 ' + (best - m) + ' 分' : ''));
+      $('overText').className = isNew ? 'rec' : '';
+      $('over').classList.add('on');
+    }, 720);
+  }
+
+  function addRipple(x, scale){
+    for(let i = 0; i < 3; i++) parts.push({ kind:'ripple', x, t: -i * 0.12, life: 1.1, s: scale });
+  }
+  function addPuff(x, y, n, color){
+    for(let i = 0; i < n; i++){
+      const a = -Math.PI * (0.15 + 0.7 * Math.random());
+      const sp = 40 + Math.random() * 90;
+      parts.push({ kind:'puff', x: x + (Math.random() - 0.5) * 14, y, vx: Math.cos(a) * sp,
+                   vy: Math.sin(a) * sp, t: 0, life: 0.4 + Math.random() * 0.3, color, r: 2 + Math.random() * 2.4 });
+    }
+  }
+  function addSplash(x, y){
+    for(let i = 0; i < 16; i++){
+      const a = -Math.PI * (0.2 + 0.6 * Math.random());
+      const sp = 80 + Math.random() * 170;
+      parts.push({ kind:'drop', x: x + (Math.random() - 0.5) * 18, y, vx: Math.cos(a) * sp,
+                   vy: Math.sin(a) * sp, t: 0, life: 1.1, plopped: false });
+    }
+  }
+
+  let tGlobal = 0;
+
+  /* ============================================================
+     绘制
+     ============================================================ */
+  // 远山：预生成瓦片山脊（种子固定，滚动时形状不跳）
+  const ridgeTiles = [];
+  (function buildRidges(){
+    const r = mulberry32(20260924);
+    for(let layer = 0; layer < 2; layer++){
+      const pts = [];
+      const n = 9;
+      for(let i = 0; i <= n; i++){
+        pts.push({ x: i / n, h: (0.35 + r() * 0.65) * (layer ? 92 : 132), tip: r() < 0.5 });
+      }
+      ridgeTiles.push(pts);
+    }
+    // 秋树 + 亭子（中景带）
+    const trees = [];
+    const r2 = mulberry32(77012);
+    for(let i = 0; i < 7; i++){
+      trees.push({ x: (i + 0.2 + r2() * 0.6) / 7, s: 0.7 + r2() * 0.6, tone: r2(), seed: (r2() * 1e9) | 0 });
+    }
+    ridgeTiles.push(trees);
+  })();
+
+  function drawSky(){
+    const g = ctx.createLinearGradient(0, 0, 0, waterY);
+    g.addColorStop(0, '#f8f1e5');
+    g.addColorStop(0.6, '#f4eadb');
+    g.addColorStop(1, '#efe3d2');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, waterY + 2);
+    // 淡红日
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    const g2 = ctx.createRadialGradient(W * 0.74, waterY * 0.26, 4, W * 0.74, waterY * 0.26, 40);
+    g2.addColorStop(0, 'rgba(214,140,110,.5)');
+    g2.addColorStop(1, 'rgba(214,140,110,0)');
+    ctx.fillStyle = g2;
+    ctx.beginPath(); ctx.arc(W * 0.74, waterY * 0.26, 40, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(196,110,84,.42)';
+    ctx.beginPath(); ctx.arc(W * 0.74, waterY * 0.26, 15, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawRidgeLayer(pts, factor, baseY, color, alpha){
+    const tile = W * 2;
+    const off = -((camX * factor) % tile);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    for(let k = -1; k <= 1; k++){
+      const ox = off + k * tile;
+      ctx.beginPath();
+      ctx.moveTo(ox, baseY);
+      const n = pts.length - 1;
+      for(let i = 0; i < n; i++){
+        const a = pts[i], b = pts[i + 1];
+        const ax = ox + a.x * tile, bx = ox + b.x * tile;
+        if(a.tip) ctx.quadraticCurveTo(ax, baseY - a.h, (ax + bx) / 2, baseY - (a.h + b.h) / 2 + 8);
+        else ctx.quadraticCurveTo(ax, baseY - a.h, (ax + bx) / 2, baseY - (a.h + b.h) / 2);
+      }
+      const last = pts[n];
+      ctx.lineTo(ox + last.x * tile, baseY - last.h);
+      ctx.lineTo(ox + tile, baseY);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawMountains(){
+    drawRidgeLayer(ridgeTiles[0], 0.10, waterY - 10, '#93a4b2', 0.42);
+    drawRidgeLayer(ridgeTiles[1], 0.24, waterY - 4, '#7c8d9c', 0.5);
+    // 山脚雾带
+    const g = ctx.createLinearGradient(0, waterY - 52, 0, waterY);
+    g.addColorStop(0, 'rgba(247,240,229,0)');
+    g.addColorStop(1, 'rgba(247,240,229,.88)');
+    ctx.fillStyle = g; ctx.fillRect(0, waterY - 52, W, 52);
+  }
+
+  function drawTreeline(){
+    const trees = ridgeTiles[2];
+    const tile = W * 1.6;
+    const off = -((camX * 0.42) % tile);
+    for(let k = -1; k <= 1; k++){
+      const ox = off + k * tile;
+      for(const tr of trees){
+        const x = ox + tr.x * tile;
+        if(x < -60 || x > W + 60) continue;
+        const base = waterY - 3;
+        const sc = tr.s;
+        // 树干
+        ctx.strokeStyle = 'rgba(84,66,52,.75)';
+        ctx.lineWidth = 2 * sc;
+        ctx.beginPath();
+        ctx.moveTo(x, base);
+        ctx.quadraticCurveTo(x + 3 * sc, base - 16 * sc, x + 1 * sc, base - 30 * sc);
+        ctx.stroke();
+        // 秋叶团：主冠 + 有种子的随机凸起（等距 5 圈会读成「一朵花」，踩过）
+        const cols = tr.tone < 0.4 ? ['#c47a3f', '#b25f33'] : (tr.tone < 0.75 ? ['#c9964a', '#b87334'] : ['#a9553a', '#8f4632']);
+        const cx0 = x, cy0 = base - 33 * sc;
+        ctx.fillStyle = cols[0];
+        ctx.globalAlpha = 0.9;
+        ctx.beginPath(); ctx.arc(cx0, cy0, 12.5 * sc, 0, 7); ctx.fill();
+        const rr = mulberry32(tr.seed);
+        for(let i = 0; i < 7; i++){
+          const dx = (rr() * 2 - 1) * 15 * sc;
+          const dy = (rr() * 2 - 1) * 11 * sc - 3 * sc;
+          ctx.fillStyle = i % 2 ? cols[0] : cols[1];
+          ctx.globalAlpha = 0.78 + rr() * 0.16;
+          ctx.beginPath(); ctx.arc(cx0 + dx, cy0 + dy, (4.5 + rr() * 7) * sc, 0, 7); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+      // 远处的小亭（中景装饰）
+      const px = ox + tile * 0.52, pb = waterY - 4;
+      if(px > -50 && px < W + 50){
+        ctx.strokeStyle = 'rgba(74,62,52,.8)'; ctx.fillStyle = 'rgba(74,62,52,.8)';
+        ctx.lineWidth = 1.6;
+        ctx.fillRect(px - 10, pb - 22, 2, 22);
+        ctx.fillRect(px + 8, pb - 22, 2, 22);
+        ctx.fillRect(px - 11, pb - 24, 22, 3);
+        ctx.beginPath();                                    // 檐角上翘
+        ctx.moveTo(px - 17, pb - 24);
+        ctx.quadraticCurveTo(px - 11, pb - 31, px, pb - 32);
+        ctx.quadraticCurveTo(px + 11, pb - 31, px + 17, pb - 24);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+  }
+
+  function drawWater(){
+    const g = ctx.createLinearGradient(0, waterY, 0, H);
+    g.addColorStop(0, '#ccd7db');
+    g.addColorStop(0.5, '#c2ced4');
+    g.addColorStop(1, '#b4c2c9');
+    ctx.fillStyle = g; ctx.fillRect(0, waterY, W, H - waterY);
+    // 水面墨线 + 波纹（两层不同速度）
+    ctx.strokeStyle = 'rgba(96,116,128,.34)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(0, waterY + 0.5); ctx.lineTo(W, waterY + 0.5); ctx.stroke();
+    for(let layer = 0; layer < 2; layer++){
+      const f = layer ? 0.85 : 1;
+      const base = waterY + 16 + layer * 26;
+      ctx.strokeStyle = layer ? 'rgba(255,255,255,.35)' : 'rgba(90,110,122,.22)';
+      ctx.lineWidth = layer ? 1.2 : 1.4;
+      const step = layer ? 34 : 46;
+      for(let y = base; y < H; y += step){
+        const drift = (tGlobal * (layer ? 6 : 10) - camX * f) % step;
+        ctx.beginPath();
+        for(let x = -step + drift; x < W + step; x += step){
+          ctx.moveTo(x, y + Math.sin((x + camX) * 0.05) * 1.5);
+          ctx.quadraticCurveTo(x + step * 0.5, y - 3, x + step, y);
+        }
+        ctx.stroke();
+      }
+    }
+    // 深水区渐深
+    const g2 = ctx.createLinearGradient(0, H - 70, 0, H);
+    g2.addColorStop(0, 'rgba(120,140,152,0)');
+    g2.addColorStop(1, 'rgba(120,140,152,.35)');
+    ctx.fillStyle = g2; ctx.fillRect(0, H - 70, W, 70);
+  }
+
+  function drawBank(){
+    // 起始岸（世界 x < bankRight）
+    const sx = bankRight - camX;
+    if(sx < -30) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(-40, waterY - 2);
+    ctx.lineTo(sx, waterY - 2);
+    ctx.quadraticCurveTo(sx - 6, waterY - 16, sx - 26, waterY - 22);
+    ctx.lineTo(-40, waterY - 26);
+    ctx.closePath();
+    const g = ctx.createLinearGradient(0, waterY - 28, 0, waterY);
+    g.addColorStop(0, '#cdbb92'); g.addColorStop(1, '#b9a877');
+    ctx.fillStyle = g; ctx.fill();
+    ctx.strokeStyle = 'rgba(96,84,60,.55)'; ctx.lineWidth = 1.2; ctx.stroke();
+    // 岸边草
+    ctx.strokeStyle = 'rgba(78,92,58,.85)'; ctx.lineWidth = 1.4;
+    for(let i = 0; i < 7; i++){
+      const gx = sx - 8 - i * 11;
+      if(gx < -10) break;
+      const sway = Math.sin(tGlobal * 1.4 + i) * 2;
+      ctx.beginPath();
+      ctx.moveTo(gx, waterY - 20);
+      ctx.quadraticCurveTo(gx + 3 + sway, waterY - 30, gx + 6 + sway, waterY - 38);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function stonePath(x, w, seed){
+    // 不规则多边形踏脚石（顶面 + 侧壁）
+    const r = mulberry32(seed);
+    const h = w / 2;
+    ctx.beginPath();
+    ctx.moveTo(x - h, surfY + 5);
+    const top = [];
+    for(let i = 0; i <= 5; i++){
+      top.push([x - h + (w * i) / 5, surfY - 2 - r() * 3]);
+    }
+    top.forEach(p => ctx.lineTo(p[0], p[1]));
+    ctx.lineTo(x + h - 2, waterY + 12 + r() * 6);
+    ctx.lineTo(x - h + 3, waterY + 14 + r() * 6);
+    ctx.closePath();
+  }
+
+  function drawPlatform(p, isTarget){
+    const x = p.x - camX;
+    if(x < -80 || x > W + 80) return;
+    const w = p.w;
+    if(isTarget){
+      const a = 0.16 + 0.1 * Math.sin(tGlobal * 4);
+      const g = ctx.createRadialGradient(x, surfY + 6, 4, x, surfY + 6, w * 0.8);
+      g.addColorStop(0, 'rgba(214,150,70,' + (a + 0.1) + ')');
+      g.addColorStop(1, 'rgba(214,150,70,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.ellipse(x, surfY + 8, w * 0.8, w * 0.42, 0, 0, 7); ctx.fill();
+    }
+    if(p.type === 'lily'){
+      const rx = w / 2, ry = w / 5.4;
+      ctx.save();
+      ctx.fillStyle = 'rgba(70,90,70,.18)';
+      ctx.beginPath(); ctx.ellipse(x, waterY + 8, rx, ry * 0.7, 0, 0, 7); ctx.fill();   // 水中影
+      ctx.fillStyle = '#7fa464';
+      ctx.beginPath(); ctx.ellipse(x, surfY + ry, rx, ry, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#5c7d4a'; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.ellipse(x, surfY + ry, rx, ry, 0, 0, 7); ctx.stroke();
+      ctx.strokeStyle = 'rgba(80,110,66,.7)'; ctx.lineWidth = 1;                        // 叶脉 + 缺口
+      for(let i = -2; i <= 2; i++){
+        ctx.beginPath(); ctx.moveTo(x, surfY + ry);
+        ctx.lineTo(x + Math.cos(i * 0.7) * rx * 0.9, surfY + ry + Math.sin(i * 0.7) * ry * 0.9);
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(240,246,238,.75)';                                          // 露珠
+      ctx.beginPath(); ctx.arc(x - rx * 0.35, surfY + ry - ry * 0.35, 2.2, 0, 7); ctx.fill();
+      ctx.restore();
+      return;
+    }
+    if(p.type === 'stump'){
+      const rx = w / 2;
+      ctx.fillStyle = 'rgba(70,90,70,.16)';
+      ctx.beginPath(); ctx.ellipse(x, waterY + 9, rx, rx * 0.24, 0, 0, 7); ctx.fill();
+      const g = ctx.createLinearGradient(x - rx, 0, x + rx, 0);
+      g.addColorStop(0, '#8a6144'); g.addColorStop(0.5, '#a87b58'); g.addColorStop(1, '#7d573d');
+      ctx.fillStyle = g;
+      ctx.fillRect(x - rx, surfY, w, waterY - surfY + 6);                               // 桩身
+      ctx.fillStyle = '#6e4d38';
+      ctx.beginPath(); ctx.ellipse(x, surfY, rx, rx * 0.3, 0, 0, 7); ctx.fill();         // 顶沿
+      ctx.fillStyle = '#b98d66';
+      ctx.beginPath(); ctx.ellipse(x, surfY, rx - 2.5, rx * 0.3 - 2, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(110,77,56,.75)'; ctx.lineWidth = 1;                        // 年轮
+      ctx.beginPath(); ctx.ellipse(x, surfY, rx * 0.6, rx * 0.17, 0, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(x, surfY, rx * 0.3, rx * 0.09, 0, 0, 7); ctx.stroke();
+      return;
+    }
+    // 石头
+    ctx.fillStyle = 'rgba(70,90,70,.16)';
+    ctx.beginPath(); ctx.ellipse(x, waterY + 9, w / 2, w / 6, 0, 0, 7); ctx.fill();
+    const g = ctx.createLinearGradient(0, surfY, 0, waterY + 8);
+    g.addColorStop(0, '#95a3ae'); g.addColorStop(1, '#6d7a87');
+    ctx.fillStyle = g;
+    stonePath(x, w, p.seed); ctx.fill();
+    ctx.strokeStyle = 'rgba(64,74,86,.85)'; ctx.lineWidth = 1.4;
+    stonePath(x, w, p.seed); ctx.stroke();
+    // 顶面高光 + 石纹
+    const rx = w / 2;
+    ctx.fillStyle = '#aeb9c2';
+    ctx.beginPath(); ctx.ellipse(x, surfY, rx - 2, 4.5, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(74,84,96,.5)'; ctx.lineWidth = 1;
+    const r = mulberry32(p.seed + 5);
+    for(let i = 0; i < 3; i++){
+      const sx = x - rx + 6 + r() * (w - 12);
+      ctx.beginPath(); ctx.moveTo(sx, surfY + 7 + r() * 8);
+      ctx.lineTo(sx + 5 + r() * 6, surfY + 9 + r() * 8); ctx.stroke();
+    }
+  }
+
+  function drawFrog(){
+    const x = frog.x - camX;
+    const y = surfY + frog.arc;
+    if(frog.sink <= 0) return;
+    const c = frog.charging ? frog.charge : 0;
+    const squash = frog.landAnim > 0 ? frog.landAnim : 0;
+    const sqY = 1 - 0.26 * c - 0.22 * squash;
+    const sqX = 1 + 0.18 * c + 0.26 * squash;
+    const jitter = c >= 1 ? Math.sin(tGlobal * 46) * 1.4 : 0;
+
+    // 影子
+    ctx.save();
+    ctx.globalAlpha = 0.22 * frog.sink;
+    ctx.fillStyle = '#4d5a52';
+    const sh = clamp(1 + frog.arc / 90, 0.3, 1);
+    ctx.beginPath(); ctx.ellipse(x, surfY + 3, 13 * sh, 3.4 * sh, 0, 0, 7); ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = frog.sink;
+    ctx.translate(x, y);
+    ctx.rotate(frog.rot);
+    ctx.scale(sqX, sqY);
+
+    const dead = state === 'over';
+    const body = dead ? '#8a9a86' : '#6f9b5e';
+    const belly = dead ? '#c3cdbb' : '#d3e3bb';
+
+    // 后腿（收拢）
+    ctx.strokeStyle = dead ? '#7c8c78' : '#5c8a4d';
+    ctx.lineWidth = 3.4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-7, -5); ctx.quadraticCurveTo(-13, -1, -9, 3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(6, -5); ctx.quadraticCurveTo(12, -1, 8, 3); ctx.stroke();
+
+    // 身体
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.ellipse(0, -9, 13, 9, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = belly;
+    ctx.beginPath(); ctx.ellipse(2, -6.5, 8, 5, 0, 0, 7); ctx.fill();
+
+    // 眼睛（盯住目标方向）
+    const aim = frog.charging ? 1.6 : 1.2;
+    ctx.fillStyle = '#f7f4ea';
+    ctx.beginPath(); ctx.arc(-4.5, -14, 4.2, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(5.5, -14, 4.2, 0, 7); ctx.fill();
+    ctx.fillStyle = '#2c2a26';
+    ctx.beginPath(); ctx.arc(-4.5 + aim, -14, 1.9, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(5.5 + aim, -14, 1.9, 0, 7); ctx.fill();
+
+    // 嘴
+    ctx.strokeStyle = 'rgba(52,74,44,.9)'; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(4, -9.5); ctx.quadraticCurveTo(9, -8, 11, -11); ctx.stroke();
+
+    // 斗笠（古风点睛）
+    ctx.fillStyle = dead ? '#a89878' : '#c9a86a';
+    ctx.beginPath();
+    ctx.moveTo(-14, -19);
+    ctx.quadraticCurveTo(0, -27, 14, -19);
+    ctx.quadraticCurveTo(0, -18, -14, -19);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#a5854e'; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.fillStyle = '#a5854e';
+    ctx.beginPath(); ctx.arc(0, -23.6, 1.5, 0, 7); ctx.fill();
+    ctx.restore();
+
+    // 蓄力条
+    if(frog.charging && state === 'play'){
+      const bw = 54, bh = 8, bx = x - bw / 2, by = y - 46;
+      const pulse = frog.charge >= 1 ? (0.6 + 0.4 * Math.sin(tGlobal * 12)) : 1;
+      ctx.save();
+      ctx.fillStyle = 'rgba(250,244,233,.92)';
+      ctx.strokeStyle = 'rgba(96,82,64,.9)';
+      ctx.lineWidth = 1.2;
+      roundRect(bx, by, bw, bh, 4); ctx.fill(); ctx.stroke();
+      const fw = Math.max(0, (bw - 4) * frog.charge);
+      if(fw > 0.5){
+        const g = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+        g.addColorStop(0, '#e2b34e'); g.addColorStop(1, '#c2503a');
+        ctx.fillStyle = g;
+        roundRect(bx + 2, by + 2, fw, bh - 4, 2.5); ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(96,82,64,.55)';                                     // 刻度
+      for(let i = 1; i < 4; i++) ctx.fillRect(bx + (bw * i) / 4 - 0.5, by + 1.5, 1, bh - 3);
+      if(frog.charge >= 1){
+        ctx.globalAlpha = pulse * 0.5;
+        ctx.strokeStyle = '#c2503a'; ctx.lineWidth = 1.6;
+        roundRect(bx - 1.5, by - 1.5, bw + 3, bh + 3, 5); ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  function roundRect(x, y, w, h, r){
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function drawParts(){
+    for(const p of parts){
+      const x = p.x - camX;
+      if(p.kind === 'ripple'){
+        if(p.t < 0) continue;
+        const k = p.t / p.life;
+        const rx = (14 + 46 * k) * p.s, ry = rx * 0.3;
+        ctx.strokeStyle = 'rgba(250,250,250,' + (0.5 * (1 - k)) + ')';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.ellipse(x, waterY + 4, rx, ry, 0, 0, 7); ctx.stroke();
+        ctx.strokeStyle = 'rgba(96,116,128,' + (0.35 * (1 - k)) + ')';
+        ctx.beginPath(); ctx.ellipse(x, waterY + 5, rx * 0.8, ry * 0.8, 0, 0, 7); ctx.stroke();
+      }else if(p.kind === 'puff'){
+        const k = p.t / p.life;
+        ctx.globalAlpha = 1 - k;
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(x, p.y + (p.vy * p.t) * 0.4, p.r * (1 + k * 0.8), 0, 7); ctx.fill();
+        ctx.globalAlpha = 1;
+      }else if(p.kind === 'drop'){
+        ctx.globalAlpha = clamp(1 - p.t / p.life, 0, 1);
+        ctx.fillStyle = '#e8f0f2';
+        ctx.beginPath(); ctx.arc(x, p.y, 2, 0, 7); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  function drawFloats(){
+    for(const f of floats){
+      const k = f.t / 0.95;
+      ctx.globalAlpha = clamp(1.3 - k * 1.3, 0, 1);
+      ctx.font = '700 15px ' + KAI;
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(247,240,229,.9)';
+      ctx.strokeText(f.txt, f.x - camX, f.y);
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.txt, f.x - camX, f.y);
+      ctx.globalAlpha = 1;
+    }
+    if(seal){
+      const k = seal.t / 0.85;
+      const s = k < 0.3 ? lerp(0.5, 1.15, k / 0.3) : lerp(1.15, 1, (k - 0.3) / 0.7);
+      ctx.save();
+      ctx.globalAlpha = clamp(1.6 - k * 1.6, 0, 1);
+      ctx.translate(seal.x - camX, seal.y);
+      ctx.rotate(-0.12);
+      ctx.scale(s, s);
+      ctx.fillStyle = '#a33a2c';
+      roundRect(-13, -13, 26, 26, 4); ctx.fill();
+      ctx.fillStyle = '#f7efe3';
+      ctx.font = '700 15px ' + KAI;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('中', 0, 1);
+      ctx.restore();
+      ctx.textBaseline = 'alphabetic';
+    }
+  }
+
+  function drawReeds(){
+    // 前景芦苇（底部取景，仿参考图）
+    const clumps = [
+      { x: 0.06, n: 5, s: 1.05 }, { x: 0.3, n: 3, s: 0.85 }, { x: 0.55, n: 2, s: 0.7 },
+      { x: 0.78, n: 3, s: 0.9 }, { x: 0.97, n: 5, s: 1.1 },
+    ];
+    for(const cl of clumps){
+      const bx = cl.x * W, by = H + 6;
+      for(let i = 0; i < cl.n; i++){
+        const ph = bx * 0.13 + i * 1.7;
+        const sway = Math.sin(tGlobal * 1.1 + ph) * 5;
+        const hgt = (58 + i * 13) * cl.s;
+        const lean = (i - cl.n / 2) * 7;
+        ctx.strokeStyle = i % 2 ? 'rgba(88,104,72,.92)' : 'rgba(70,84,58,.92)';
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.moveTo(bx + i * 4 - cl.n * 2, by);
+        ctx.quadraticCurveTo(bx + i * 4 + lean * 0.4 + sway, by - hgt * 0.55,
+                             bx + i * 4 + lean + sway, by - hgt);
+        ctx.stroke();
+        if(i === 1 && cl.s > 0.9){                              // 蒲棒
+          ctx.strokeStyle = '#7a5b3c'; ctx.lineWidth = 4.6; ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(bx + i * 4 + lean * 0.85 + sway, by - hgt * 0.94);
+          ctx.lineTo(bx + i * 4 + lean + sway, by - hgt * 0.94 - 13);
+          ctx.stroke();
+          ctx.lineCap = 'butt';
+        }
+      }
+    }
+  }
+
+  function drawLeaves(){
+    ctx.save();
+    for(let i = 0; i < 7; i++){
+      const t = tGlobal * 0.22 + i * 1.37;
+      const x = ((i * 71 + t * 26) % (W + 60)) - 30;
+      const y = ((i * 97 + t * 40) % (H + 40)) - 20;
+      const rot = t * 2.2 + i;
+      ctx.save();
+      ctx.translate(x, y); ctx.rotate(rot);
+      ctx.globalAlpha = 0.6;
+      ctx.fillStyle = i % 3 === 0 ? '#b85c33' : (i % 3 === 1 ? '#c9964a' : '#a9553a');
+      ctx.beginPath();
+      ctx.moveTo(0, -4.5);
+      ctx.quadraticCurveTo(4, -2, 5, 0);
+      ctx.quadraticCurveTo(4, 3, 0, 4.5);
+      ctx.quadraticCurveTo(-4, 3, -5, 0);
+      ctx.quadraticCurveTo(-4, -2, 0, -4.5);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(90,50,30,.5)'; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.moveTo(0, -4.5); ctx.lineTo(0, 5); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  /* ---------- UI（朱红印章式信息框，仿参考图四角布局） ---------- */
+  function paperBox(x, y, w, h, align){
+    ctx.fillStyle = 'rgba(250,244,233,.86)';
+    ctx.strokeStyle = 'rgba(122,106,88,.85)';
+    ctx.lineWidth = 1.1;
+    roundRect(x, y, w, h, 6); ctx.fill(); ctx.stroke();
+    ctx.textAlign = align;
+  }
+  function drawUI(){
+    const bw = 92, bh = 40, m = 8;
+    // 左上：本局得分
+    paperBox(m, m, bw, bh, 'left');
+    ctx.fillStyle = '#8a7a63'; ctx.font = '11px ' + KAI;
+    ctx.fillText('本局得分', m + 9, m + 16);
+    ctx.fillStyle = '#4a3f34'; ctx.font = '700 19px ' + KAI;
+    ctx.fillText(String(score), m + 9, m + 34);
+    // 右上：最高
+    paperBox(W - m - bw, m, bw, bh, 'right');
+    ctx.fillStyle = '#8a7a63'; ctx.font = '11px ' + KAI;
+    ctx.fillText('最高', W - m - 9, m + 16);
+    ctx.fillStyle = '#4a3f34'; ctx.font = '700 19px ' + KAI;
+    ctx.fillText(String(best), W - m - 9, m + 34);
+    // 左：连续正中
+    if(combo > 1){
+      paperBox(m, m + bh + 6, 84, 24, 'left');
+      ctx.fillStyle = '#a33a2c'; ctx.font = '600 12.5px ' + KAI;
+      ctx.fillText('连续正中 ×' + combo, m + 9, m + bh + 22);
+    }
+    // 右：印章
+    if(stamps > 0){
+      paperBox(W - m - 84, m + bh + 6, 84, 24, 'right');
+      ctx.fillStyle = '#a33a2c'; ctx.font = '600 12.5px ' + KAI;
+      ctx.fillText('本局印章 +' + stamps, W - m - 9, m + bh + 22);
+    }
+    ctx.textAlign = 'left';
+  }
+
+  function drawLetterSpaced(txt, x, y, sp){
+    // 逐字排版 + 整串居中（单字 drawText 用 center 对齐会整体左偏半个字宽）
+    let total = 0;
+    for(const ch of txt) total += ctx.measureText(ch).width + sp;
+    total -= sp;
+    const prev = ctx.textAlign;
+    ctx.textAlign = 'left';
+    let cx = x - total / 2;
+    for(const ch of txt){ ctx.fillText(ch, cx, y); cx += ctx.measureText(ch).width + sp; }
+    ctx.textAlign = prev;
+  }
+  function drawHint(){
+    const a = 1;
+    ctx.save();
+    ctx.globalAlpha = a;
+    const cy = H * 0.30;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#8a7a63'; ctx.font = '11px ' + KAI;
+    drawLetterSpaced('qīng wā guò hé', W / 2, cy - 26, 2.4);
+    ctx.fillStyle = '#6d4c33'; ctx.font = '700 30px ' + KAI;
+    ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(248,241,229,.85)';
+    ctx.strokeText('青蛙过河', W / 2, cy + 6);
+    ctx.fillText('青蛙过河', W / 2, cy + 6);
+    ctx.strokeStyle = 'rgba(122,106,88,.7)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(W / 2 - 62, cy + 18); ctx.lineTo(W / 2 + 62, cy + 18); ctx.stroke();
+    ctx.fillStyle = '#5f5142'; ctx.font = '13.5px ' + KAI;
+    ctx.fillText('按住蓄力 · 松手起跳', W / 2, cy + 40);
+    ctx.fillStyle = '#8a7a63'; ctx.font = '11.5px ' + KAI;
+    ctx.fillText('落在石上继续 · 落水即止', W / 2, cy + 59);
+    ctx.fillText('正中石心，印章加分', W / 2, cy + 76);
+    ctx.restore();
+    ctx.textAlign = 'left';
+  }
+
+  function draw(){
+    ctx.setTransform(S, 0, 0, S, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    if(shakeT > 0){
+      const k = shakeT * 16;
+      ctx.translate((Math.random() - 0.5) * k, (Math.random() - 0.5) * k);
+    }
+    drawSky();
+    drawMountains();
+    drawTreeline();
+    drawWater();
+    drawBank();
+    const next = platforms.find(p => p.x > frog.x + 10);
+    for(const p of platforms) drawPlatform(p, next && p === next && state === 'play');
+    drawFrog();
+    drawParts();
+    drawReeds();
+    drawLeaves();
+    drawFloats();
+    drawUI();
+    if(state === 'ready') drawHint();
+    ctx.restore();
+  }
+
+  /* ---------- 主循环 ---------- */
+  function frame(ts){
+    raf = requestAnimationFrame(frame);
+    if(!lastTs) lastTs = ts;
+    let dt = (ts - lastTs) / 1000; lastTs = ts;
+    if(!(dt > 0)) dt = 1 / 60;
+    dt = Math.min(dt, 1 / 20);
+    step(dt);
+    draw();
+  }
+
+  /* ---------- 布局（height:100% + 溢出兜底） ---------- */
+  function layout(){
+    const stage = $('stage');
+    const availW = stage.clientWidth, availH = stage.clientHeight;
+    if(!availW || !availH) return;
+    S = availW / W; H = availH / S;
+    refit();
+    const dpr = window.devicePixelRatio || 1;
+    cv.style.width = availW + 'px'; cv.style.height = availH + 'px';
+    cv.width = Math.round(availW * dpr); cv.height = Math.round(availH * dpr);
+    ctx.setTransform(S, 0, 0, S, 0, 0);
+    let guard = 0, prevH = document.documentElement.scrollHeight;
+    while(prevH > window.innerHeight + 1 && guard++ < 10){
+      S *= 0.985; H = availH / S; refit();
+      cv.style.width = Math.round(W * S) + 'px'; cv.style.height = availH + 'px';
+      cv.width = Math.round(W * S * dpr); cv.height = Math.round(availH * dpr);
+      ctx.setTransform(S, 0, 0, S, 0, 0);
+      const nh = document.documentElement.scrollHeight;
+      if(nh >= prevH) break;
+      prevH = nh;
+    }
+    if(/[?&]debug/.test(location.search)) showDbg();
+  }
+
+  /* ---------- 音效开关 ---------- */
+  $('btnSound').onclick = () => {
+    soundOn = !soundOn;
+    try{ localStorage.setItem('frog_sound', soundOn ? '1' : '0'); }catch(e){}
+    setSoundLabel();
+    if(!soundOn){ chargeOff(); if(bgmGain && ac) bgmGain.gain.setTargetAtTime(0, ac.currentTime, 0.06); }
+    else { audio(); if(bgmOn) startBgm(); if(bgmGain && ac) bgmGain.gain.setTargetAtTime(0.8, ac.currentTime, 0.06); }
+    toast(soundOn ? '音效与音乐已开' : '音效与音乐已关');
+  };
+  function setSoundLabel(){ $('btnSound').textContent = soundOn ? '🔊 音效' : '🔇 音效'; }
+  soundOn = localStorage.getItem('frog_sound') !== '0';
+  $('overRetry').onclick = () => { chargeOff(); reset(); };
+
+  /* ---------- 诊断（一键复制，用户不念数字） ---------- */
+  function dbgText(){
+    const dpr = window.devicePixelRatio || 1;
+    let vh100 = '?';
+    try{
+      const pr = document.createElement('div');
+      pr.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:100vh;pointer-events:none';
+      document.body.appendChild(pr);
+      vh100 = Math.round(pr.getBoundingClientRect().height);
+      document.body.removeChild(pr);
+    }catch(e){}
+    const nextP = platforms.find(p => p.x > frog.x + 10);
+    let need = '—';
+    if(nextP && frog.mode === 'idle'){
+      const dist = nextP.x - frog.x;
+      const c = (dist - MINJ) / (MAXJ - MINJ);
+      need = dist.toFixed(0) + ' → 蓄力 ' + (c >= 0 && c <= 1 ? (c * 100).toFixed(0) + '%' : '不可达!');
+    }
+    return [
+      '【青蛙过河·诊断】' + new Date().toLocaleString('zh-CN'),
+      '视口=' + window.innerWidth + '×' + window.innerHeight + '  朝向=' + (window.innerWidth >= window.innerHeight ? '横屏' : '竖屏') + '  dpr=' + dpr,
+      '高度探针: 100vh=' + vh100 + '  与可视差=' + (vh100 === '?' ? '?' : (vh100 - window.innerHeight)) + 'px',
+      '画布css=' + cv.style.width + '×' + cv.style.height + '  物理=' + cv.width + '×' + cv.height,
+      '逻辑=' + W + '×' + Math.round(H) + '  scale=' + S.toFixed(3) + '  水面=' + waterY + '  可站立面=' + surfY,
+      '页面总高=' + document.documentElement.scrollHeight + '/' + window.innerHeight,
+      '状态=' + state + '  动作=' + frog.mode + '  蓄力=' + (frog.charge * 100).toFixed(0) + '%  分数=' + score + '  最高=' + best,
+      '青蛙(世界)=' + frog.x.toFixed(0) + '  屏幕x=' + (frog.x - camX).toFixed(0) + '  相机=' + camX.toFixed(0) + '  石台=' + platforms.length,
+      '跳距区间=' + MINJ + '~' + MAXJ + '  下一块: ' + need,
+      '音效=' + (soundOn ? '开' : '关') + '  BGM=' + (bgmTimer ? '播放中' : '停'),
+      'UA=' + navigator.userAgent,
+    ].join('\n');
+  }
+  function copyText(txt){
+    let done = false;
+    try{
+      if(navigator.clipboard && window.isSecureContext && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt); done = true; }
+    }catch(e){ done = false; }
+    if(!done){
+      try{
+        const ta = document.createElement('textarea');
+        ta.value = txt; ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+        document.body.appendChild(ta); ta.select();
+        if(ta.setSelectionRange) ta.setSelectionRange(0, txt.length);
+        done = document.execCommand('copy');
+        document.body.removeChild(ta);
+      }catch(e){ done = false; }
+    }
+    if(!done){
+      try{
+        const rg = document.createRange(); rg.selectNodeContents($('dbg'));
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg);
+      }catch(e){}
+    }
+    toast(done ? '诊断信息已复制 ✓ 直接粘给开发者' : '已选中，长按选择「复制」');
+    return done;
+  }
+  function showDbg(){ const el = $('dbg'); el.classList.add('on'); el.textContent = dbgText(); return el.textContent; }
+  $('btnDiag').addEventListener('click', e => { e.stopPropagation(); copyText(showDbg()); });
+  $('dbg').addEventListener('click', e => { e.stopPropagation(); copyText(showDbg()); });
+
+  function toast(msg){
+    const t = $('toast');
+    t.textContent = msg; t.classList.add('on');
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 1700);
+  }
+
+  /* ---------- 启动 ---------- */
+  setSoundLabel();
+  layout();
+  reset(1);                              // 固定种子起步（首局可预期），重开时随机
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', () => setTimeout(layout, 250));
+  if(!raf) raf = requestAnimationFrame(frame);
+
+  /* ---------- 测试钩子 ---------- */
+  window.__frog = () => ({
+    state, score, best, combo, stamps, soundOn, W, H, waterY, surfY, camX,
+    frogX: frog.x, screenX: frog.x - camX, arc: frog.arc, mode: frog.mode,
+    charge: frog.charging ? frog.charge : frog.charge, charging: frog.charging,
+    MINJ, MAXJ, GAP_CAP, PSTORE: PSTORE.slice(), frogW: FROG_W, bankRight, frogStart: 62,
+    platforms: platforms.map(p => ({ x:p.x, w:p.w, type:p.type })),
+    next: (() => { const p = platforms.find(q => q.x > frog.x + 10); return p ? { x:p.x, w:p.w, type:p.type } : null; })(),
+    bgm: !!bgmTimer,
+  });
+  window.__frogStep = dt => step(dt);
+  window.__frogReset = seed => { chargeOff(); reset(seed); };
+  window.__frogPress = () => pressStart();
+  window.__frogRelease = () => pressEnd();
+  window.__frogSetCharge = c => { frog.charge = clamp(c, 0, 1); };
+  window.__frogSetX = x => { frog.x = x; frog.mode = 'idle'; frog.arc = 0; frog.rot = 0; };
+  window.__frogCurve = { MINJ, MAXJ, gapRange: (h0, h1, first) => gapRange(h0, h1, first) };
+})();
+</script>
+</body>
+</html>
