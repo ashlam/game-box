@@ -847,15 +847,18 @@
     ctx.beginPath(); ctx.moveTo(4, -9.5); ctx.quadraticCurveTo(9, -8, 11, -11); ctx.stroke();
 
     // 斗笠（古风点睛）
-    ctx.fillStyle = dead ? '#a89878' : '#c9a86a';
+    // ⚠️ 曾经的问题：原色 #c9a86a 和岸边 #cdbb92 几乎同色，青蛙站在土黄岸上斗笠直接隐形。
+    //    处理：提亮草色 + 加深描边（#7a5a30 / 1.8px），并把顶部收尖（斗笠是尖的不是平片）。
+    ctx.fillStyle = dead ? '#b3a486' : '#dcc07a';
     ctx.beginPath();
-    ctx.moveTo(-14, -19);
-    ctx.quadraticCurveTo(0, -27, 14, -19);
-    ctx.quadraticCurveTo(0, -18, -14, -19);
+    ctx.moveTo(-15, -18.6);
+    ctx.quadraticCurveTo(0, -30, 15, -18.6);
+    ctx.quadraticCurveTo(0, -17.4, -15, -18.6);
     ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#a5854e'; ctx.lineWidth = 1.2; ctx.stroke();
-    ctx.fillStyle = '#a5854e';
-    ctx.beginPath(); ctx.arc(0, -23.6, 1.5, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#7a5a30'; ctx.lineWidth = 1.8;
+    ctx.stroke();
+    ctx.fillStyle = '#7a5a30';
+    ctx.beginPath(); ctx.arc(0, -25.6, 1.6, 0, 7); ctx.fill();
     ctx.restore();
 
     // 蓄力条
