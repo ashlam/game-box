@@ -113,6 +113,7 @@
   /* ---------- 坐标系 ---------- */
   const W = 360;                 // 逻辑宽固定
   let H = 640, S = 1;            // H 由画布比例反推
+  let dprNow = 1;                // 缓存 devicePixelRatio（draw 里也要用）
   let waterY = 280, surfY = 266; // 水面线 / 可站立面（石头顶统一高度）
   function refit(){
     waterY = Math.round(H * 0.44);
@@ -1082,7 +1083,9 @@
   }
 
   function draw(){
-    ctx.setTransform(S, 0, 0, S, 0, 0);
+    // ★ 必须 S*dpr：canvas 变换作用在 backing store（物理像素）上，
+    //   只用 S 的话在 dpr=2.6 的手机上画面只占画布 1/2.6（已复现，和用户截图一致）
+    ctx.setTransform(S * dprNow, 0, 0, S * dprNow, 0, 0);
     ctx.clearRect(0, 0, W, H);
     ctx.save();
     if(shakeT > 0){
@@ -1125,15 +1128,16 @@
     S = availW / W; H = availH / S;
     refit();
     const dpr = window.devicePixelRatio || 1;
+    dprNow = dpr;
     cv.style.width = availW + 'px'; cv.style.height = availH + 'px';
     cv.width = Math.round(availW * dpr); cv.height = Math.round(availH * dpr);
-    ctx.setTransform(S, 0, 0, S, 0, 0);
+    ctx.setTransform(S * dpr, 0, 0, S * dpr, 0, 0);
     let guard = 0, prevH = document.documentElement.scrollHeight;
     while(prevH > window.innerHeight + 1 && guard++ < 10){
       S *= 0.985; H = availH / S; refit();
       cv.style.width = Math.round(W * S) + 'px'; cv.style.height = availH + 'px';
       cv.width = Math.round(W * S * dpr); cv.height = Math.round(availH * dpr);
-      ctx.setTransform(S, 0, 0, S, 0, 0);
+      ctx.setTransform(S * dpr, 0, 0, S * dpr, 0, 0);
       const nh = document.documentElement.scrollHeight;
       if(nh >= prevH) break;
       prevH = nh;
