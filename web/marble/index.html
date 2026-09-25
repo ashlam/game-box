@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>弹珠乐园 · 小游戏盒子</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#191d26; --card2:#202632; --line:#2b3242;
+    --txt:#e8ecf3; --dim:#8b95a7; --acc:#5b8cff;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+  html{height:100%}
+  html,body{margin:0}
+  body{
+    background:radial-gradient(1200px 600px at 50% -10%,#1b2233 0%,var(--bg) 60%);
+    color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    /* ★ height:100%（不是 100vh/100dvh）：手机上 100vh 是地址栏隐藏时的高度，会凭空溢出 */
+    height:100%;display:flex;flex-direction:column;align-items:center;
+    padding:calc(env(safe-area-inset-top) + 6px) 4px calc(env(safe-area-inset-bottom) + 16px);
+    overflow:hidden;
+  }
+  .top{width:100%;display:flex;align-items:center;gap:7px;margin-bottom:6px;flex:0 0 auto}
+  .top a{color:var(--dim);text-decoration:none;font-size:18px;padding:5px 9px;border-radius:9px;
+          background:var(--card);border:1px solid var(--line);line-height:1}
+  .top h1{font-size:15px;margin:0;color:var(--dim);font-weight:600;white-space:nowrap;flex:1}
+  .top button{font-size:11.5px;padding:6px 8px;border-radius:9px;border:1px solid var(--line);
+               background:var(--card);color:var(--txt);font-family:inherit;line-height:1;white-space:nowrap}
+  .top button:active{background:var(--acc);border-color:var(--acc);color:#fff}
+
+  #stage{width:100%;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;touch-action:none}
+  canvas{display:block;border-radius:14px;border:1px solid var(--line);touch-action:none;
+          box-shadow:0 10px 30px rgba(0,0,0,.45)}
+
+  /* 结算面板走嘉年华配色（红+金），和画面里的机框连成一体 */
+  #over{position:fixed;inset:0;background:rgba(30,14,10,.74);backdrop-filter:blur(3px);display:none;
+         align-items:center;justify-content:center;padding:22px;z-index:9}
+  #over.on{display:flex}
+  .panel{position:relative;width:100%;max-width:330px;background:#fff6e6;border:2px solid #e0b34c;
+          border-radius:18px;padding:24px 20px 16px;text-align:center;color:#5a4231;
+          box-shadow:0 20px 50px rgba(0,0,0,.5);font-family:-apple-system,"PingFang SC","Noto Sans CJK SC",sans-serif}
+  .panel::after{content:"★";position:absolute;right:14px;top:10px;font-size:20px;color:#e0b34c}
+  .panel h2{margin:0 0 8px;font-size:22px;color:#c23b2c;letter-spacing:3px;font-weight:800}
+  .panel .big{font-size:44px;font-weight:800;color:#d24534;font-variant-numeric:tabular-nums;line-height:1.1;margin:6px 0 2px}
+  .panel .unit{font-size:13px;color:#a4845f;font-weight:700;letter-spacing:3px}
+  .panel p{color:#8a6f52;font-size:12.5px;margin:10px 0 14px;line-height:1.7}
+  .panel p.rec{color:#c23b2c;font-weight:700}
+  .panel .rule{background:#fdf0d8;border:1px dashed #e0b34c;border-radius:10px;padding:8px 10px;
+               font-size:11.5px;color:#8a6f52;line-height:1.7;margin:0 0 14px}
+  .panel button{width:100%;font-size:15px;padding:13px;border-radius:12px;border:1px solid #e0b34c;
+                 background:#f6e6c4;color:#7a5b3a;font-family:inherit;margin-bottom:8px;letter-spacing:4px}
+  .panel button.pri{background:#d24534;border-color:#d24534;color:#fff;font-weight:700}
+  .panel button:active{filter:brightness(.94)}
+
+  #toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 84px);transform:translate(-50%,-12px);
+          background:#20262ff2;border:1px solid var(--line);padding:11px 18px;border-radius:12px;font-size:13.5px;
+          opacity:0;transition:.22s;pointer-events:none;z-index:70;max-width:86vw;text-align:center}
+  #toast.on{opacity:1;transform:translate(-50%,0)}
+
+  #dbg{position:fixed;left:6px;right:6px;bottom:calc(env(safe-area-inset-bottom) + 8px);z-index:60;display:none;
+        font-size:10px;line-height:1.45;font-family:ui-monospace,Menlo,Consolas,monospace;color:#a8b8cf;
+        background:rgba(8,10,14,.88);border:1px solid rgba(120,150,200,.24);border-radius:8px;padding:7px 9px;
+        white-space:pre-wrap;word-break:break-all;cursor:pointer;
+        -webkit-user-select:text;user-select:text}
+  #dbg.on{display:block}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="/">‹</a>
+  <h1>弹珠乐园</h1>
+  <button id="btnSound">🔊 音效</button>
+  <button id="btnDiag" title="复制诊断信息">诊断</button>
+</div>
+
+<div id="stage"><canvas id="cv"></canvas></div>
+
+<div id="toast"></div>
+<div id="dbg"></div>
+
+<div id="over"><div class="panel">
+  <h2 id="overTitle">弹珠用完了</h2>
+  <div class="big" id="overScore">0</div>
+  <div class="unit">本局最高弹珠</div>
+  <p id="overText"></p>
+  <div class="rule">落桶规则：桶上的数字加给剩余弹珠<br>0 号桶不加 —— 这颗就白打了</div>
+  <button class="pri" id="overRetry">再来一次 · 5 颗</button>
+</div></div>
+
+<script>
+(function(){
+  'use strict';
+  /* ============================================================
+     弹珠乐园 —— 蓄力发射 · 撞钉反弹 · 落桶加球
+
+     规则（用户定的，逐条）：
+       1. 初始 5 颗弹珠
+       2. 按住蓄力，松手后按力量弹出
+       3. 落下去会撞「弹性障碍物（钉子）」或墙壁 → 反弹
+       4. 最后看落到哪个桶
+       5. 桶上的数字加给剩余弹珠数；0 不加（即白损失一颗）
+
+     界面参考用户给的实拍图（嘉年华风格弹珠机）：
+       顶部中间炮口朝下的发射器（趴只小熊）、圆角玻璃场地（天空+白云+粉钉）、
+       底部 9 桶 1·0·2·4·8·4·2·0·1（中间 8 金冠）、左侧蓝色「可用弹珠」胶囊、
+       红色机框 + 底部灯泡。
+       ⚠️ 参考图是横屏投影；本作按用户真机（竖屏手机）排布：
+          信息做顶部两枚胶囊，不放左右侧栏。
+       参考图里的「下一颗 / ↑×1 加倍 / 加弹珠(购买)」属于它的商业系统，
+       用户没要求 → 不做。
+
+     数值基准：**逻辑高固定 560**、宽随屏反推（物理场地要纵向空间，见坐标系注释）。
+     ★ canvas 变换必须用 S*dpr（上一个游戏漏乘，真机画面只占 38%，已修）。
+     ============================================================ */
+
+  const $ = id => document.getElementById(id);
+  const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const cv = $('cv'), ctx = cv.getContext('2d');
+  const UI = '-apple-system,"PingFang SC","Noto Sans CJK SC",sans-serif';
+
+  /* ---------- 坐标系 ----------
+   * ★ 这里和别的游戏相反：**固定逻辑高 HFIX、宽度随屏反推**。
+   *   别的游戏固定逻辑宽 360 让高浮动（青蛙的几何全是按比例的，所以没事）；
+   *   本作的物理场地需要「纵向空间」（炮口 100 → 桶口 H-62 必须够高才能放下钉场）。
+   *   桌面宽矮窗口（以及手机横屏）下固定宽会让 H 缩到 187：
+   *     生成区间 y0=126 > y1=95 → 一颗钉都放不下（浏览器里实测 钉 0 颗，已复现）。
+   *   固定高之后：H 恒为 560 → 场地恒为 100..498，任何屏幕宽高比都能放下 10 行钉。 */
+  const HFIX = 560;            // 逻辑高固定
+  let W = 342;                 // 逻辑宽由布局反推（首次 layout 前的初值）
+  let H = HFIX, S = 1;
+  let dprNow = 1;              // 缓存 devicePixelRatio（draw 里要用）
+
+  /* 场地几何（W/H 变化时由 refit() 重算） */
+  let fieldL = 6, fieldR = W - 6;
+  let fieldT = 100;            // 玻璃场地顶（炮口下方）
+  let mouthY = H - 62;         // 桶口线：球心越过它就结算
+  let floorY = H - 16;         // 桶底
+  let slotW = 0;               // 每个桶的宽 = (fieldR-fieldL)/9
+  let CANNON_X = W / 2;        // 炮在场地水平中心
+  function refit(){
+    fieldR = W - 6;
+    CANNON_X = W / 2;
+    mouthY = H - 62;
+    floorY = H - 16;
+    slotW = (fieldR - fieldL) / NUMS.length;
+  }
+
+  /* ---------- 规则常数（★ 全部来自用户原话） ---------- */
+  const START_BALLS = 5;                                   // 初始 5 个球
+  const NUMS = [1, 0, 2, 4, 8, 4, 2, 0, 1];                // 9 桶数字（参考图原样，对称，中间 8 头奖）
+  const WIN_I = 4;                                         // 金冠在中间
+
+  /* ---------- 手感 / 物理常数 ---------- */
+  const MINV = 150, MAXV = 660;     // 蓄力 0%/100% 的出膛速度（线性）
+  const CHARGE_T = 1.2;             // 满蓄力秒数
+  const G = 520;                    // 重力（逻辑单位/秒²）
+  const RB = 6.5;                   // 球半径
+  const RP = 5;                     // 钉半径
+  const REST_PEG = 0.74;            // 钉恢复系数（弹性 <1，会慢慢泄能）
+  const REST_WALL = 0.86;           // 墙
+  const REST_CAP = 0.7;             // 桶分隔条圆头
+  const WATCH_SPEED = 9;            // 低于此速度算「停住」
+  const WATCH_TIME = 1.0;           // 停这么久就给一脚（防止卡在钉顶）
+  const FLIGHT_CAP = 14;            // 单球超时兜底（正常远小于此值）
+  const CANNON_MOUTH = 92;
+
+  /* ---------- 状态 ---------- */
+  let state = 'ready';             // ready | play | over   （play = 有球在飞）
+  let balls = START_BALLS;         // 剩余弹珠（含此刻在飞的这颗已扣掉）
+  let launched = 0, gain = 0, runPeak = START_BALLS, best = 0;
+  let lastBucket = -1, pegHits = 0, flights = 0;
+  let ball = null;                 // {x,y,vx,vy,restTime,flightT,trail:[]}
+  let pegs = [];
+  let charge = 0, charging = false;
+  let fieldSeed = 1;
+  let effects = [], floats = [], cannonShake = 0;
+  let hintOn = true;               // 首屏规则提示
+  let overTimer = null, lastTs = 0, raf = null;
+  let soundOn = true, bgmTimer = null, bgmNext = 0, bgmStep = 0, bgmGain = null;
+  let lastPegSnd = 0, lastWallSnd = 0;   // 音效节流（连撞时别糊成一片）
+
+  best = parseInt(localStorage.getItem('marble_best') || '0', 10) || 0;
+
+  function mulberry32(a){
+    return function(){
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  /* ---------- 一局的重置 + 钉场生成 ---------- */
+  function reset(seed){
+    fieldSeed = (seed === undefined) ? ((Math.random() * 1e9) | 0) : seed;
+    rng = mulberry32(fieldSeed);
+    balls = START_BALLS;
+    launched = 0; gain = 0; runPeak = START_BALLS;
+    lastBucket = -1; pegHits = 0; flights = 0;
+    ball = null; charge = 0; charging = false;
+    effects = []; floats = []; cannonShake = 0;
+    state = 'ready'; hintOn = true;
+    clearTimeout(overTimer); overTimer = null;
+    $('over').classList.remove('on');
+    genPegs();
+  }
+  let rng = mulberry32(1);
+
+  /** 生成钉场（种子固定 → 同一局可复现，测试能断言）。
+   *  规则：
+   *    · 交错行、带抖动（参考图那种散布感）
+   *    · ★ 炮口正下方 ±3.2 内不能有钉：完全正对会「原路弹回 → 上下打摆」卡死
+   *    · 距左右墙 ≥ 12、距炮口 ≥ 24、距桶口 ≥ 26（留出落桶缓冲）
+   *    · 钉不能互相重叠（d ≥ 2*RP + 3），否则会把球直接卡住 */
+  function genPegs(){
+    pegs = [];
+    const y0 = fieldT + 26, y1 = mouthY - 30;
+    const rowGap = 36, colGap = 44;
+    let idx = 0;
+    for(let y = y0; y <= y1; y += rowGap){
+      const rowIdx = Math.round((y - y0) / rowGap);
+      const off = (rowIdx % 2) * (colGap / 2);        // 交错
+      for(let x = fieldL + 16 + off; x <= fieldR - 16; x += colGap){
+        const jx = x + (rng() * 2 - 1) * 9;
+        const jy = y + (rng() * 2 - 1) * 7;
+        if(jx < fieldL + 12 || jx > fieldR - 12) continue;
+        if(Math.abs(jx - CANNON_X) < 3.2) continue;   // ★ 避开正下方
+        if(jy < fieldT + 22 || jy > mouthY - 26) continue;
+        let ok = true;
+        for(const p of pegs){
+          const dx = p.x - jx, dy = p.y - jy;
+          if(dx * dx + dy * dy < (2 * RP + 3) * (2 * RP + 3)){ ok = false; break; }
+        }
+        if(!ok) continue;
+        pegs.push({ x: jx, y: jy, i: idx++ });
+      }
+    }
+  }
+
+  /* ============================================================
+     音效：Web Audio 现场合成（零依赖、可静音）
+     ============================================================ */
+  let ac = null, chargeOsc = null, chargeGain = null;
+  function audio(){
+    if(ac === null){
+      const C = window.AudioContext || window.webkitAudioContext;
+      try{ ac = C ? new C() : false; }catch(e){ ac = false; }
+    }
+    if(ac && ac.state === 'suspended'){ try{ ac.resume(); }catch(e){} }
+    return ac || null;
+  }
+  function tone(freq, dur, opt){
+    const o = opt || {};
+    if(!soundOn) return;
+    const c = audio(); if(!c) return;
+    const t0 = c.currentTime + (o.at || 0);
+    const osc = c.createOscillator(), g = c.createGain();
+    osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    if(o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, o.to), t0 + dur);
+    const vol = (o.gain === undefined ? 0.12 : o.gain);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g); g.connect(c.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+  }
+  function noiseBurst(dur, opt){
+    const o = opt || {};
+    if(!soundOn) return;
+    const c = audio(); if(!c) return;
+    const t0 = c.currentTime + (o.at || 0);
+    const len = Math.max(1, Math.floor(c.sampleRate * dur));
+    const buf = c.createBuffer(1, len, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, o.decay || 2);
+    const src = c.createBufferSource(); src.buffer = buf;
+    const f = c.createBiquadFilter(); f.type = o.type || 'lowpass';
+    f.frequency.setValueAtTime(o.freq || 900, t0);
+    if(o.to) f.frequency.exponentialRampToValueAtTime(Math.max(40, o.to), t0 + dur);
+    const g = c.createGain(); g.gain.value = (o.gain === undefined ? 0.1 : o.gain);
+    src.connect(f); f.connect(g); g.connect(c.destination);
+    src.start(t0);
+  }
+  function chargeOn(){
+    if(!soundOn) return;
+    const c = audio(); if(!c || chargeOsc) return;
+    chargeOsc = c.createOscillator(); chargeGain = c.createGain();
+    chargeOsc.type = 'triangle';
+    chargeOsc.frequency.setValueAtTime(200, c.currentTime);
+    chargeGain.gain.setValueAtTime(0.04, c.currentTime);
+    chargeOsc.connect(chargeGain); chargeGain.connect(c.destination);
+    chargeOsc.start();
+  }
+  function chargeUpdate(c){
+    if(!ac || !chargeOsc) return;
+    chargeOsc.frequency.setTargetAtTime(200 + 560 * c, ac.currentTime, 0.03);
+  }
+  function chargeOff(){
+    if(!ac || !chargeOsc) return;
+    try{ chargeGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.03); chargeOsc.stop(ac.currentTime + 0.08); }catch(e){}
+    chargeOsc = null; chargeGain = null;
+  }
+  function sndFire(){                                   // 出膛：弹性下坠 + 气声
+    tone(520, 0.16, { type:'triangle', to:180, gain:0.14 });
+    noiseBurst(0.1, { type:'bandpass', freq:1600, to:500, gain:0.05, decay:3 });
+  }
+  function sndPeg(i){                                   // 撞钉：pachinko 的「叮」，按钉序错开音高
+    tone(760 + (i % 5) * 130, 0.07, { type:'sine', gain:0.06 });
+  }
+  function sndWall(){ tone(210, 0.06, { type:'sine', gain:0.05 }); }
+  function sndBucket(n){                                // 落桶：0=低沉「噗」；N>0 越大越亮
+    if(n === 0){ tone(240, 0.3, { type:'sine', to:150, gain:0.11 }); return; }
+    const base = 500 + n * 70;
+    tone(base, 0.13, { type:'triangle', gain:0.12, at:0 });
+    tone(base * 1.26, 0.16, { type:'triangle', gain:0.1, at:0.08 });
+    if(n >= 8) tone(base * 1.5, 0.3, { type:'sine', gain:0.08, at:0.16 });   // 头奖多一声
+  }
+  function sndOver(){ [60, 57, 52].forEach((f, i) => tone(f, 0.28, { type:'triangle', gain:0.1, at: i * 0.16 })); }
+  function sndRecord(){ [60, 64, 67, 72].forEach((f, i) => tone(f, 0.2, { type:'triangle', gain:0.1, at: i * 0.09 })); }
+
+  /* ---------- BGM：原创欢快循环（C 大调五声 · 112 BPM） ---------- */
+  const BPM = 112, ST = 60 / BPM / 2;
+  const mhz = n => 440 * Math.pow(2, (n - 69) / 12);
+  // 0 = 休止（数组里不能写裸 '-'，踩过）
+  const LEAD = [76, 0, 79, 0, 81, 0, 79, 0, 76, 0, 74, 0, 72, 0, 0, 0,
+                74, 0, 76, 0, 79, 0, 0, 0, 81, 0, 79, 0, 76, 0, 0, 0];
+  const BASS = [48, 0, 0, 0, 0, 0, 48, 0, 55, 0, 0, 0, 0, 0, 55, 0,
+                48, 0, 0, 0, 0, 0, 48, 0, 43, 0, 0, 0, 0, 0, 0, 0];
+  function pluck(f, at, dur, vol){
+    const c = ac;
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(f * 1.015, at);
+    o.frequency.exponentialRampToValueAtTime(f, at + 0.05);
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    o.connect(g); g.connect(bgmGain); o.start(at); o.stop(at + dur + 0.03);
+  }
+  function bgmTick(){
+    if(!ac || !bgmGain) return;
+    while(bgmNext < ac.currentTime + 0.18){
+      const i = bgmStep % LEAD.length;
+      if(LEAD[i] > 0) pluck(mhz(LEAD[i]), bgmNext, ST * 2.2, 0.045);
+      if(BASS[i] > 0) pluck(mhz(BASS[i]), bgmNext, ST * 4, 0.05);
+      bgmNext += ST; bgmStep++;
+    }
+  }
+  function startBgm(){
+    const c = audio(); if(!c || bgmTimer) return;
+    if(!bgmGain){ bgmGain = c.createGain(); bgmGain.connect(c.destination); }
+    bgmGain.gain.value = soundOn ? 0.8 : 0;
+    bgmNext = c.currentTime + 0.08; bgmStep = 0;
+    bgmTick(); bgmTimer = setInterval(bgmTick, 50);
+  }
+  function stopBgm(){ if(bgmTimer){ clearInterval(bgmTimer); bgmTimer = null; } }
+
+  /* ============================================================
+     输入：按住蓄力，松手发射（触屏 / 鼠标 / 空格）
+     ============================================================ */
+  function pressStart(){
+    if(state === 'over' || state === 'play') return;      // 有球在飞不给蓄力
+    if(hintOn){ hintOn = false; }
+    if(!charging){
+      charging = true; charge = 0;
+      audio(); startBgm();                                 // 首次触摸解锁音频
+      chargeOn();
+    }
+  }
+  function pressEnd(){
+    if(!charging) return;
+    charging = false;
+    chargeOff();
+    if(state === 'play'){ charge = 0; return; }            // 飞行中不给发
+    fire(charge);
+    charge = 0;
+  }
+  function fire(c){
+    if(balls <= 0){ gameOver(); return; }                  // ★ 没球就不让发
+    const v = MINV + c * (MAXV - MINV);                    // ★ 力量 → 出膛速度（线性）
+    balls--;                                               // ★ 发射即扣 1
+    launched++; flights++;
+    ball = { x: CANNON_X, y: CANNON_MOUTH, vx: 0, vy: v,
+             restT: 0, xStag: 0, checkX: CANNON_X, flightT: 0, trail: [] };
+    state = 'play';
+    cannonShake = 1;
+    lastSpeed = v;
+    sndFire();
+  }
+  let lastSpeed = 0;
+
+  cv.addEventListener('touchstart', e => { e.preventDefault(); pressStart(); }, { passive:false });
+  cv.addEventListener('touchend',   e => { e.preventDefault(); pressEnd(); },   { passive:false });
+  cv.addEventListener('touchcancel', () => pressEnd(), { passive:true });
+  cv.addEventListener('mousedown', e => { e.preventDefault(); pressStart(); });
+  window.addEventListener('mouseup', () => pressEnd());
+  document.addEventListener('keydown', e => {
+    if(e.code === 'Space' || e.key === ' '){
+      e.preventDefault();
+      if(!e.repeat) pressStart();
+    }
+    if(e.key === 'r' || e.key === 'R'){ chargeOff(); reset(); }
+  });
+  document.addEventListener('keyup', e => {
+    if(e.code === 'Space' || e.key === ' ') { e.preventDefault(); pressEnd(); }
+  });
+
+  /* ============================================================
+     物理与结算
+     ============================================================ */
+  function bucketAt(x){
+    // ★ 桶格铺满整块场地 → 任何落点都必然属于某个桶（测试会断言 9 格无缝）
+    return clamp(Math.floor((x - fieldL) / slotW), 0, NUMS.length - 1);
+  }
+
+  /** 落桶结算（规则来自用户原话）：
+   *  发射时已扣 1；这里把桶上的数字加上去；0 就是不加 = 白损失一颗。 */
+  function landBucket(i){
+    const n = NUMS[i];
+    lastBucket = i;
+    gain += n;
+    balls += n;                                            // ★ 加的是桶上的数字本身
+    runPeak = Math.max(runPeak, balls);
+    if(runPeak > best){
+      best = runPeak;
+      try{ localStorage.setItem('marble_best', String(best)); }catch(e){}
+    }
+    sndBucket(n);
+    floats.push({ x: fieldL + (i + 0.5) * slotW, y: mouthY - 8, t: 0,
+                  txt: n > 0 ? '+' + n : '0', color: n > 0 ? '#fff8e0' : '#b9c6cf' });
+    effects.push({ kind:'flash', i, t: 0 });
+    ball = null;
+    if(balls <= 0) gameOver(); else state = 'ready';
+  }
+  function gameOver(){
+    state = 'over';
+    charging = false; chargeOff();
+    stopBgm();
+    sndOver();
+    const isRec = runPeak >= best && runPeak > START_BALLS;
+    overTimer = setTimeout(() => {
+      $('overTitle').textContent = isRec ? '新纪录' : '弹珠用完了';
+      $('overScore').textContent = runPeak;
+      $('overText').textContent = '发射 ' + launched + ' 颗 · 累计加球 +' + gain +
+        ' · 最高 ' + best + (best > runPeak ? ' · 差 ' + (best - runPeak) + ' 颗' : '');
+      $('overText').className = isRec ? 'rec' : '';
+      $('over').classList.add('on');
+    }, 640);
+  }
+
+  /** 单个物理子步（dt ≤ 1/120 → 最大速 660 也只走 5.5 单位 < 钉+球半径 11.5，不会穿钉） */
+  function physics(h){
+    if(!ball) return;
+    ball.flightT += h;
+    ball.vy += G * h;
+    ball.x += ball.vx * h;
+    ball.y += ball.vy * h;
+
+    // 左右墙 + 顶棚（都弹性反弹）
+    if(ball.x < fieldL + RB){ ball.x = fieldL + RB; ball.vx = Math.abs(ball.vx) * REST_WALL; hitWall(); }
+    if(ball.x > fieldR - RB){ ball.x = fieldR - RB; ball.vx = -Math.abs(ball.vx) * REST_WALL; hitWall(); }
+    if(ball.y < fieldT + RB){ ball.y = fieldT + RB; ball.vy = Math.abs(ball.vy) * REST_WALL; hitWall(); }
+
+    // 钉子（圆-圆弹性碰撞）
+    for(const p of pegs){
+      const dx = ball.x - p.x, dy = ball.y - p.y;
+      const rr = RP + RB;
+      const d2 = dx * dx + dy * dy;
+      if(d2 >= rr * rr || d2 === 0) continue;
+      const d = Math.sqrt(d2), nx = dx / d, ny = dy / d;
+      ball.x = p.x + nx * rr;                              // 推出重叠
+      ball.y = p.y + ny * rr;
+      const vn = ball.vx * nx + ball.vy * ny;
+      if(vn < 0){                                          // 只在接近时反弹
+        ball.vx -= (1 + REST_PEG) * vn * nx;
+        ball.vy -= (1 + REST_PEG) * vn * ny;
+        pegHits++;
+        const _now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : -999;
+        if(_now - lastPegSnd > 26){ lastPegSnd = _now; sndPeg(p.i); }
+        effects.push({ kind:'ring', x: p.x, y: p.y, t: 0 });
+        if(effects.length > 60) effects.shift();
+        ball.restT = 0;
+      }
+    }
+
+    // 越过桶口 → 结算（按球心所在格）
+    if(ball.y >= mouthY){
+      const idx = bucketAt(ball.x);
+      landBucket(idx);
+      return;
+    }
+
+    // 桶分隔条（胶囊：竖线 + 顶部圆头）—— 越过桶口前会先被圆头弹开
+    const capR = 2.6;
+    for(let k = 0; k <= NUMS.length; k++){
+      const dxp = fieldL + k * slotW;
+      // 线段范围 [mouthY, floorY]
+      const cy = clamp(ball.y, mouthY, floorY);
+      const ddx = ball.x - dxp, ddy = ball.y - cy;
+      const rr = capR + RB;
+      const d2 = ddx * ddx + ddy * ddy;
+      if(d2 >= rr * rr || d2 === 0) continue;
+      const d = Math.sqrt(d2), nx = ddx / d, ny = ddy / d;
+      ball.x = dxp + nx * rr;
+      ball.y = cy + ny * rr;
+      const vn = ball.vx * nx + ball.vy * ny;
+      if(vn < 0){
+        ball.vx -= (1 + REST_CAP) * vn * nx;
+        ball.vy -= (1 + REST_CAP) * vn * ny;
+        sndWall();
+        ball.restT = 0;
+      }
+    }
+
+    // 看门狗 A：速度几乎为零（能量泄完卡在钉顶/隔条顶）→ 给一脚
+    const sp2 = ball.vx * ball.vx + ball.vy * ball.vy;
+    if(sp2 < WATCH_SPEED * WATCH_SPEED){
+      ball.restT += h;
+      if(ball.restT > WATCH_TIME){
+        ball.restT = 0;
+        ball.vx += (ball.x < CANNON_X ? 1 : -1) * (45 + rng() * 30);   // ★ 用本局 rng（不是 Math.random）保证可复现
+        ball.vy = -35;
+      }
+    }else ball.restT = 0;
+    // 看门狗 B：x 位置长时间不挪窝（哪怕速度很高 = 原地上下打摆，速度看门抓不到）
+    //          正常最慢一局横穿场地也 < 0.9s，1.2s 阈值不会误伤
+    if(Math.abs(ball.x - ball.checkX) > 4){ ball.checkX = ball.x; ball.xStag = 0; }
+    else{
+      ball.xStag += h;
+      if(ball.xStag > 1.2){
+        ball.xStag = 0; ball.checkX = ball.x;
+        ball.vx += (rng() < 0.5 ? -1 : 1) * 55;                        // ★ 同上
+        ball.vy = Math.min(ball.vy, -40);
+      }
+    }
+
+    // 超时兜底：正常远小于此值（测试会断言实际用不到）
+    if(ball.flightT > FLIGHT_CAP){
+      landBucket(bucketAt(ball.x));
+    }
+  }
+  function hitWall(){
+    // ⚠️ 别写成 `performance ? ...` —— 未声明的标识符在严格模式/Node 桩里直接 ReferenceError
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : -999;
+    if(now - lastWallSnd > 45){ lastWallSnd = now; sndWall(); }
+    ball.restT = 0; ball.xStag = 0; ball.checkX = ball.x;
+  }
+
+  function step(dt){
+    tGlobal += dt;
+    if(cannonShake > 0) cannonShake = Math.max(0, cannonShake - dt * 3);
+
+    if(charging && state !== 'play'){
+      charge = Math.min(1, charge + dt / CHARGE_T);
+      chargeUpdate(charge);
+    }
+    if(ball && state === 'play'){
+      // 固定 1/120 子步：既保精度又让测试可复现
+      const n = Math.max(1, Math.min(8, Math.ceil(dt * 120)));
+      const h = dt / n;
+      for(let i = 0; i < n && ball && state === 'play'; i++) physics(h);
+      if(ball){
+        ball.trail.push({ x: ball.x, y: ball.y });
+        if(ball.trail.length > 10) ball.trail.shift();
+      }
+    }
+
+    for(let i = effects.length - 1; i >= 0; i--){
+      effects[i].t += dt;
+      if(effects[i].t > (effects[i].kind === 'flash' ? 0.55 : 0.4)) effects.splice(i, 1);
+    }
+    for(let i = floats.length - 1; i >= 0; i--){
+      floats[i].t += dt; floats[i].y -= 24 * dt;
+      if(floats[i].t > 1) floats.splice(i, 1);
+    }
+  }
+  let tGlobal = 0;
+
+  /* ============================================================
+     绘制
+     ============================================================ */
+  function roundRect(x, y, w, h, r){
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  // 云（场地背景的装饰，位置固定不随局变）
+  const CLOUDS = [ {x:0.22,y:0.28,s:1}, {x:0.66,y:0.46,s:0.8}, {x:0.38,y:0.68,s:1.15}, {x:0.8,y:0.2,s:0.7} ];
+  function drawField(){
+    // 机框（嘉年华红）
+    ctx.fillStyle = '#c9432f';
+    ctx.fillRect(0, 0, W, H);
+    const gg = ctx.createLinearGradient(0, 0, W, 0);
+    gg.addColorStop(0, 'rgba(0,0,0,.16)'); gg.addColorStop(0.5, 'rgba(255,255,255,.05)'); gg.addColorStop(1, 'rgba(0,0,0,.16)');
+    ctx.fillStyle = gg; ctx.fillRect(0, 0, W, H);
+
+    // 玻璃场地（天空）
+    roundRect(fieldL, fieldT, fieldR - fieldL, floorY - fieldT, 14);
+    const sky = ctx.createLinearGradient(0, fieldT, 0, floorY);
+    sky.addColorStop(0, '#9fcdf2'); sky.addColorStop(0.55, '#c3e2f7'); sky.addColorStop(1, '#dff0fb');
+    ctx.fillStyle = sky; ctx.fill();
+    // 白云
+    ctx.save();
+    roundRect(fieldL, fieldT, fieldR - fieldL, floorY - fieldT, 14); ctx.clip();
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    for(const c of CLOUDS){
+      const cx = fieldL + c.x * (fieldR - fieldL), cy = fieldT + c.y * (mouthY - fieldT), s = c.s;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, 22 * s, 9 * s, 0, 0, 7); ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx - 12 * s, cy + 3 * s, 14 * s, 7 * s, 0, 0, 7); ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(cx + 13 * s, cy + 3 * s, 13 * s, 6.5 * s, 0, 0, 7); ctx.fill();
+    }
+    // 桶区底色（略深，和钉区分层）
+    ctx.fillStyle = 'rgba(120,150,180,.14)';
+    ctx.fillRect(fieldL, mouthY, fieldR - fieldL, floorY - mouthY);
+    ctx.restore();
+    // 金色边框
+    ctx.strokeStyle = '#e8b64c'; ctx.lineWidth = 3;
+    roundRect(fieldL, fieldT, fieldR - fieldL, floorY - fieldT, 14); ctx.stroke();
+    // 底部灯泡
+    const n = 9;
+    for(let i = 0; i < n; i++){
+      const bx = 26 + i * ((W - 52) / (n - 1));
+      const blink = 0.55 + 0.45 * Math.sin(tGlobal * 4 + i * 1.1);
+      ctx.fillStyle = 'rgba(255,226,122,' + blink.toFixed(3) + ')';
+      ctx.beginPath(); ctx.arc(bx, H - 7, 4.2, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(120,60,30,.7)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(bx, H - 7, 4.2, 0, 7); ctx.stroke();
+    }
+  }
+
+  function drawPegs(){
+    for(const p of pegs){
+      // 钉影
+      ctx.fillStyle = 'rgba(70,90,120,.18)';
+      ctx.beginPath(); ctx.arc(p.x + 1.5, p.y + 2, RP, 0, 7); ctx.fill();
+      // 钉身（参考图的粉橙）
+      const g = ctx.createRadialGradient(p.x - 1.6, p.y - 1.8, 0.5, p.x, p.y, RP);
+      g.addColorStop(0, '#ffd9d2'); g.addColorStop(0.55, '#f4a9a0'); g.addColorStop(1, '#e08a80');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(p.x, p.y, RP, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(190,110,100,.75)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(p.x, p.y, RP, 0, 7); ctx.stroke();
+      // 高光
+      ctx.fillStyle = 'rgba(255,255,255,.75)';
+      ctx.beginPath(); ctx.arc(p.x - 1.5, p.y - 1.7, 1.5, 0, 7); ctx.fill();
+    }
+  }
+
+  function bucketColor(n){
+    return n === 8 ? '#f2b134' : n === 4 ? '#b04ae8' : n === 2 ? '#43c96b' :
+           n === 0 ? '#2fbfd8' : '#4f7df0';
+  }
+  function drawBuckets(){
+    for(let i = 0; i < NUMS.length; i++){
+      const n = NUMS[i];
+      const x0 = fieldL + i * slotW;
+      const flash = effects.find(e => e.kind === 'flash' && e.i === i);
+      const boost = flash ? (1 - flash.t / 0.55) : 0;
+      const pad = 2.4;
+      const w = slotW - pad * 2;
+      // 桶身
+      const g = ctx.createLinearGradient(0, mouthY, 0, floorY);
+      g.addColorStop(0, bucketColor(n));
+      g.addColorStop(1, 'rgba(0,0,0,.34)');
+      ctx.fillStyle = g;
+      roundRect(x0 + pad, mouthY + 1, w, floorY - mouthY - 1, 5);
+      ctx.fill();
+      // 桶口高亮
+      ctx.fillStyle = boost > 0 ? 'rgba(255,255,255,' + (0.55 * boost).toFixed(3) + ')' : 'rgba(255,255,255,.34)';
+      roundRect(x0 + pad, mouthY + 1, w, 5, 3); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1;
+      roundRect(x0 + pad, mouthY + 1, w, floorY - mouthY - 1, 5); ctx.stroke();
+      // 数字
+      ctx.fillStyle = n === 8 ? '#7a4b00' : '#ffffff';
+      const nfs = clamp(slotW * 0.42, 13, 26);      // 字号随桶宽（宽屏桶宽，别用固定字号显得空）
+      ctx.font = '800 ' + (n === 8 ? Math.round(nfs * 1.18) : nfs) + 'px ' + UI;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(n), x0 + slotW / 2, mouthY + 24);
+      ctx.textBaseline = 'alphabetic';
+      // 8 号金冠
+      if(i === WIN_I){
+        const cx = x0 + slotW / 2, cy = mouthY - 4;
+        ctx.fillStyle = '#ffd76a';
+        ctx.strokeStyle = '#b8860b'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cx - 9, cy + 5);
+        ctx.lineTo(cx - 9, cy - 4); ctx.lineTo(cx - 4.5, cy + 0);
+        ctx.lineTo(cx, cy - 6); ctx.lineTo(cx + 4.5, cy + 0);
+        ctx.lineTo(cx + 9, cy - 4); ctx.lineTo(cx + 9, cy + 5);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+    }
+    // 分隔条（竖线 + 顶部圆头，物理上也是墙）
+    for(let k = 0; k <= NUMS.length; k++){
+      const x = fieldL + k * slotW;
+      ctx.strokeStyle = '#e8b64c'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x, mouthY + 2); ctx.lineTo(x, floorY - 2); ctx.stroke();
+      const cap = ctx.createRadialGradient(x - 1, mouthY - 1, 0.5, x, mouthY, 3.4);
+      cap.addColorStop(0, '#ffe9a8'); cap.addColorStop(1, '#d99a2e');
+      ctx.fillStyle = cap;
+      ctx.beginPath(); ctx.arc(x, mouthY, 3.4, 0, 7); ctx.fill();
+    }
+  }
+
+  function drawCannon(){
+    const cx = CANNON_X;
+    const sh = cannonShake > 0 ? Math.sin(tGlobal * 60) * 2.2 * cannonShake : 0;
+    // 小熊（趴在机框顶上，参考图同款位置；原创简笔）
+    const by = 8;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, W, by + 22); ctx.clip();
+    ctx.fillStyle = '#d9a06a';
+    ctx.beginPath(); ctx.arc(cx - 12, by - 2, 6.5, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 12, by - 2, 6.5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#e8b884';
+    ctx.beginPath(); ctx.arc(cx, by, 15, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(140,90,50,.5)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx, by, 15, 0, 7); ctx.stroke();
+    ctx.fillStyle = '#5a3a24';
+    ctx.beginPath(); ctx.arc(cx - 5, by - 1, 1.7, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + 5, by - 1, 1.7, 0, 7); ctx.fill();
+    ctx.fillStyle = '#8a5a34';
+    ctx.beginPath(); ctx.ellipse(cx, by + 5, 5.5, 4, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(cx, by + 3.6, 1.5, 0, 7); ctx.fill();
+    ctx.restore();
+
+    // 拉杆（蓄力时往下压 = 压缩弹簧，对应参考图「下拉拉杆」；杆身会被炮体盖住下段，读作压进去）
+    const pull = charging ? charge * 9 : 0;
+    ctx.fillStyle = '#8a5b2a';
+    roundRect(cx - 3, 30 + pull, 6, 14, 3); ctx.fill();
+    ctx.fillStyle = '#c98a3e';
+    roundRect(cx - 11, 26 + pull, 22, 7, 3.5); ctx.fill();
+
+    // 炮身
+    ctx.save();
+    ctx.translate(sh, 0);
+    const bodyG = ctx.createLinearGradient(cx - 15, 0, cx + 15, 0);
+    bodyG.addColorStop(0, '#9a6a2e'); bodyG.addColorStop(0.4, '#e0a95c'); bodyG.addColorStop(1, '#8a5a24');
+    ctx.fillStyle = bodyG;
+    roundRect(cx - 14, 40, 28, 46, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(90,50,20,.8)'; ctx.lineWidth = 1.4;
+    roundRect(cx - 14, 40, 28, 46, 7); ctx.stroke();
+    // 炮口
+    ctx.fillStyle = '#c98a3e';
+    roundRect(cx - 17, 78, 34, 11, 5); ctx.fill();
+    ctx.strokeStyle = 'rgba(90,50,20,.8)';
+    roundRect(cx - 17, 78, 34, 11, 5); ctx.stroke();
+    // 装填好的球（有球可发时才显示）
+    if(state !== 'play' && balls > 0){
+      const g = ctx.createRadialGradient(cx - 2, 66, 1, cx, 68, 7.5);
+      g.addColorStop(0, '#8f9dff'); g.addColorStop(1, '#3b4bd8');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(cx, 68, 7, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.7)';
+      ctx.beginPath(); ctx.arc(cx - 2.4, 65.6, 2, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawBall(){
+    if(!ball) return;
+    // 轨迹残影
+    for(let i = 0; i < ball.trail.length; i++){
+      const tr = ball.trail[i];
+      ctx.globalAlpha = (i / ball.trail.length) * 0.3;
+      ctx.fillStyle = '#5b6bff';
+      ctx.beginPath(); ctx.arc(tr.x, tr.y, RB * (0.4 + 0.6 * i / ball.trail.length), 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    const g = ctx.createRadialGradient(ball.x - 2.4, ball.y - 2.6, 1, ball.x, ball.y, RB);
+    g.addColorStop(0, '#a9b5ff'); g.addColorStop(0.5, '#5b6bff'); g.addColorStop(1, '#2f3fd0');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, RB, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(30,40,120,.7)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, RB, 0, 7); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.beginPath(); ctx.arc(ball.x - 2.4, ball.y - 2.6, 2.1, 0, 7); ctx.fill();
+  }
+
+  function drawEffects(){
+    for(const e of effects){
+      if(e.kind === 'ring'){
+        const k = e.t / 0.4;
+        ctx.strokeStyle = 'rgba(255,255,255,' + (0.7 * (1 - k)).toFixed(3) + ')';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.arc(e.x, e.y, RP + 2 + 9 * k, 0, 7); ctx.stroke();
+      }
+    }
+    for(const f of floats){
+      const k = f.t / 1;
+      ctx.globalAlpha = clamp(1.4 - k * 1.4, 0, 1);
+      ctx.font = '800 17px ' + UI;
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 3.4; ctx.strokeStyle = 'rgba(40,30,20,.65)';
+      ctx.strokeText(f.txt, f.x, f.y);
+      ctx.fillStyle = f.color;
+      ctx.fillText(f.txt, f.x, f.y);
+      ctx.globalAlpha = 1;
+    }
+    ctx.textAlign = 'left';
+  }
+
+  function drawCharge(){
+    if(!charging) return;
+    // ★ 蓄力条放炮左侧空白区：原来画在 y=46（炮身 40..86 的正中间），按住时会压在炮上（首屏没按住看不出来）
+    const bh = 9, by = 58;
+    const bw = Math.min(120, Math.max(48, CANNON_X - 28));
+    const bx = CANNON_X - 14 - bw - 6;
+    // 方向提示（只给方向，不给落点 —— 和青蛙一致：不剧透轨迹）；只画到第一排钉之上，别压钉
+    ctx.save();
+    ctx.setLineDash([3, 5]);
+    ctx.strokeStyle = 'rgba(90,70,40,.45)'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(CANNON_X, CANNON_MOUTH + 8); ctx.lineTo(CANNON_X, fieldT + 22); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = 'rgba(255,250,240,.94)';
+    ctx.strokeStyle = 'rgba(96,66,40,.9)'; ctx.lineWidth = 1.2;
+    roundRect(bx, by, bw, bh, 4.5); ctx.fill(); ctx.stroke();
+    const fw = (bw - 4) * charge;
+    if(fw > 0.5){
+      const g = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+      g.addColorStop(0, '#ffd76a'); g.addColorStop(1, '#e2542f');
+      ctx.fillStyle = g;
+      roundRect(bx + 2, by + 2, fw, bh - 4, 3); ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(96,66,40,.5)';
+    for(let i = 1; i < 4; i++) ctx.fillRect(bx + (bw * i) / 4 - 0.5, by + 1.5, 1, bh - 3);
+    if(charge >= 1){
+      ctx.globalAlpha = 0.45 + 0.4 * Math.sin(tGlobal * 12);
+      ctx.strokeStyle = '#e2542f'; ctx.lineWidth = 1.6;
+      roundRect(bx - 1.5, by - 1.5, bw + 3, bh + 3, 5.5); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function pill(x, y, w, h){
+    ctx.fillStyle = 'rgba(52,84,196,.92)';
+    roundRect(x, y, w, h, 9); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1.2;
+    roundRect(x, y, w, h, 9); ctx.stroke();
+  }
+  function drawUI(){
+    // 左：可用弹珠（参考图的蓝色胶囊）
+    pill(6, 6, 112, 36);
+    const gx = 24, gy = 24;
+    const gg = ctx.createRadialGradient(gx - 2, gy - 2, 1, gx, gy, 9);
+    gg.addColorStop(0, '#a9b5ff'); gg.addColorStop(1, '#3b4bd8');
+    ctx.fillStyle = gg;
+    ctx.beginPath(); ctx.arc(gx, gy, 8.5, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.8)';
+    ctx.beginPath(); ctx.arc(gx - 2.4, gy - 2.6, 2.2, 0, 7); ctx.fill();
+    ctx.fillStyle = '#cfe0ff'; ctx.font = '600 9.5px ' + UI;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText('可用弹珠', 40, 19);
+    ctx.fillStyle = '#ffffff'; ctx.font = '800 17px ' + UI;
+    ctx.fillText(String(balls), 40, 36);
+    // 发射中显示扣掉后的余量（balls 已在发射时扣过，这里就是真实余量）
+    // 右：最高
+    pill(W - 6 - 84, 6, 84, 36);
+    ctx.fillStyle = '#cfe0ff'; ctx.font = '600 9.5px ' + UI;
+    ctx.textAlign = 'right';
+    ctx.fillText('最高', W - 16, 19);
+    ctx.fillStyle = '#ffffff'; ctx.font = '800 17px ' + UI;
+    ctx.fillText(String(best), W - 16, 36);
+    ctx.textAlign = 'left';
+    // 飞行中：左下角小字显示这球的出膛力量
+    if(state === 'play'){
+      ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.font = '600 9.5px ' + UI;
+      ctx.fillText('力量 ' + Math.round(((lastSpeed - MINV) / (MAXV - MINV)) * 100) + '%', 8, 54);
+    }
+  }
+
+  function drawHint(){
+    const cx = W / 2, cy = (fieldT + mouthY) * 0.44;
+    const hw = Math.min(132, (W - 14) / 2);          // 宽度自适应，窄屏不溢出
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,252,246,.93)';
+    ctx.strokeStyle = '#e0b34c'; ctx.lineWidth = 2;
+    roundRect(cx - hw, cy - 62, hw * 2, 132, 14); ctx.fill(); ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#c23b2c'; ctx.font = '800 24px ' + UI;
+    ctx.fillText('弹珠乐园', cx, cy - 30);
+    ctx.fillStyle = '#5a4231'; ctx.font = '700 12.5px ' + UI;
+    ctx.fillText('按住蓄力 · 松手发射', cx, cy - 6);
+    ctx.fillStyle = '#8a6f52'; ctx.font = '11.5px ' + UI;
+    ctx.fillText('撞到钉子和墙壁会反弹', cx, cy + 14);
+    ctx.fillText('落到桶里，桶上的数字加给你', cx, cy + 32);
+    ctx.fillStyle = '#c23b2c'; ctx.font = '700 11.5px ' + UI;
+    ctx.fillText('0 号桶不加 —— 这颗就白打了', cx, cy + 50);
+    ctx.restore();
+    ctx.textAlign = 'left';
+  }
+
+  function draw(){
+    // ★ 必须 S*dpr：变换作用在物理像素上，漏乘 dpr 画面只占 1/dpr（上一个游戏踩过）
+    ctx.setTransform(S * dprNow, 0, 0, S * dprNow, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    drawField();
+    drawPegs();
+    drawBuckets();
+    drawCannon();
+    drawBall();
+    drawEffects();
+    drawCharge();
+    drawUI();
+    if(hintOn && state === 'ready') drawHint();
+  }
+
+  /* ---------- 主循环 ---------- */
+  function frame(ts){
+    raf = requestAnimationFrame(frame);
+    if(!lastTs) lastTs = ts;
+    let dt = (ts - lastTs) / 1000; lastTs = ts;
+    if(!(dt > 0)) dt = 1 / 60;
+    dt = Math.min(dt, 1 / 20);
+    step(dt);
+    draw();
+  }
+
+  /* ---------- 布局（height:100% + 溢出兜底） ---------- */
+  function layout(){
+    const stage = $('stage');
+    const availW = stage.clientWidth, availH = stage.clientHeight;
+    if(!availW || !availH) return;
+    // ★ 固定逻辑高：缩放由高度决定，逻辑宽随屏宽反推（见坐标系注释）
+    S = availH / HFIX; H = HFIX; W = availW / S;
+    refit();
+    const dpr = window.devicePixelRatio || 1;
+    dprNow = dpr;
+    cv.style.width = availW + 'px'; cv.style.height = availH + 'px';
+    cv.width = Math.round(availW * dpr); cv.height = Math.round(availH * dpr);
+    ctx.setTransform(S * dpr, 0, 0, S * dpr, 0, 0);
+    // 溢出兜底：本模型下画布 css 恒等于 stage 尺寸、body 是 height:100%+overflow:hidden，
+    // 理论上不可能溢出；万一 WebView 抽风，这里仍会走一次并因「改不动」立即退出（无死循环）。
+    let guard = 0, prevH = document.documentElement.scrollHeight;
+    while(prevH > window.innerHeight + 1 && guard++ < 10){
+      S *= 0.985; H = HFIX; W = availW / S; refit();
+      cv.style.width = availW + 'px'; cv.style.height = availH + 'px';
+      cv.width = Math.round(availW * dpr); cv.height = Math.round(availH * dpr);
+      ctx.setTransform(S * dpr, 0, 0, S * dpr, 0, 0);
+      const nh = document.documentElement.scrollHeight;
+      if(nh >= prevH) break;
+      prevH = nh;
+    }
+    if(/[?&]debug/.test(location.search)) showDbg();
+  }
+
+  /* ---------- 音效开关 ---------- */
+  $('btnSound').onclick = () => {
+    soundOn = !soundOn;
+    try{ localStorage.setItem('marble_sound', soundOn ? '1' : '0'); }catch(e){}
+    setSoundLabel();
+    if(!soundOn){ chargeOff(); if(bgmGain && ac) bgmGain.gain.setTargetAtTime(0, ac.currentTime, 0.06); }
+    else { audio(); if(bgmTimer && bgmGain && ac) bgmGain.gain.setTargetAtTime(0.8, ac.currentTime, 0.06); }
+    toast(soundOn ? '音效与音乐已开' : '音效与音乐已关');
+  };
+  function setSoundLabel(){ $('btnSound').textContent = soundOn ? '🔊 音效' : '🔇 音效'; }
+  soundOn = localStorage.getItem('marble_sound') !== '0';
+  $('overRetry').onclick = () => { chargeOff(); reset(); };
+
+  /* ---------- 诊断（一键复制） ---------- */
+  function dbgText(){
+    const dpr = window.devicePixelRatio || 1;
+    let vh100 = '?';
+    try{
+      const pr = document.createElement('div');
+      pr.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:100vh;pointer-events:none';
+      document.body.appendChild(pr);
+      vh100 = Math.round(pr.getBoundingClientRect().height);
+      document.body.removeChild(pr);
+    }catch(e){}
+    return [
+      '【弹珠乐园·诊断】' + new Date().toLocaleString('zh-CN'),
+      '视口=' + window.innerWidth + '×' + window.innerHeight + '  朝向=' + (window.innerWidth >= window.innerHeight ? '横屏' : '竖屏') + '  dpr=' + dpr,
+      '高度探针: 100vh=' + vh100 + '  与可视差=' + (vh100 === '?' ? '?' : (vh100 - window.innerHeight)) + 'px',
+      '画布css=' + cv.style.width + '×' + cv.style.height + '  物理=' + cv.width + '×' + cv.height,
+      '逻辑=' + W + '×' + Math.round(H) + '  scale=' + S.toFixed(3) + '  桶口=' + mouthY + '  桶底=' + floorY,
+      '页面总高=' + document.documentElement.scrollHeight + '/' + window.innerHeight,
+      '状态=' + state + '  弹珠=' + balls + '  发射=' + launched + '  累计加球=+' + gain + '  最高=' + best,
+      '钉场=' + pegs.length + ' 颗(种子 ' + fieldSeed + ')  上一桶=' + lastBucket +
+        (lastBucket >= 0 ? '(' + NUMS[lastBucket] + ')' : ''),
+      '上一球: 出膛=' + lastSpeed.toFixed(0) + ' 力量=' + (lastSpeed > 0 ? Math.round((lastSpeed - MINV) / (MAXV - MINV) * 100) + '%' : '—') +
+        '  撞钉=' + pegHits + '  在飞=' + (ball ? Math.round(ball.flightT * 100) / 100 + 's' : '否'),
+      '区间: 力量0%=' + MINV + ' 100%=' + MAXV + '  重力=' + G + '  钉r=' + RP + ' 球r=' + RB,
+      '音效=' + (soundOn ? '开' : '关') + '  BGM=' + (bgmTimer ? '播放中' : '停'),
+      'UA=' + navigator.userAgent,
+    ].join('\n');
+  }
+  function copyText(txt){
+    let done = false;
+    try{
+      if(navigator.clipboard && window.isSecureContext && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt); done = true; }
+    }catch(e){ done = false; }
+    if(!done){
+      try{
+        const ta = document.createElement('textarea');
+        ta.value = txt; ta.setAttribute('readonly', '');
+        ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+        document.body.appendChild(ta); ta.select();
+        if(ta.setSelectionRange) ta.setSelectionRange(0, txt.length);
+        done = document.execCommand('copy');
+        document.body.removeChild(ta);
+      }catch(e){ done = false; }
+    }
+    if(!done){
+      try{
+        const rg = document.createRange(); rg.selectNodeContents($('dbg'));
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg);
+      }catch(e){}
+    }
+    toast(done ? '诊断信息已复制 ✓ 直接粘给开发者' : '已选中，长按选择「复制」');
+    return done;
+  }
+  function showDbg(){ const el = $('dbg'); el.classList.add('on'); el.textContent = dbgText(); return el.textContent; }
+  $('btnDiag').addEventListener('click', e => { e.stopPropagation(); copyText(showDbg()); });
+  $('dbg').addEventListener('click', e => { e.stopPropagation(); copyText(showDbg()); });
+
+  function toast(msg){
+    const t = $('toast');
+    t.textContent = msg; t.classList.add('on');
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 1700);
+  }
+
+  /* ---------- 启动 ---------- */
+  setSoundLabel();
+  layout();
+  reset(1);                          // 固定种子起步（首局可预期），重开时随机
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', () => setTimeout(layout, 250));
+  if(!raf) raf = requestAnimationFrame(frame);
+
+  /* ---------- 测试钩子 ---------- */
+  window.__marble = () => ({
+    state, balls, launched, gain, runPeak, best, lastBucket, pegHits, flights,
+    lastSpeed, charge, charging, hintOn, soundOn,
+    NUMS: NUMS.slice(), START_BALLS, MINV, MAXV, CHARGE_T,
+    G, RB, RP, REST_PEG, REST_WALL, FLIGHT_CAP,
+    W, H, fieldL, fieldR, fieldT, mouthY, floorY, slotW, cannonX: CANNON_X,
+    pegCount: pegs.length, fieldSeed,
+    pegs: pegs.map(p => ({ x: p.x, y: p.y, i: p.i })),
+    ball: ball ? { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, flightT: ball.flightT } : null,
+    bgm: !!bgmTimer,
+  });
+  window.__marbleStep = dt => step(dt);
+  window.__marbleReset = seed => { chargeOff(); reset(seed); };
+  window.__marblePress = () => pressStart();
+  window.__marbleRelease = () => pressEnd();
+  window.__marbleSetCharge = c => { charge = clamp(c, 0, 1); };
+  window.__marbleLand = i => landBucket(clamp(i | 0, 0, NUMS.length - 1));   // 直接按桶结算（测规则用）
+  window.__marbleSetBall = o => {                     // 测物理用（卡死看门狗等）
+    ball = { x:o.x, y:o.y, vx:o.vx || 0, vy:o.vy || 0, restT: o.restT || 0,
+             xStag: 0, checkX: o.x, flightT: 0, trail: [] };
+    state = 'play';
+  };
+})();
+</script>
+</body>
+</html>
