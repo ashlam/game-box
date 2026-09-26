@@ -281,8 +281,8 @@ section('6) ★ 交通生成公平性（每排必留活路）· 变道车');
   ok(ran === 3600, '观测跑满 60 秒（' + ran + '/3600 帧）');
   ok(nan === 0, '长跑 60 秒坐标无 NaN');
   ok(offRoadObj === 0, '车辆横向/速度不越界（越界 ' + offRoadObj + ' 次）');
-  ok(maxPerRow <= R().LANES - 1,
-     '★ 同一排最多占 ' + maxPerRow + ' 条道（≤ ' + (R().LANES - 1) + '）→ 永远留得出活路',
+  ok(maxPerRow <= R().LANES - 2,
+     '★ 同一排最多占 ' + maxPerRow + ' 条道（≤ ' + (R().LANES - 2) + '）→ 4 车道至少留 2 条空，不会并排堵死',
      '最多 ' + maxPerRow);
   ok(sawDrift, '★ 有「冷不丁变道」的车（观测到变道过程）');
 }
@@ -668,6 +668,22 @@ section('14) ★ 可辨识性：唯一能被吃的东西必须"视觉上跳出�
      '敌车四种颜色仍互不相同（降饱和后依然可区分类型）');
 
   // 场上只有 fuel 带 pickup 标记
+  // ★ 擦边也要吃到：把油桶横向偏出"盒子相交"5 个单位（旧判定 -4/-6 时吃不到，正是用户报的"有时不消失"）
+  reset(73); noSpawn(true); clearObjs();
+  {
+    const s0 = R(), py0 = s0.player.y, cx = s0.ROAD_L + s0.LANE_W * 1.5;
+    setP({ x: cx, invuln: 99999, fuel: 0.5 });
+    const off = (Math.round(s0.CAR_W * 0.95) + s0.CAR_W) / 2 + 5;    // 横向差 5 个单位：盒子不相交
+    putObj({ kind: 'fuel', lane: 1, x: cx + off, y: py0, v: 0, vWant: 0, pickup: true,
+             w: Math.round(s0.CAR_W * 0.95), h: Math.round(s0.CAR_H * 1.05),
+             signal: 0, signalSide: 0, drift: 0, targetX: cx + off });
+    run(3);
+    const o = R().objs.find(q => q.kind === 'fuel');
+    ok(o && o.dead && R().fuel > 0.9,
+       '★ 擦边碰到油桶也算吃到（旧判定下会漏吃 → 表现为"吃到了桶却不消失"）',
+       o ? ('dead=' + o.dead + ' fuel=' + R().fuel.toFixed(2)) : '桶不见了');
+  }
+
   reset(71); noSpawn(false); setP({ invuln: 99999 });
   let pickupKinds = new Set(), fuelSeen = 0, orders = {};
   for (let i = 0; i < 3600; i++) {
@@ -686,11 +702,60 @@ section('14) ★ 可辨识性：唯一能被吃的东西必须"视觉上跳出�
   setP({ x: R().ROAD_L + R().LANE_W * 1.5, invuln: 0 });
   const px = R().player.x, py = R().player.y;
   putObj({ kind: 'fuel', lane: 1, x: px, y: py + 110, v: 100, vWant: 100, pickup: true,
-           w: Math.round(R().CAR_W * 1.2), h: Math.round(R().CAR_H * 1.62),
+           w: Math.round(R().CAR_W * 0.95), h: Math.round(R().CAR_H * 1.05),
            signal: 0, signalSide: 0, drift: 0, targetX: px });
   let eaten = false;
   for (let i = 0; i < 200 && !eaten; i++) { step(DT); eaten = R().objs.some(o => o.kind === 'fuel' && o.dead); }
   ok(eaten && R().fuel > 0.9 && R().hp === 3, '★ 吃到加油车：油回满且不掉命（符合"能吃的"定位）');
+}
+
+/* ================= 15) ★ 刷新空间：竖向要留出机动余量 ================= */
+section('15) ★ 排间距：按最高速留足换道时间');
+{
+  reset(81);
+  noSpawn(false);
+  setP({ invuln: 99999 });
+  const seen = new Set(), rows = [];
+  let prevIds = new Set();
+  for (let i = 0; i < 7200; i++) {                 // 120 秒
+    step(DT);
+    const s = R();
+    for (const o of s.objs) {
+      if (prevIds.has(o.id) || seen.has(o.id)) continue;
+      seen.add(o.id);
+      if (o.y > 1200) rows.push({ y: o.y, kind: o.kind, lane: o.lane, id: o.id });   // 跳过开局教学排
+    }
+    prevIds = new Set(s.objs.map(o => o.id));
+  }
+  // ① 排间距：只看**敌车/障碍**的排（加油桶是拾取物，刷在相邻车道不算堵路）
+  const traffic = rows.filter(r => r.kind !== 'fuel');
+  const ys = [...new Set(traffic.map(r => Math.round(r.y)))].sort((a, b) => a - b);
+  let minGap = Infinity;
+  for (let i = 1; i < ys.length; i++) minGap = Math.min(minGap, ys[i] - ys[i - 1]);
+  const vMax = R().V_MAX;
+  ok(ys.length > 15, '观测到足够多的敌车排（' + ys.length + ' 排）');
+  ok(minGap >= 350, '★ 相邻敌车排竖向间距 ≥ 350 逻辑单位（实测最小 ' + minGap + '）', 'minGap=' + minGap);
+  ok(minGap / vMax >= 0.8,
+     '★ 最高速(500km/h)下两排之间也留出 ≥0.8 秒机动时间（实测 ' + (minGap / vMax).toFixed(2) + ' 秒）',
+     (minGap / vMax).toFixed(2) + 's');
+
+  // ② ★ 横向重叠（同车道/擦边）的两台车，竖向必须留出净距 —— 真正的"堵路"判据
+  let sameLaneMin = Infinity, worstPair = null;
+  for (let a = 0; a < rows.length; a++) {
+    for (let b = a + 1; b < rows.length; b++) {
+      if (rows[a].lane !== rows[b].lane) continue;              // 横向不重叠 → 不挡路
+      const gap = Math.abs(rows[a].y - rows[b].y);
+      if (gap < sameLaneMin) { sameLaneMin = gap; worstPair = [rows[a], rows[b]]; }
+    }
+  }
+  ok(sameLaneMin >= 200,
+     '★ 同车道两车竖向净距 ≥ 200 逻辑单位（实测最小 ' + Math.round(sameLaneMin) + '）→ 不会叠成一堵墙',
+     'min=' + Math.round(sameLaneMin) + ' ' + JSON.stringify(worstPair));
+
+  // ③ 每排占道数
+  let worst = 0;
+  for (const y of ys) worst = Math.max(worst, new Set(traffic.filter(r => Math.round(r.y) === y).map(r => r.lane)).size);
+  ok(worst <= R().LANES - 2, '★ 每排最多占 ' + worst + ' 条道（4 车道至少留 2 条空）', 'worst=' + worst);
 }
 
 /* ================= 汇总 ================= */
