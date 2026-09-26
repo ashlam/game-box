@@ -136,8 +136,9 @@
   let TOUCH_TOP = 340;                 // ★ 触控区上边界（在玩家车下方）
   let TOUCH_BOTTOM = 508;              // ★ 触控区下边界（在底部橙边之上，不被铭牌吃掉）
   let TOUCH_MID = 415;                 // ★ 档位分界：上面高速、下面常规
-  const ZONE_RATIO = 0.30;             // 触控区占屏高比例
-  const ZONE_SPLIT = 0.45;             // 上 45% 高速档，下 55% 常规档（拇指自然位在常规）
+  // ★ 两段高度直接给常数（按用户要求调整：高速 76→38 减半；常规 92→31 减三分之二）
+  //   想再调手感改这两个数即可
+  let ZONE_HI = 38, ZONE_LO = 31;
   const LANES = 4;
   const laneX = i => ROAD_L + LANE_W * (i + 0.5);
   function refit(){
@@ -152,12 +153,11 @@
     HUD_H = Math.max(54, Math.round(H * 0.115));
     BOTTOM_BAND = Math.max(40, Math.round(H * 0.082));
     BAND_W = Math.max(26, Math.min(60, ROAD_L - 8));
-    // ★ 触控区：整体落在底部橙边之上，保证常规档也有足够大的区域（原来被橙边吃掉只剩一条缝）
-    const zoneH = Math.round(H * ZONE_RATIO);
-    TOUCH_BOTTOM = H - BOTTOM_BAND - 6;                                  // 贴着橙边上沿
-    TOUCH_TOP = TOUCH_BOTTOM - zoneH;
-    TOUCH_MID = TOUCH_TOP + Math.round(zoneH * ZONE_SPLIT);              // 高速上 45% / 常规下 55%
-    PY = TOUCH_TOP - CAR_H / 2 - 14;                                     // 车始终在触控区上方
+    // ★ 触控区：整体落在底部橙边之上（不会被机身/铭牌吃掉）
+    TOUCH_BOTTOM = H - BOTTOM_BAND - 6;                     // 贴着橙边上沿
+    TOUCH_TOP = TOUCH_BOTTOM - ZONE_HI - ZONE_LO;
+    TOUCH_MID = TOUCH_TOP + ZONE_HI;                        // 上半高速 / 下半常规
+    PY = TOUCH_TOP - CAR_H / 2 - 14;                        // 车始终在触控区上方
   }
   const V_BASE = 180, V_MAX = 320, KMH = 1.25;   // 320×1.25 = 400 km/h（对齐资料里的 400）
   const ACC = 300, DEC = 560;                    // 提速/回落速率（两档手感）
@@ -1222,7 +1222,8 @@
       '横向x=' + (player ? player.x.toFixed(0) : '—') + '（路面 ' + ROAD_L + '~' + ROAD_R + '，车道宽 ' + LANE_W.toFixed(0) + '）',
       '距离=' + Math.floor(distance) + '米 本段进度=' + (player ? ((player.y - stageStartY) / STAGE_LEN * 100).toFixed(0) : '0') + '%',
       '油=' + Math.round(fuel * 100) + '%  时间=' + timeLeft.toFixed(1) + 's  超越=' + passed + '  场上对象=' + (objs ? objs.length : 0),
-      '触控区=' + TOUCH_TOP + '..' + TOUCH_BOTTOM + '（分界 ' + TOUCH_MID + ' 上高速/下常规） 车屏y=' + Math.round(PY),
+      '触控区=' + TOUCH_TOP + '..' + TOUCH_BOTTOM + '（高速 ' + ZONE_HI + ' / 常规 ' + ZONE_LO +
+        '，分界 ' + TOUCH_MID + '） 车屏y=' + Math.round(PY),
       '场上车型=' + (objs ? (['truck','sedan','sports','weaver','fuel','cone','barrel']
         .map(k => { const n = objs.filter(o => !o.dead && o.kind === k).length; return n ? (ENEMY[k] ? ENEMY[k].name : k) + n : null; })
         .filter(Boolean).join(' ') || '—') : '—'),
@@ -1281,7 +1282,7 @@
   window.__racer = () => ({
     state, reason, hp, stage, distance, passed, fuel, timeLeft,
     player: { x: player.x, y: player.y, v: player.v, invuln: player.invuln },
-    PY, W, H, HUD_H, HFIX, BOTTOM_BAND, TOUCH_TOP, TOUCH_BOTTOM, TOUCH_MID, FOLLOW, MIN_GAP,
+    PY, W, H, HUD_H, HFIX, BOTTOM_BAND, TOUCH_TOP, TOUCH_BOTTOM, TOUCH_MID, ZONE_HI, ZONE_LO, FOLLOW, MIN_GAP,
     ROAD_L, ROAD_R, LANES, LANE_W,
     V_BASE, V_MAX, KMH, STAGE_LEN, TIME_START, TIME_BONUS, HP_START, FUEL_RATE,
     CAR_W, CAR_H,

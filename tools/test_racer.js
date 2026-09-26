@@ -368,10 +368,11 @@ section('10) ★ 滑屏触控：底部专用触控区 / 左右滑动带车 / 上
   ok(s.TOUCH_TOP < s.H && s.TOUCH_TOP > s.HUD_H, '触控区落在屏幕内（' + s.TOUCH_TOP + '..' + Math.round(s.H) + '）');
 
   const mid = s.TOUCH_MID, yHi = mid - 14, yLo = mid + 14;
-  const zoneH = s.TOUCH_BOTTOM - s.TOUCH_TOP, slowH = s.H - s.TOUCH_MID;
-  ok(zoneH >= s.H * 0.25, '★ 触控区整体够大（' + zoneH + ' ≥ ' + Math.round(s.H * 0.25) + '）');
-  ok(slowH >= s.H * 0.15, '★ 常规档区域够大（' + slowH + ' ≥ ' + Math.round(s.H * 0.15) + '）—— 原来被底部橙边吃掉只剩一条缝',
-     '常规区 ' + slowH);
+  const zoneH = s.TOUCH_BOTTOM - s.TOUCH_TOP, slowH = s.TOUCH_BOTTOM - s.TOUCH_MID, hiH = s.TOUCH_MID - s.TOUCH_TOP;
+  ok(zoneH === s.ZONE_HI + s.ZONE_LO && hiH === s.ZONE_HI && slowH === s.ZONE_LO,
+     '★ 触控区两段高度严格等于设定值（高速 ' + hiH + ' / 常规 ' + slowH + '，总 ' + zoneH + '）',
+     'hi=' + hiH + ' lo=' + slowH + ' zone=' + zoneH);
+  ok(hiH >= 24 && slowH >= 24, '★ 两段都还够手指按（高速 ≥24、常规 ≥24；当前 ' + hiH + '/' + slowH + '）');
   ok(s.TOUCH_BOTTOM <= s.H - s.BOTTOM_BAND + 1,
      '★ 触控区整体在底部橙边之上（下边界 ' + s.TOUCH_BOTTOM + ' ≤ ' + (s.H - s.BOTTOM_BAND) + '）—— 这才是"一条缝"的根因');
   ok(s.TOUCH_TOP > s.PY + s.CAR_H / 2, '触控区仍在玩家车下方');
