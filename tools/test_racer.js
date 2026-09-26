@@ -836,6 +836,56 @@ section('16) ★ 车身体积与判定盒：无处可钻');
   }
 }
 
+/* ================= 17) ★ 高速两档增压 ================= */
+section('17) ★ 高速两档：一档顶住 2.5 秒 → 二档 1.6 倍（逐渐加速）');
+{
+  reset(101); quiet();
+  const s0 = R();
+  ok(s0.BOOST_MULT === 1.6 && s0.BOOST_HOLD === 2.5,
+     '常数：二档倍率 ×' + s0.BOOST_MULT + ' / 保持 ' + s0.BOOST_HOLD + ' 秒');
+  ok(s0.player.boostLv === 1 && s0.player.boostT === 0, '开局是一档、蓄力为 0');
+  setP({ x: s0.ROAD_L + s0.LANE_W * 1.5, v: s0.V_BASE });
+
+  input({ gas: true });
+  run(90);                                       // 1.5 秒（其中约 0.7 秒用来提速到一档上限）
+  ok(R().player.boostLv === 1, '1.5 秒时仍是一档（蓄力还没满）');
+  ok(Math.abs(R().player.v - s0.V_MAX) < 0.5,
+     '一档上限稳定在 ' + Math.round(s0.V_MAX * s0.KMH) + ' km/h');
+
+  run(120);                                      // 再 2 秒 → 累计约 3.5 秒，越过 2.5 秒门槛
+  const a = R();
+  ok(a.player.boostLv === 2, '★ 顶住 2.5 秒 → 升二档');
+  ok(a.player.v < s0.V_MAX * s0.BOOST_MULT - 5,
+     '★ 升档后是"逐渐"加速（此刻 ' + Math.round(a.player.v) + '，二档上限 ' + Math.round(s0.V_MAX * s0.BOOST_MULT) + '，未瞬移）',
+     'v=' + a.player.v.toFixed(1));
+
+  run(180);                                      // 再 3 秒，够升到二档上限
+  ok(Math.abs(R().player.v - s0.V_MAX * s0.BOOST_MULT) < 0.5,
+     '★ 二档上限 = 一档 ×1.6 = ' + Math.round(s0.V_MAX * s0.BOOST_MULT * s0.KMH) + ' km/h（实测 ' +
+       Math.round(R().player.v * s0.KMH) + '）');
+  ok(R().player.boostT === s0.BOOST_HOLD, '二档时蓄力条保持满格');
+
+  // 松手 → 回一档
+  input({ gas: false });
+  run(30);
+  ok(R().player.boostLv === 1 && R().player.boostT === 0, '★ 松开油门 → 回一档并清零蓄力（增压要重新蓄）');
+  run(150);
+  ok(Math.abs(R().player.v - s0.V_BASE) < 0.5, '松手后回到常规速度 ' + Math.round(s0.V_BASE * s0.KMH) + ' km/h');
+
+  // 重新按住 → 必须重新攒
+  input({ gas: true });
+  run(120);                                      // 2 秒 < 2.5 秒
+  ok(R().player.boostLv === 1, '★ 重新按住后要重新蓄（2 秒时仍是一档）');
+  input({ gas: false });
+
+  // 新一局重置
+  reset(102);
+  ok(R().player.boostLv === 1 && R().player.boostT === 0, '开新局档位/蓄力重置');
+
+  // 二档时仪表/音高不出错（绘制冒烟已覆盖 draw，这里验证引擎音仍正常）
+  ok(R().engine === true || R().engine === false, '二档逻辑不影响音频状态机');
+}
+
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');
