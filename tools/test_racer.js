@@ -808,6 +808,19 @@ section('16) ★ 车身体积与判定盒：无处可钻');
        'hp=' + R().hp);
   }
 
+  // ③b ★ 路障尺寸与敌车大致一致（原来只有车的一半，用户反馈不成比例）
+  {
+    const s = R();
+    reset(94); noSpawn(true); clearObjs();
+    const s2 = R();
+    putObj({ kind: 'cone', lane: 1, x: s2.ROAD_L + s2.LANE_W * 1.5, y: s2.player.y + 200,
+             v: 0, w: Math.round(s2.CAR_W * 0.88), h: Math.round(s2.CAR_H * 0.80) });
+    run(2);
+    const cone = R().objs.find(o => o.kind === 'cone');
+    ok(cone && cone.w >= s2.CAR_W * 0.7 && cone.h >= s2.CAR_H * 0.6,
+       '★ 路障与敌车尺寸大致一致（锥桶 ' + cone.w + '×' + cone.h + ' vs 车 ' + s2.CAR_W + '×' + s2.CAR_H + '）');
+  }
+
   // ④ 油桶仍保持"擦到就算吃到"（拾取物故意宽容，与敌车相反）
   reset(93); noSpawn(true); clearObjs();
   {

@@ -143,14 +143,14 @@
   const laneX = i => ROAD_L + LANE_W * (i + 0.5);
   function refit(){
     H = HFIX;
-    // 车道宽夹在 56~96：手机竖屏时它天然就在此区间（不改变真机手感），
-    // 宽屏/桌面时不让车道和车身被等比放大成"箱子"（截图里确实变成了大蓝箱）
-    const laneWant = (W - Math.round(W * 0.115) * 2) / LANES;
-    LANE_W = clamp(laneWant, 56, 96);
-    const roadW = LANE_W * LANES;
-    ROAD_L = (W - roadW) / 2; ROAD_R = ROAD_L + roadW;
-    // ★ 车身占车道 72%：相邻两车道之间的缝只剩 LANE_W−CAR_W（约 18）< 车身宽 → 无法贴着分界线穿过
-    CAR_W = Math.round(LANE_W * 0.72); CAR_H = Math.round(CAR_W * 1.66);
+    // ★ 赛道变窄（用户要求：还原小车身比例，靠"窄赛道"而不是"大车身"来堵住钻缝）
+    //   路宽取屏宽 62% 且不超过 212 逻辑单位 → 手机竖屏车道约 53（原来 66）
+    const roadWant = Math.min(W * 0.62, 212);
+    LANE_W = roadWant / LANES;
+    ROAD_L = (W - roadWant) / 2; ROAD_R = ROAD_L + roadWant;
+    // 车身回到小比例（占道 56%，绝对尺寸和放大前基本一致），
+    // 但车道窄了 → 相邻车道缝 = 53−30 = 23 < 车宽 30 → 依旧钻不过去
+    CAR_W = Math.round(LANE_W * 0.56); CAR_H = Math.round(CAR_W * 1.72);
     HUD_H = Math.max(54, Math.round(H * 0.115));
     BOTTOM_BAND = Math.max(40, Math.round(H * 0.082));
     BAND_W = Math.max(26, Math.min(60, ROAD_L - 8));
@@ -292,7 +292,9 @@
       if(occupied(laneX(lane), y, CAR_W)) continue;
       if(rng() < 0.18 + 0.18 * diff){                  // 施工障碍（固定：静止、绝不变道）
         objs.push({ id: nextObjId++, kind: rng() < 0.5 ? 'cone' : 'barrel', lane, x: laneX(lane), y,
-                    v: 0, w: Math.max(14, Math.round(CAR_W * 0.74)), h: Math.max(20, Math.round(CAR_H * 0.52)),
+                    v: 0,
+                    // ★ 路障尺寸与敌车大致一致（原来只有车的一半，看着不成比例）
+                    w: Math.round(CAR_W * 0.88), h: Math.round(CAR_H * 0.80),
                     dead: false, changeT: 0, signal: 0, signalSide: 0, drift: 0, targetX: laneX(lane) });
       }else{
         const ty = easy ? 'truck' : pickType(diff);    // 开局只放最慢的卡车，教学用
@@ -309,9 +311,9 @@
   }
   function spawnFuel(y){
     const lane = (rng() * LANES) | 0;
-    if(occupied(laneX(lane), y, CAR_W * 0.62)) return;    // ★ 生成安全（原来漏了，会把加油车刷在别人车上造成穿透）
+    if(occupied(laneX(lane), y, CAR_W * 0.80)) return;    // ★ 生成安全（原来漏了，会把加油车刷在别人车上造成穿透）
     objs.push({ id: nextObjId++, kind: 'fuel', lane, x: laneX(lane), y, v: FUEL_V, vWant: FUEL_V,   // ★ 固定速度
-                w: Math.round(CAR_W * 0.62), h: Math.round(CAR_H * 0.80),   // 油桶尺寸（明显比车小）
+                w: Math.round(CAR_W * 0.80), h: Math.round(CAR_H * 0.66),   // 油桶尺寸（比车短、更敦实）
                 dead: false, changeT: 0, signal: 0, signalSide: 0, drift: 0, targetX: laneX(lane) });
   }
   /* ============================================================
@@ -892,23 +894,31 @@
       const sy = toScreenY(o.y);
       if(sy < HUD_H - 80 || sy > H + 80) continue;
       if(o.kind === 'cone'){
-        ctx.fillStyle = 'rgba(0,0,0,.18)';
-        ctx.beginPath(); ctx.ellipse(o.x, sy + 12, 12, 4, 0, 0, 7); ctx.fill();
-        ctx.fillStyle = PALETTE.cone;
-        ctx.beginPath(); ctx.moveTo(o.x, sy - 14); ctx.lineTo(o.x + 11, sy + 11); ctx.lineTo(o.x - 11, sy + 11); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(o.x - 7, sy + 1, 14, 4);
+        const cw = o.w, ch = o.h;
+        ctx.fillStyle = 'rgba(0,0,0,.20)';
+        ctx.beginPath(); ctx.ellipse(o.x, sy + ch * 0.44, cw * 0.60, ch * 0.10, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = PALETTE.cone;                       // 锥体
+        ctx.beginPath();
+        ctx.moveTo(o.x, sy - ch * 0.50);
+        ctx.lineTo(o.x + cw * 0.42, sy + ch * 0.30);
+        ctx.lineTo(o.x - cw * 0.42, sy + ch * 0.30);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff';                             // 白色反光带
+        ctx.fillRect(o.x - cw * 0.26, sy - ch * 0.02, cw * 0.52, ch * 0.16);
+        ctx.fillStyle = '#c25f14';                          // 底座
+        roundRect(o.x - cw * 0.58, sy + ch * 0.28, cw * 1.16, ch * 0.16, 3); ctx.fill();
       }else if(o.kind === 'barrel'){
-        ctx.fillStyle = 'rgba(0,0,0,.18)';
-        ctx.beginPath(); ctx.ellipse(o.x, sy + 13, 12, 4, 0, 0, 7); ctx.fill();
-        ctx.fillStyle = PALETTE.barrel;
-        roundRect(o.x - 10, sy - 13, 20, 26, 4); ctx.fill();
-        ctx.fillStyle = PALETTE.cone;
-        ctx.fillRect(o.x - 10, sy - 6, 20, 5);
-        ctx.fillRect(o.x - 10, sy + 3, 20, 5);
-        ctx.strokeStyle = 'rgba(30,36,44,.45)'; ctx.lineWidth = 1;
-        roundRect(o.x - 10, sy - 13, 20, 26, 4); ctx.stroke();
-      }else if(o.kind === 'fuel'){
+        const bw = o.w, bh = o.h;
+        ctx.fillStyle = 'rgba(0,0,0,.20)';
+        ctx.beginPath(); ctx.ellipse(o.x, sy + bh * 0.46, bw * 0.56, bh * 0.09, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = PALETTE.barrel;                     // 桶身
+        roundRect(o.x - bw * 0.42, sy - bh * 0.46, bw * 0.84, bh * 0.92, bw * 0.16); ctx.fill();
+        ctx.strokeStyle = 'rgba(30,36,44,.45)'; ctx.lineWidth = 1.2;
+        roundRect(o.x - bw * 0.42, sy - bh * 0.46, bw * 0.84, bh * 0.92, bw * 0.16); ctx.stroke();
+        ctx.fillStyle = PALETTE.cone;                       // 两道橙带
+        ctx.fillRect(o.x - bw * 0.42, sy - bh * 0.18, bw * 0.84, bh * 0.14);
+        ctx.fillRect(o.x - bw * 0.42, sy + bh * 0.04, bw * 0.84, bh * 0.14);
+            }else if(o.kind === 'fuel'){
         drawFuelCan(o.x, sy, o.w, o.h);
       }else if(o.kind === 'weaver'){
         const E2 = ENEMY.weaver;
@@ -1256,7 +1266,8 @@
       '油=' + Math.round(fuel * 100) + '%  时间=' + timeLeft.toFixed(1) + 's  超越=' + passed + '  场上对象=' + (objs ? objs.length : 0),
       '触控区=' + TOUCH_TOP + '..' + TOUCH_BOTTOM + '（高速 ' + ZONE_HI + ' / 常规 ' + ZONE_LO +
         '，分界 ' + TOUCH_MID + '） 车屏y=' + Math.round(PY),
-      '车道宽=' + LANE_W.toFixed(1) + ' 车身=' + CAR_W + '×' + CAR_H +
+      '路面=' + Math.round(ROAD_L) + '..' + Math.round(ROAD_R) + '（宽 ' + Math.round(ROAD_R - ROAD_L) + '，占屏 ' +
+        ((ROAD_R - ROAD_L) / W * 100).toFixed(0) + '%） 车道=' + LANE_W.toFixed(1) + ' 车身=' + CAR_W + '×' + CAR_H +
         '（占道 ' + (CAR_W / LANE_W * 100).toFixed(0) + '%，相邻车道缝 ' + (LANE_W - CAR_W).toFixed(0) + ' < 车宽 → 穿不过去）',
       '场上车型=' + (objs ? (['truck','sedan','sports','weaver','fuel','cone','barrel']
         .map(k => { const n = objs.filter(o => !o.dead && o.kind === k).length; return n ? (ENEMY[k] ? ENEMY[k].name : k) + n : null; })
