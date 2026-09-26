@@ -84,7 +84,7 @@
   <div class="big" id="overScore">0</div>
   <div class="unit">最远距离（米）</div>
   <p id="overText"></p>
-  <div class="rule">玩法：自动前进 · 左右躲车躲障碍<br>底部区域按住左右滑动转向（手指不挡车）<br>手指在区域内上半 = 高速 500 km/h<br>★ 只有绿色「油」桶能吃（回满油）<br>其余全是敌人 · 到终点加时进下一段</div>
+  <div class="rule">玩法：自动前进 · 左右躲车躲障碍<br>底部区域按住左右滑动转向（手指不挡车）<br>手指在上半 = 高速 500 km/h<br>★ 在高速上一档顶住 2.5 秒 → 升二档 800 km/h<br>★ 只有绿色「油」桶能吃（回满油）<br>其余全是敌人 · 到终点加时进下一段</div>
   <button class="pri" id="overRetry">再来一次</button>
 </div></div>
 
@@ -160,7 +160,9 @@
     TOUCH_MID = TOUCH_TOP + ZONE_HI;                        // 上半高速 / 下半常规
     PY = TOUCH_TOP - CAR_H / 2 - 14;                        // 车始终在触控区上方
   }
-  const V_BASE = 180, V_MAX = 400, KMH = 1.25;   // ★ 高速档提速：400×1.25 = 500 km/h（用户要求）
+  const V_BASE = 180, V_MAX = 400, KMH = 1.25;   // 一档上限 400×1.25 = 500 km/h
+  const BOOST_MULT = 1.6;                        // ★ 二档：上限 = 一档上限 ×1.6 → 640 逻辑 = 800 km/h
+  const BOOST_HOLD = 2.5;                        // ★ 在一档上限保持多久才升二档（秒）
   const ACC = 300, DEC = 560;                    // 提速/回落速率（两档手感）
   const STEER = 196;                             // 键盘横向速度
   const FOLLOW = 620;                            // ★ 滑屏跟手的最大横向速度（66 宽车道约 0.11s 到位）
@@ -251,7 +253,7 @@
   function reset(seed){
     fieldSeed = (seed === undefined) ? ((Math.random() * 1e9) | 0) : seed;
     seedRng = mulberry32(fieldSeed);
-    player = { x: laneX(1), v: V_BASE, y: 0, invuln: 0, crashT: 0 };
+    player = { x: laneX(1), v: V_BASE, y: 0, invuln: 0, crashT: 0, boostLv: 1, boostT: 0 };
     objs = [];
     input = { left: false, right: false, gas: false, touchGas: false, touching: false, targetX: null };
     active.clear();
@@ -443,6 +445,8 @@
   function sndOver(){ [64, 60, 55].forEach((f, i) => tone(f, 0.3, { type:'triangle', gain:0.1, at: i * 0.16 })); }
   function sndRecord(){ [72, 76, 79, 84].forEach((f, i) => tone(f, 0.22, { type:'sine', gain:0.11, at: i * 0.1 })); }
   function sndWarn(){ tone(880, 0.09, { type:'square', gain:0.07 }); }
+  function sndBoost(){ tone(320, 0.5, { type:'sawtooth', to: 1100, gain:0.13 });
+                       noiseBurst(0.35, { type:'highpass', freq: 600, gain: 0.07, decay: 1.6 }); }
   function sndSkid(){ noiseBurst(0.18, { type:'bandpass', freq:900, to:200, gain:0.06, decay:2.5 }); }
 
   /* ============================================================
@@ -531,12 +535,31 @@
     /* ---- 速度（两档 + 脱路 + 油尽） ---- */
     const offRoad = player.x < ROAD_L || player.x > ROAD_R;
     const gasOn = input.gas || (input.touching && input.touchGas);   // 键盘油门 / 触控区上半
-    let tv = gasOn ? V_MAX : V_BASE;
+
+    /* ★ 高速两档：
+     *   一档：上限 V_MAX（500 km/h）。按住油门并稳定在一档上限上保持 BOOST_HOLD 秒
+     *        → 升二档：上限提到 1.6 倍（800 km/h），且靠正常加速度"逐渐"升上去（不是瞬移）。
+     *   松手（或不踩油门）立即回到一档并清零保持时间 —— 增压得重新蓄。 */
+    if(gasOn){
+      if(player.boostLv === 1 && player.v >= V_MAX * 0.985){
+        player.boostT += dt;
+        if(player.boostT >= BOOST_HOLD){
+          player.boostLv = 2; player.boostT = BOOST_HOLD;
+          glowT = 1; sndBoost();
+          floats.push({ x: W / 2, y: PY - 56, t: 0, txt: '二档增压！800 km/h', color: '#ffd166' });
+          addBurst(player.x, player.y - 30, 16, '#ffd166');
+        }
+      }
+    }else{
+      player.boostLv = 1; player.boostT = 0;
+    }
+    const vCap = player.boostLv === 2 ? V_MAX * BOOST_MULT : V_MAX;
+    let tv = gasOn ? vCap : V_BASE;
     if(offRoad) tv = Math.min(tv, V_BASE * 0.6);
     if(fuel <= 0) tv = Math.min(tv, 46);
     const prevV = player.v;
     player.v += clamp(tv - player.v, -DEC * dt, ACC * dt);
-    const ratio = clamp(player.v / V_MAX, 0, 1);
+    const ratio = clamp(player.v / (V_MAX * BOOST_MULT), 0, 1);   // ★ 按绝对速度，二档还有上升空间
     engineUpdate(ratio);
     // 脱路/急减速 → 打滑音 + 尘土
     if(offRoad && player.v > 90 && rng() < dt * 6){ sndSkid(); skid = 0.25; }
@@ -944,8 +967,8 @@
   }
 
   function drawSpeedLines(){
-    const ratio = clamp(player.v / V_MAX, 0, 1);
-    if(ratio < 0.72) return;
+    const ratio = clamp(player.v / (V_MAX * BOOST_MULT), 0, 1);   // ★ 按绝对速度（二档更密）
+    if(ratio < 0.5) return;
     const n = Math.round((ratio - 0.72) / 0.28 * 14);
     ctx.strokeStyle = 'rgba(255,255,255,.5)';
     ctx.lineWidth = 1.6;
@@ -1026,13 +1049,28 @@
     ctx.fillStyle = '#7fc4ff';
     roundRect(px, py + 13, Math.max(2, pw * prog), ph, 4); ctx.fill();
 
-    // 右：速度
+    // 右：速度 + ★ 档位 + 蓄力条
     ctx.textAlign = 'right';
-    ctx.fillStyle = glowT > 0 ? '#ffe066' : '#ffffff';
+    ctx.fillStyle = (player.boostLv === 2 || glowT > 0) ? '#ffd166' : '#ffffff';
     ctx.font = '800 24px ' + FONT;
     ctx.fillText(String(Math.round(player.v * KMH)), W - 12, 32);
     ctx.fillStyle = '#93a4bd'; ctx.font = '600 9.5px ' + FONT;
     ctx.fillText('km/h', W - 12, 46);
+    // 档位字
+    ctx.fillStyle = player.boostLv === 2 ? '#ffd166' : '#8ea3bd';
+    ctx.font = '800 10px ' + FONT;
+    ctx.fillText(player.boostLv === 2 ? '二档' : '一档', W - 66, 30);
+    // 升档蓄力条（一档时攒进度；二档时满格金色）
+    const pbx = W - 60, pby = 36, pbw = 48, pbh = 5;
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    roundRect(pbx, pby, pbw, pbh, 2.5); ctx.fill();
+    const pr = player.boostLv === 2 ? 1 : clamp(player.boostT / BOOST_HOLD, 0, 1);
+    ctx.fillStyle = player.boostLv === 2 ? '#ffd166' : '#7fc4ff';
+    if(pr > 0){ roundRect(pbx, pby, Math.max(2, pbw * pr), pbh, 2.5); ctx.fill(); }
+    if(player.boostLv === 1 && pr > 0.02){
+      ctx.fillStyle = '#cfd8e6'; ctx.font = '600 8.5px ' + FONT;
+      ctx.fillText('保持中', W - 64, pby + 15);
+    }
 
     // 命（小车身图标）
     for(let i = 0; i < hp; i++){
@@ -1147,7 +1185,7 @@
     ctx.fillText('火箭车', W / 2, cy - 38);
     ctx.fillStyle = '#2b3a4a'; ctx.font = '700 12px ' + FONT;
     ctx.fillText('底部区域按住，左右滑动转向', W / 2, cy - 12);
-    ctx.fillText('手指在上半 = 高速 400', W / 2, cy + 6);
+    ctx.fillText('上半 = 高速 500 · 顶住 2.5 秒升二档 800', W / 2, cy + 6);
     // 车型图例（★ 让玩家"看懂再玩"）
     ctx.strokeStyle = 'rgba(242,130,32,.35)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(W / 2 - hw + 16, cy + 18); ctx.lineTo(W / 2 + hw - 16, cy + 18); ctx.stroke();
@@ -1256,7 +1294,8 @@
       '页面总高=' + document.documentElement.scrollHeight + '/' + window.innerHeight,
       '状态=' + state + ' 原因=' + (reason || '—') + ' 段=' + stage + ' 命=' + hp,
       '速度=' + Math.round(player ? player.v : 0) + '（' + Math.round((player ? player.v : 0) * KMH) + 'km/h） 车速比=' +
-        (player ? (player.v / V_MAX).toFixed(2) : '—') + ' 档位=' +
+        (player ? (player.v / V_MAX).toFixed(2) : '—') + ' 增压档=' +
+        (player ? player.boostLv + '档(蓄力 ' + player.boostT.toFixed(1) + '/' + BOOST_HOLD + 's)' : '—') + ' 档位=' +
         ((input.gas || (input.touching && input.touchGas)) ? '高速' : '常规') + (input.gas ? '(键盘)' : ''),
       '触控区=' + TOUCH_TOP + '..' + Math.round(H) + '（车底缘 ' + Math.round(PY + CAR_H / 2) + '，★ 在车下方）' +
         ' 触控中=' + (input.touching ? '是' : '否') + ' 触点数=' + active.size +
@@ -1326,10 +1365,10 @@
   //   每帧 ReferenceError，而 Node 测试不跑 draw() 所以漏了 —— 现已加绘制冒烟测试）
   window.__racer = () => ({
     state, reason, hp, stage, distance, passed, fuel, timeLeft,
-    player: { x: player.x, y: player.y, v: player.v, invuln: player.invuln },
+    player: { x: player.x, y: player.y, v: player.v, invuln: player.invuln, boostLv: player.boostLv, boostT: player.boostT },
     PY, W, H, HUD_H, HFIX, BOTTOM_BAND, TOUCH_TOP, TOUCH_BOTTOM, TOUCH_MID, ZONE_HI, ZONE_LO, FOLLOW, MIN_GAP,
     ROAD_L, ROAD_R, LANES, LANE_W,
-    V_BASE, V_MAX, KMH, STAGE_LEN, TIME_START, TIME_BONUS, HP_START, FUEL_RATE,
+    V_BASE, V_MAX, KMH, BOOST_MULT, BOOST_HOLD, STAGE_LEN, TIME_START, TIME_BONUS, HP_START, FUEL_RATE,
     CAR_W, CAR_H,
     objs: objs.map(o => ({ id:o.id, kind:o.kind, lane:o.lane, x:o.x, y:o.y, v:o.v, w:o.w, h:o.h,
                            dead:o.dead, drift:o.drift, changeT:o.changeT, targetX:o.targetX,

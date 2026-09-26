@@ -394,24 +394,46 @@ section('10) ★ 滑屏触控：底部专用触控区 / 左右滑动带车 / 上
   run(120);
   ok(Math.abs(R().player.v - R().V_BASE) < 0.5, '常规档到位（' + R().player.v.toFixed(0) + '）');
 
-  // ④ 左右滑动带车
-  const x0 = R().player.x;
-  touch('move', s.ROAD_L - 10, yLo, 1);
-  run(60);
-  const xL = R().player.x;
-  ok(xL < x0 - 20, '★ 手指左滑 → 车向左（' + x0.toFixed(0) + ' → ' + xL.toFixed(0) + '）');
-  ok(Math.abs(xL - (s.ROAD_L - 10)) < 3, '车跟到手指的横向位置（目标 ' + (s.ROAD_L - 10).toFixed(0) + '）');
-  touch('move', s.ROAD_R + 10, yLo, 1);
-  run(60);
-  const xR = R().player.x;
-  ok(xR > xL + 20, '★ 手指右滑 → 车向右（' + xL.toFixed(0) + ' → ' + xR.toFixed(0) + '）');
-  ok(xR <= s.ROAD_R + 20.5, '仍在横向界内（' + xR.toFixed(0) + ' ≤ ' + (s.ROAD_R + 20) + '）');
+  // ④ ★ 按下不动 → 车不动；只有左右滑动才移动（用户要求，原来是"按哪去哪"）
+  {
+    const xBefore = R().player.x;
+    touch('down', s.W / 2, yLo, 1);
+    run(60);                                     // 按住 1 秒不动
+    ok(Math.abs(R().player.x - xBefore) < 0.6,
+       '★ 按住屏幕不动 → 车完全不动（不再被吸到手指位置）',
+       'x ' + xBefore.toFixed(1) + '→' + R().player.x.toFixed(1));
+    ok(Math.abs(R().input.targetX - xBefore) < 0.6, '按下瞬间目标 x = 当时的车 x（锚点建立）');
+    touch('move', s.W / 2 + 60, yLo, 1);         // 横滑 +60
+    run(60);
+    const xA = R().player.x;
+    ok(Math.abs(xA - (xBefore + 60)) < 3,
+       '★ 手指横滑 +60 → 车右移 60（1:1 相对滑动）',
+       xBefore.toFixed(0) + '→' + xA.toFixed(0));
+    const xB = R().player.x;
+    touch('move', s.W / 2 + 60, yLo + 18, 1);    // 只做竖向移动
+    run(45);
+    ok(Math.abs(R().player.x - xB) < 0.6, '上下滑动不改变车的横向位置（只切换档位）');
+    ok(R().input.gasOn === false, '手指在下半 → 常规档');
+    touch('move', s.W / 2 - 90, yLo, 1);         // 再左滑
+    run(90);
+    ok(R().player.x < xB - 60, '继续左滑 → 车继续左移（' + xB.toFixed(0) + '→' + R().player.x.toFixed(0) + '）');
+    ok(R().player.x >= s.ROAD_L - 20.5, '仍在横向界内');
+    touch('up', s.W / 2 - 90, yLo, 1);
+  }
 
-  // ⑤ 跟手有速度上限（不是瞬移）
-  touch('move', s.ROAD_L, yLo, 1);
-  run(1);
-  ok(Math.abs(R().player.x - xR) < s.FOLLOW * DT * 1.6,
-     '跟手有最大横向速度（1 帧只走 ' + Math.abs(R().player.x - xR).toFixed(1) + '，不是瞬移）');
+  // ④b ★ 换个位置重新按住，车不能被吸过去（旧实现会直接跳过去）
+  {
+    const xKeep = R().player.x;
+    touch('down', s.ROAD_L + 2, yLo, 5);
+    run(45);
+    ok(Math.abs(R().player.x - xKeep) < 0.6,
+       '★ 按在别处重新按住，车不会被吸过去（锚点机制）',
+       'x ' + xKeep.toFixed(0) + '→' + R().player.x.toFixed(0));
+    touch('move', s.ROAD_L + 2 + 40, yLo, 5);    // 从新锚点滑 +40
+    run(60);
+    ok(Math.abs(R().player.x - (xKeep + 40)) < 3, '新锚点之后仍按增量移动（+40）');
+    touch('up', s.ROAD_L + 42, yLo, 5);
+  }
 
   // ⑥ 松手：回常规档；车停在原地（★ 不擅自加"自动回正"机制）
   touch('up', s.ROAD_L, yLo, 1);
@@ -428,9 +450,11 @@ section('10) ★ 滑屏触控：底部专用触控区 / 左右滑动带车 / 上
   ok(R().input.touching === true, '两指同时按住 → 仍在操控');
   touch('up', s.ROAD_L, yLo, 8);
   ok(R().input.touching === true, '★ 松开后按的那一指，另一指仍然有效（修掉旧代码多指互相覆盖）');
-  touch('move', s.ROAD_L - 5, yLo, 7);
+  const x7 = R().player.x;
+  touch('move', s.ROAD_L + 50, yLo, 7);          // 7 号指从按下点 ROAD_L 滑到 +50
   run(60);
-  ok(R().player.x < s.ROAD_L + 30, '剩下的手指继续带车（' + R().player.x.toFixed(0) + '）');
+  ok(Math.abs(R().player.x - (x7 + 50)) < 3,
+     '剩下的手指继续带车（Δ+50 → ' + x7.toFixed(0) + '→' + R().player.x.toFixed(0) + '）');
   touch('up', s.ROAD_L - 5, yLo, 7);
   ok(R().input.touching === false, '两指都松开 → 退出操控');
 
