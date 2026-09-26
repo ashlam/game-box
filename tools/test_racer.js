@@ -354,6 +354,124 @@ section('9) 三种结束原因都能正常收尾');
   ok(R().fuel === 0 && R().player.v <= 50, '油尽时车速被压到低速（' + R().player.v.toFixed(0) + '）—— 还能挣扎到加油车');
 }
 
+/* ================= 10) ★ 滑屏触控（底部触控区） ================= */
+section('10) ★ 滑屏触控：底部专用触控区 / 左右滑动带车 / 上半高速');
+{
+  const touch = (k, lx, ly, id) => win.__racerTouch(k, lx, ly, id);
+  reset(31);
+  quiet();
+  const s = R();
+  const carBottom = s.PY + s.CAR_H / 2;
+  ok(s.TOUCH_TOP > carBottom,
+     '★ 触控区在玩家车下方（车底缘 ' + carBottom.toFixed(0) + ' < 触控区顶 ' + s.TOUCH_TOP + '）→ 手指不会挡住车',
+     '车底 ' + carBottom.toFixed(0) + ' vs 触控区顶 ' + s.TOUCH_TOP);
+  ok(s.TOUCH_TOP < s.H && s.TOUCH_TOP > s.HUD_H, '触控区落在屏幕内（' + s.TOUCH_TOP + '..' + Math.round(s.H) + '）');
+
+  const mid = (s.TOUCH_TOP + s.H) / 2, yHi = mid - 12, yLo = mid + 12;
+
+  // ① 画面中部（非触控区）的触摸必须被忽略
+  touch('down', s.W / 2, s.TOUCH_TOP - 60, 1);
+  ok(R().input.touching === false, '★ 触控区之外的触摸被忽略（不会误触、也不挡视线）');
+  touch('up', s.W / 2, s.TOUCH_TOP - 60, 1);
+
+  // ② 触控区上半 = 高速档
+  ok(touch('down', s.W / 2, yHi, 1).touching === true, '在触控区按住 → 进入触控操控');
+  ok(touch('move', s.W / 2, yHi, 1).gasOn === true, '★ 手指在触控区上半 → 高速档');
+  run(90);
+  ok(Math.abs(R().player.v - R().V_MAX) < 0.5, '高速档到位（' + R().player.v.toFixed(0) + ' = 400km/h）');
+
+  // ③ 下半 = 常规档
+  ok(touch('move', s.W / 2, yLo, 1).gasOn === false, '★ 手指移到下半 → 回常规档');
+  run(120);
+  ok(Math.abs(R().player.v - R().V_BASE) < 0.5, '常规档到位（' + R().player.v.toFixed(0) + '）');
+
+  // ④ 左右滑动带车
+  const x0 = R().player.x;
+  touch('move', s.ROAD_L - 10, yLo, 1);
+  run(60);
+  const xL = R().player.x;
+  ok(xL < x0 - 20, '★ 手指左滑 → 车向左（' + x0.toFixed(0) + ' → ' + xL.toFixed(0) + '）');
+  ok(Math.abs(xL - (s.ROAD_L - 10)) < 3, '车跟到手指的横向位置（目标 ' + (s.ROAD_L - 10).toFixed(0) + '）');
+  touch('move', s.ROAD_R + 10, yLo, 1);
+  run(60);
+  const xR = R().player.x;
+  ok(xR > xL + 20, '★ 手指右滑 → 车向右（' + xL.toFixed(0) + ' → ' + xR.toFixed(0) + '）');
+  ok(xR <= s.ROAD_R + 20.5, '仍在横向界内（' + xR.toFixed(0) + ' ≤ ' + (s.ROAD_R + 20) + '）');
+
+  // ⑤ 跟手有速度上限（不是瞬移）
+  touch('move', s.ROAD_L, yLo, 1);
+  run(1);
+  ok(Math.abs(R().player.x - xR) < s.FOLLOW * DT * 1.6,
+     '跟手有最大横向速度（1 帧只走 ' + Math.abs(R().player.x - xR).toFixed(1) + '，不是瞬移）');
+
+  // ⑥ 松手：回常规档；车停在原地（★ 不擅自加"自动回正"机制）
+  touch('up', s.ROAD_L, yLo, 1);
+  ok(R().input.touching === false, '松手 → 退出触控操控');
+  ok(R().input.gasOn === false, '松手 → 回常规档');
+  const xKeep = R().player.x;
+  run(120);
+  ok(Math.abs(R().player.x - xKeep) < 1, '松手后车停在原横向位置（不自动回正）');
+  ok(Math.abs(R().player.v - R().V_BASE) < 0.5, '松手后速度回常规档');
+
+  // ⑦ 多指：旧代码两指会互相覆盖，这里必须各自有效
+  touch('down', s.ROAD_L, yLo, 7);
+  touch('down', s.ROAD_R, yLo, 8);
+  ok(R().input.touching === true, '两指同时按住 → 仍在操控');
+  touch('up', s.ROAD_L, yLo, 8);
+  ok(R().input.touching === true, '★ 松开后按的那一指，另一指仍然有效（修掉旧代码多指互相覆盖）');
+  touch('move', s.ROAD_L - 5, yLo, 7);
+  run(60);
+  ok(R().player.x < s.ROAD_L + 30, '剩下的手指继续带车（' + R().player.x.toFixed(0) + '）');
+  touch('up', s.ROAD_L - 5, yLo, 7);
+  ok(R().input.touching === false, '两指都松开 → 退出操控');
+
+  // ⑧ 触控操控与键盘互不干扰（★ 先把车放回路面：上一步停在左路肩=草地，草地限速到不了高速）
+  setP({ x: (s.ROAD_L + s.ROAD_R) / 2 });
+  input({ gas: true });
+  run(90);
+  ok(Math.abs(R().player.v - R().V_MAX) < 0.5 && R().input.touching === false, '键盘油门在触控之外仍然有效（桌面调试用）');
+  input({ gas: false });
+}
+
+/* ================= 11) ★ 绘制冒烟（防"删了 UI 却残留引用"） ================= */
+section('11) ★ 绘制冒烟：各种状态下 draw() 都不能抛错');
+{
+  const drawOk = () => { try { win.__racerDraw(); return null; } catch (e) { return String(e && e.message || e); } };
+  reset(41);
+  quiet();
+  const cases = [];
+  cases.push(['开局(ready/play + 提示卡)', drawOk()]);
+  setP({ x: (R().ROAD_L + R().ROAD_R) / 2 });
+  run(30);
+  cases.push(['行驶中', drawOk()]);
+  win.__racerTouch('down', R().W / 2, (R().TOUCH_TOP + R().H) / 2 - 12, 1);
+  cases.push(['触控中(高速档)', drawOk()]);
+  win.__racerTouch('move', R().W / 2, (R().TOUCH_TOP + R().H) / 2 + 12, 1);
+  cases.push(['触控中(常规档)', drawOk()]);
+  win.__racerTouch('up', R().W / 2, R().H - 10, 1);
+  setP({ timeLeft: 0.2 });
+  run(30);
+  cases.push(['结束(over)', drawOk()]);
+  hintOnForce();
+  run(2);
+  cases.push(['提示卡显示中', drawOk()]);
+  // 三种窗口比例都画一遍（宽矮/竖屏/方屏）
+  const sizes = [[390, 260], [390, 700], [760, 700]];
+  const origW = els.stage.clientWidth, origH = els.stage.clientHeight;
+  for (const [w, h] of sizes) {
+    els.stage.clientWidth = w; els.stage.clientHeight = h;
+    win.__racerLayout ? win.__racerLayout() : null;
+    cases.push(['窗口 ' + w + 'x' + h, drawOk()]);
+  }
+  els.stage.clientWidth = origW; els.stage.clientHeight = origH;
+  const bad = cases.filter(([, e]) => e);
+  ok(bad.length === 0, '★ 各状态 + 各窗口比例下 draw() 均不抛错（' + cases.length + ' 种）',
+     bad.map(([n, e]) => n + ': ' + e).join(' / '));
+}
+function hintOnForce(){
+  // 让提示卡重新显示（reset 后 hintOn=true；上面触控过会关掉）
+  try { win.__racerReset(42); } catch (e) {}
+}
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');
