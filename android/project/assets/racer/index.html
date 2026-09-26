@@ -159,7 +159,7 @@
     TOUCH_MID = TOUCH_TOP + ZONE_HI;                        // 上半高速 / 下半常规
     PY = TOUCH_TOP - CAR_H / 2 - 14;                        // 车始终在触控区上方
   }
-  const V_BASE = 180, V_MAX = 320, KMH = 1.25;   // 320×1.25 = 400 km/h（对齐资料里的 400）
+  const V_BASE = 180, V_MAX = 400, KMH = 1.25;   // ★ 高速档提速：400×1.25 = 500 km/h（用户要求）
   const ACC = 300, DEC = 560;                    // 提速/回落速率（两档手感）
   const STEER = 196;                             // 键盘横向速度
   const FOLLOW = 620;                            // ★ 滑屏跟手的最大横向速度（66 宽车道约 0.11s 到位）
@@ -170,6 +170,7 @@
 
   /* ---------- 调色板（★ 等照片到了改这里） ---------- */
   const PALETTE = {
+    fuel:'#0ee04a', fuelLite:'#8affb0',    // ★ 全场唯一高饱和电光绿（S≈0.88，敌车最高 0.54）= 唯一能吃的东西
     // ★ 照用户那张「RACING CAR」手持赛车玩具照片取色
     frame:      '#f58220',   // 机身：亮橙硬塑料
     frameLite:  '#ffa94d',
@@ -214,11 +215,12 @@
    *   wf/hf：相对标准车身的宽/高倍率
    *   signal：变道前先亮灯的秒数（0 = 绝不变道）—— "可预判"的关键
    * -------------------------------------------------------------------- */
+  // ★ 敌车统一"低饱和交通色"：视觉上退到背景，把唯一高饱和的绿色加油车衬出来
   const ENEMY = {
-    truck:  { name:'卡车',   color:'#e8ecf2', lite:'#ffffff', wf:1.17, hf:1.50, v:88,  signal:0,   label:'最慢 · 不变道 · 货箱大' },
-    sedan:  { name:'轿车',   color:'#9a63d8', lite:'#c9a6f2', wf:1.00, hf:1.00, v:150, signal:0,   label:'中速 · 不变道' },
-    sports: { name:'跑车',   color:'#f2c53d', lite:'#ffe89a', wf:1.00, hf:0.87, v:208, signal:0,   label:'最快 · 低矮 · 会跑掉' },
-    weaver: { name:'变道车', color:'#f2842b', lite:'#ffb066', wf:1.00, hf:1.00, v:132, signal:0.7, label:'★ 先亮琥珀转向灯再变道' },
+    truck:  { name:'卡车',   color:'#b9c2cc', lite:'#d8dee6', wf:1.17, hf:1.50, v:88,  signal:0,   label:'最慢 · 不变道 · 货箱大' },
+    sedan:  { name:'轿车',   color:'#7d6a9c', lite:'#a596c0', wf:1.00, hf:1.00, v:150, signal:0,   label:'中速 · 不变道' },
+    sports: { name:'跑车',   color:'#c2a545', lite:'#ddc777', wf:1.00, hf:0.87, v:208, signal:0,   label:'最快 · 低矮 · 会跑掉' },
+    weaver: { name:'变道车', color:'#c1703a', lite:'#d99a68', wf:1.00, hf:1.00, v:132, signal:0.7, label:'★ 先亮琥珀转向灯再变道' },
   };
   const FUEL_V = 100;                    // 加油车固定速度
   const SIGNAL_T = 0.7;                  // 变道车亮灯时长（秒）
@@ -305,9 +307,9 @@
   }
   function spawnFuel(y){
     const lane = (rng() * LANES) | 0;
-    if(occupied(laneX(lane), y, CAR_W * 1.17)) return;    // ★ 生成安全（原来漏了，会把加油车刷在别人车上造成穿透）
+    if(occupied(laneX(lane), y, CAR_W * 1.20)) return;    // ★ 生成安全（原来漏了，会把加油车刷在别人车上造成穿透）
     objs.push({ id: nextObjId++, kind: 'fuel', lane, x: laneX(lane), y, v: FUEL_V, vWant: FUEL_V,   // ★ 固定速度
-                w: Math.round(CAR_W * 1.17), h: Math.round(CAR_H * 1.46),
+                w: Math.round(CAR_W * 1.20), h: Math.round(CAR_H * 1.62),   // 罐车比例，更长大
                 dead: false, changeT: 0, signal: 0, signalSide: 0, drift: 0, targetX: laneX(lane) });
   }
   /* ============================================================
@@ -348,7 +350,7 @@
     }
     while(!spawnOff && nextFuelY < ahead){
       spawnFuel(nextFuelY);
-      nextFuelY += 2300 + rng() * 900;
+      nextFuelY += 1850 + rng() * 700;
     }
     // 回收身后
     for(let i = objs.length - 1; i >= 0; i--) if(objs[i].y < player.y - 260) objs.splice(i, 1);
@@ -835,6 +837,85 @@
     }
   }
 
+  /** ★ 加油车：长油罐车造型 + 罐体橙白警戒条 + 大油滴 + 呼吸光环 + 头顶「加油」标牌
+   *  目的：一眼就能和敌车区分开（敌车是轿车/卡车/跑车/变道车，没有光环、没有标牌、没有警戒条） */
+  function drawFuelCar(x, y, w, h){
+    const pulse = 0.5 + 0.5 * Math.sin(tGlobal * 5);
+    // ★ 竖直光柱 —— 全场唯一有光柱的物体，一眼就是"能吃的"
+    const beamH = Math.min(h * 3.0, 150), bwTop = w * 0.34, bwBot = w * 0.72;
+    const bg = ctx.createLinearGradient(0, y - beamH, 0, y + h * 0.3);
+    bg.addColorStop(0, 'rgba(120,255,170,0)');
+    bg.addColorStop(0.5, 'rgba(120,255,170,.16)');
+    bg.addColorStop(1, 'rgba(160,255,200,' + (0.30 + 0.16 * pulse).toFixed(2) + ')');
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    ctx.moveTo(x - bwTop, y - beamH); ctx.lineTo(x + bwTop, y - beamH);
+    ctx.lineTo(x + bwBot, y + h * 0.3); ctx.lineTo(x - bwBot, y + h * 0.3);
+    ctx.closePath(); ctx.fill();
+    // 呼吸光环（画在车身下面）
+    ctx.globalAlpha = 0.30 + 0.40 * pulse;
+    ctx.strokeStyle = '#8dffb4'; ctx.lineWidth = 3.4;
+    ctx.beginPath(); ctx.ellipse(x, y + h * 0.04, w * 0.82, h * 0.62, 0, 0, 7); ctx.stroke();
+    ctx.globalAlpha = 1;
+    // 轮胎
+    ctx.fillStyle = PALETTE.tire;
+    roundRect(x - w / 2 - 2.5, y - h * 0.30, 7, h * 0.19, 2); ctx.fill();
+    roundRect(x + w / 2 - 4.5, y - h * 0.30, 7, h * 0.19, 2); ctx.fill();
+    roundRect(x - w / 2 - 2.5, y + h * 0.13, 7, h * 0.19, 2); ctx.fill();
+    roundRect(x + w / 2 - 4.5, y + h * 0.13, 7, h * 0.19, 2); ctx.fill();
+    // 罐体（圆柱感：左右深色 + 中间亮带）
+    const g = ctx.createLinearGradient(x - w / 2, 0, x + w / 2, 0);
+    g.addColorStop(0, '#0fb347'); g.addColorStop(0.34, PALETTE.fuelLite);
+    g.addColorStop(0.62, PALETTE.fuel); g.addColorStop(1, '#0d7a33');
+    ctx.fillStyle = g;
+    roundRect(x - w / 2, y - h * 0.46, w, h * 0.90, w * 0.32); ctx.fill();
+    ctx.strokeStyle = 'rgba(10,40,20,.6)'; ctx.lineWidth = 1.5;
+    roundRect(x - w / 2, y - h * 0.46, w, h * 0.90, w * 0.32); ctx.stroke();
+    // 罐体橙白警戒条（斜纹感：错位条纹，一眼是"危险品罐车"）
+    ctx.save();
+    ctx.beginPath(); roundRect(x - w / 2, y - h * 0.46, w, h * 0.90, w * 0.32); ctx.clip();
+    for(let i = -2; i < 6; i++){
+      ctx.fillStyle = (i % 2 === 0) ? '#f6f7f9' : '#f2842b';
+      const bx = x - w / 2 + i * w * 0.30;
+      ctx.beginPath();
+      ctx.moveTo(bx, y + h * 0.12); ctx.lineTo(bx + w * 0.16, y + h * 0.12);
+      ctx.lineTo(bx + w * 0.16 - w * 0.10, y + h * 0.24); ctx.lineTo(bx - w * 0.10, y + h * 0.24);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+    // 大油滴（白底 + 深绿描边，对比足）
+    const r = w * 0.27, dy = y - h * 0.14;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(x, dy - r * 1.3);
+    ctx.quadraticCurveTo(x + r, dy + r * 0.18, x, dy + r);
+    ctx.quadraticCurveTo(x - r, dy + r * 0.18, x, dy - r * 1.3);
+    ctx.fill();
+    ctx.strokeStyle = '#0c5227'; ctx.lineWidth = 1.9; ctx.stroke();
+    // ★ 罐体上直接写「加油」（牌被裁掉也认得出）
+    ctx.fillStyle = '#25ff7a'; ctx.font = '800 ' + Math.round(w * 0.30) + 'px ' + FONT;
+    ctx.textAlign = 'center';
+    ctx.fillText('加油', x, y + h * 0.34);
+    ctx.textAlign = 'left';
+    // 顶部双闪警示灯
+    if(Math.floor(tGlobal * 6) % 2){
+      ctx.fillStyle = '#ffd83d';
+      ctx.beginPath(); ctx.arc(x - w * 0.30, y - h * 0.48, 4.4, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + w * 0.30, y - h * 0.48, 4.4, 0, 7); ctx.fill();
+    }
+    // 头顶「加油」浮动标牌 —— 最直观的辨识
+    const by = y - h * 0.86 + Math.sin(tGlobal * 3) * 3;
+    const bw2 = 52, bh2 = 25;
+    ctx.fillStyle = 'rgba(14,150,66,.97)';
+    roundRect(x - bw2 / 2, by - bh2 / 2, bw2, bh2, 8); ctx.fill();
+    ctx.strokeStyle = '#ccffdd'; ctx.lineWidth = 2;
+    roundRect(x - bw2 / 2, by - bh2 / 2, bw2, bh2, 8); ctx.stroke();
+    ctx.fillStyle = '#ffffff'; ctx.font = '800 15px ' + FONT;
+    ctx.textAlign = 'center';
+    ctx.fillText('加油', x, by + 5.5);
+    ctx.textAlign = 'left';
+  }
+
   /** 变道车的转向灯：琥珀箭头，闪烁，指向即将变过去的一侧 */
   function drawSignal(cx, cy, w, h, side){
     if(!side || Math.floor(tGlobal * 7) % 2) return;      // 闪烁
@@ -871,14 +952,7 @@
         ctx.strokeStyle = 'rgba(30,36,44,.45)'; ctx.lineWidth = 1;
         roundRect(o.x - 10, sy - 13, 20, 26, 4); ctx.stroke();
       }else if(o.kind === 'fuel'){
-        drawCarShape(o.x, sy, o.w, o.h, PALETTE.fuelCar, '#7fe89a', { truck: true, toy: true });
-        // 油滴标记
-        ctx.fillStyle = '#08351a';
-        ctx.beginPath();
-        ctx.moveTo(o.x, sy - 16);
-        ctx.quadraticCurveTo(o.x + 8, sy - 6, o.x, sy - 1);
-        ctx.quadraticCurveTo(o.x - 8, sy - 6, o.x, sy - 16);
-        ctx.fill();
+        drawFuelCar(o.x, sy, o.w, o.h);
       }else if(o.kind === 'weaver'){
         const E2 = ENEMY.weaver;
         drawCarShape(o.x, sy, o.w, o.h, E2.color, E2.lite, { toy: true });
@@ -1100,7 +1174,7 @@
     ctx.save();
     ctx.fillStyle = 'rgba(255,247,238,.96)';
     ctx.strokeStyle = PALETTE.frame; ctx.lineWidth = 2.5;
-    roundRect(W / 2 - hw, cy - 66, hw * 2, 176, 14); ctx.fill(); ctx.stroke();
+    roundRect(W / 2 - hw, cy - 66, hw * 2, 180, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = PALETTE.grip; ctx.font = '800 22px ' + FONT;
     ctx.fillText('火箭车', W / 2, cy - 38);
@@ -1112,13 +1186,14 @@
     ctx.beginPath(); ctx.moveTo(W / 2 - hw + 16, cy + 18); ctx.lineTo(W / 2 + hw - 16, cy + 18); ctx.stroke();
     ctx.fillStyle = '#5c7186'; ctx.font = '11px ' + FONT;
     ctx.fillText('卡车最慢 · 轿车中速 · 跑车最快会跑掉', W / 2, cy + 36);
+    ctx.fillStyle = '#0a8f3c'; ctx.font = '800 11.5px ' + FONT;
+    ctx.fillText('★ 只有带绿色光柱的车能吃', W / 2, cy + 54);
     ctx.fillStyle = '#c05f0d'; ctx.font = '700 11px ' + FONT;
-    ctx.fillText('★ 橙色车亮琥珀灯 = 即将变道', W / 2, cy + 54);
+    ctx.fillText('其余全是敌人 · 橙色车亮灯会变道', W / 2, cy + 70);
     ctx.fillStyle = '#5c7186'; ctx.font = '11px ' + FONT;
-    ctx.fillText('按颜色认车 → 提前预判', W / 2, cy + 72);
-    ctx.fillText('绿车加油 · 到终点加时进下一段', W / 2, cy + 90);
+    ctx.fillText('吃到加油车 = 油箱回满', W / 2, cy + 86);
     ctx.fillStyle = '#c0392b'; ctx.font = '700 11px ' + FONT;
-    ctx.fillText('时间到 / 撞光三条命即结束', W / 2, cy + 110);
+    ctx.fillText('到终点加时进下一段 · 时间到/撞光三条命结束', W / 2, cy + 104);
     ctx.restore();
     ctx.textAlign = 'left';
   }
@@ -1288,7 +1363,8 @@
     CAR_W, CAR_H,
     objs: objs.map(o => ({ id:o.id, kind:o.kind, lane:o.lane, x:o.x, y:o.y, v:o.v, w:o.w, h:o.h,
                            dead:o.dead, drift:o.drift, changeT:o.changeT, targetX:o.targetX,
-                           signal:o.signal, signalSide:o.signalSide, vWant:o.vWant, blocked:o.blocked })),
+                           signal:o.signal, signalSide:o.signalSide, vWant:o.vWant, blocked:o.blocked,
+                           pickup: o.kind === 'fuel' })),
     input: Object.assign({}, input, { gasOn: input.gas || (input.touching && input.touchGas) }),
     best, hintOn, fieldSeed, soundOn, engine: !!engineOsc,
   });

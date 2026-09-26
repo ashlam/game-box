@@ -128,8 +128,9 @@ section('1) 自动前进 · 两档速度');
   quiet();
   const a = R();
   ok(a.state === 'play', '开局即 play（自动前进）');
-  ok(a.V_BASE === 180 && a.V_MAX === 320, '两档速度常数（常规 ' + a.V_BASE + ' / 高速 ' + a.V_MAX + '）');
-  ok(Math.abs(a.V_MAX * a.KMH - 400) < 1e-9, '★ 高速 = 400 km/h（对齐资料：高速模式可达 400）');
+  ok(a.V_BASE === 180 && a.V_MAX === 400, '两档速度常数（常规 ' + a.V_BASE + ' / 高速 ' + a.V_MAX + '）');
+  ok(Math.abs(a.V_MAX * a.KMH - 500) < 1e-9, '★ 高速档 = ' + (a.V_MAX * a.KMH) + ' km/h（用户要求提速）');
+  ok(a.V_MAX >= a.V_BASE * 2, '★ 高速档至少是常规档的 2 倍（' + a.V_MAX + ' vs ' + a.V_BASE + '）');
   ok(a.hp === 3 && a.fuel === 1 && Math.abs(a.timeLeft - a.TIME_START) < 1e-9,
      '开局：3 条命 · 满油 · 倒计时 ' + a.TIME_START + 's');
 
@@ -645,6 +646,51 @@ section('13) ★ 不穿透机制：跟车 + 硬性钳制');
   }
   ok(behindOk, '★ 后方快车不会穿过玩家（玩家也被当作前车）');
   ok(minPlayerGap > -1, '★ 与玩家的最小净距始终为正（' + minPlayerGap.toFixed(2) + '）', 'gap ' + minPlayerGap.toFixed(2));
+}
+
+/* ================= 14) ★ 视觉等级：能吃的必须一眼可辨 ================= */
+section('14) ★ 可辨识性：唯一能被吃的东西必须"视觉上跳出来"');
+{
+  // 饱和度高低的度量（HSL 里的 S 分量）
+  function satOf(hex){
+    const r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
+    const mx = Math.max(r,g,b), mn = Math.min(r,g,b), l = (mx+mn)/2;
+    return mx === mn ? 0 : (l > 0.5 ? (mx-mn)/(2-mx-mn) : (mx-mn)/(mx+mn));
+  }
+  const E = win.__racerEnemy();
+  const fuelSat = satOf('#0ee04a');
+  const enemySats = ['truck','sedan','sports','weaver'].map(k => satOf(E[k].color));
+  const maxEnemySat = Math.max.apply(null, enemySats);
+  ok(fuelSat > maxEnemySat + 0.25,
+     '★ 加油车的绿是全饱和色，敌车全部降饱和（S ' + fuelSat.toFixed(2) + ' vs 敌车最高 ' + maxEnemySat.toFixed(2) + '）',
+     'fuel ' + fuelSat.toFixed(2) + ' / enemy max ' + maxEnemySat.toFixed(2));
+  ok(new Set(['truck','sedan','sports','weaver'].map(k => E[k].color)).size === 4,
+     '敌车四种颜色仍互不相同（降饱和后依然可区分类型）');
+
+  // 场上只有 fuel 带 pickup 标记
+  reset(71); noSpawn(false); setP({ invuln: 99999 });
+  let pickupKinds = new Set(), fuelSeen = 0, orders = {};
+  for (let i = 0; i < 3600; i++) {
+    step(DT);
+    for (const o of R().objs) {
+      if (o.pickup) { pickupKinds.add(o.kind); fuelSeen++; }
+      if (o.kind === 'fuel') orders[o.id] = true;
+    }
+  }
+  ok(pickupKinds.size === 1 && pickupKinds.has('fuel'),
+     '★ 场上只有加油车带"可拾取"标记，其余车辆一律没有（实际：' + [...pickupKinds].join('/') + '）');
+  ok(Object.keys(orders).length > 0, '60 秒内至少出现过一辆加油车（出现更密，实际 ' + Object.keys(orders).length + ' 辆）');
+
+  // 定向：强迫开一次加油车，验证吃掉回满油 + 只有它不扣命
+  reset(72); noSpawn(true); clearObjs();
+  setP({ x: R().ROAD_L + R().LANE_W * 1.5, invuln: 0 });
+  const px = R().player.x, py = R().player.y;
+  putObj({ kind: 'fuel', lane: 1, x: px, y: py + 110, v: 100, vWant: 100, pickup: true,
+           w: Math.round(R().CAR_W * 1.2), h: Math.round(R().CAR_H * 1.62),
+           signal: 0, signalSide: 0, drift: 0, targetX: px });
+  let eaten = false;
+  for (let i = 0; i < 200 && !eaten; i++) { step(DT); eaten = R().objs.some(o => o.kind === 'fuel' && o.dead); }
+  ok(eaten && R().fuel > 0.9 && R().hp === 3, '★ 吃到加油车：油回满且不掉命（符合"能吃的"定位）');
 }
 
 /* ================= 汇总 ================= */
