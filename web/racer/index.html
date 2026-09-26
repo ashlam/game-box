@@ -133,7 +133,11 @@
   let ROAD_L = 39, ROAD_R = 303, LANE_W = 66;
   let CAR_W = 29, CAR_H = 50;
   let HUD_H = 64, BOTTOM_BAND = 46, BAND_W = 35;
-  let TOUCH_TOP = 441;                 // ★ 底部触控区上边界：始终在玩家车下方（手指不挡视线）
+  let TOUCH_TOP = 340;                 // ★ 触控区上边界（在玩家车下方）
+  let TOUCH_BOTTOM = 508;              // ★ 触控区下边界（在底部橙边之上，不被铭牌吃掉）
+  let TOUCH_MID = 415;                 // ★ 档位分界：上面高速、下面常规
+  const ZONE_RATIO = 0.30;             // 触控区占屏高比例
+  const ZONE_SPLIT = 0.45;             // 上 45% 高速档，下 55% 常规档（拇指自然位在常规）
   const LANES = 4;
   const laneX = i => ROAD_L + LANE_W * (i + 0.5);
   function refit(){
@@ -148,8 +152,12 @@
     HUD_H = Math.max(54, Math.round(H * 0.115));
     BOTTOM_BAND = Math.max(40, Math.round(H * 0.082));
     BAND_W = Math.max(26, Math.min(60, ROAD_L - 8));
-    PY = H - BOTTOM_BAND - CAR_H * 2.2;              // 车抬高，给底部触控区腾地方
-    TOUCH_TOP = Math.round(PY + CAR_H / 2 + 12);     // ★ 触控区起点 = 车身下缘再留 12
+    // ★ 触控区：整体落在底部橙边之上，保证常规档也有足够大的区域（原来被橙边吃掉只剩一条缝）
+    const zoneH = Math.round(H * ZONE_RATIO);
+    TOUCH_BOTTOM = H - BOTTOM_BAND - 6;                                  // 贴着橙边上沿
+    TOUCH_TOP = TOUCH_BOTTOM - zoneH;
+    TOUCH_MID = TOUCH_TOP + Math.round(zoneH * ZONE_SPLIT);              // 高速上 45% / 常规下 55%
+    PY = TOUCH_TOP - CAR_H / 2 - 14;                                     // 车始终在触控区上方
   }
   const V_BASE = 180, V_MAX = 320, KMH = 1.25;   // 320×1.25 = 400 km/h（对齐资料里的 400）
   const ACC = 300, DEC = 560;                    // 提速/回落速率（两档手感）
@@ -217,6 +225,7 @@
   /* ---------- 状态 ---------- */
   let state = 'ready';        // ready | play | over
   let spawnOff = false;       // 测试钩子：关掉刷车（测速/测转向时排除交通干扰）
+  const fronts = [];          // 每帧复用的"前车"列表（含玩家）
   let player, objs, input, fuel, timeLeft, hp, stage, distance, passed,
       stageStartY, nextRowY, nextFuelY, nextObjId, seedRng, fieldSeed;
   let effects, floats, shake, skid, glowT, warnT, reason, best, overTimer, lastTs, raf;
@@ -274,6 +283,9 @@
     const n = Math.min(maxOcc, LANES - 1);
     for(let k = 0; k < n; k++){
       const lane = lanes[k];
+      // ★ 生成安全：该位置已经有车（含变道途中的车、排队车队、玩家）就跳过，
+      //   否则会"刷新在别人身上"直接穿透
+      if(occupied(laneX(lane), y, CAR_W)) continue;
       if(rng() < 0.18 + 0.18 * diff){                  // 施工障碍（固定：静止、绝不变道）
         objs.push({ id: nextObjId++, kind: rng() < 0.5 ? 'cone' : 'barrel', lane, x: laneX(lane), y,
                     v: 0, w: Math.max(14, Math.round(CAR_W * 0.74)), h: Math.max(20, Math.round(CAR_H * 0.52)),
@@ -283,7 +295,7 @@
         const E = ENEMY[ty];
         objs.push({
           id: nextObjId++, kind: ty, lane, x: laneX(lane), y,
-          v: E.v,                                      // ★ 固定速度：同类车永远一样快
+          v: E.v, vWant: E.v,                          // ★ 固定巡航速度：同类车永远一样快
           w: Math.round(CAR_W * E.wf), h: Math.round(CAR_H * E.hf),
           dead: false, signal: 0, signalSide: 0, drift: 0, targetX: laneX(lane),
           changeT: E.signal ? 1.2 + rng() * 2.4 : 0,    // ★ 只有变道车有变道计时
@@ -293,10 +305,40 @@
   }
   function spawnFuel(y){
     const lane = (rng() * LANES) | 0;
-    objs.push({ id: nextObjId++, kind: 'fuel', lane, x: laneX(lane), y, v: FUEL_V,   // ★ 固定速度
+    if(occupied(laneX(lane), y, CAR_W * 1.17)) return;    // ★ 生成安全（原来漏了，会把加油车刷在别人车上造成穿透）
+    objs.push({ id: nextObjId++, kind: 'fuel', lane, x: laneX(lane), y, v: FUEL_V, vWant: FUEL_V,   // ★ 固定速度
                 w: Math.round(CAR_W * 1.17), h: Math.round(CAR_H * 1.46),
                 dead: false, changeT: 0, signal: 0, signalSide: 0, drift: 0, targetX: laneX(lane) });
   }
+  /* ============================================================
+     ★ 不穿透机制（跟车）
+     同类车速度固定后，快车必然追上慢车、车也会开到静止障碍上 —— 必须有不穿透规则。
+     规则（对所有会动的车生效，不改变"车型行为固定"的设定）：
+       1) 找前方「横向有重叠」的最近物体（真实盒子判断，兼容变道中途的横向位置）
+       2) 速度上限 = 前车速度 + 间距余量（贴越近限速越低，最终停下）
+       3) 硬性钳制：仍贴到最小车距以内就把位置钳回去 —— 保证永不重叠
+       4) 玩家也算"前车"：后面的快车只会跟着你，不会穿过你
+     ============================================================ */
+  const MIN_GAP = 5;                   // 最小车头间距（逻辑单位）
+  /** 生成安全检查：该位置是否已被占用（含玩家）—— 避免"刷新在别人身上"造成穿透 */
+  function occupied(x, y, w){
+    const half = (w + CAR_W) / 2 + 8;
+    if(objs.some(q => !q.dead && Math.abs(q.x - x) < (w + q.w) / 2 + 8 && Math.abs(q.y - y) < 220)) return true;
+    if(Math.abs(player.x - x) < half && Math.abs(player.y - y) < 240) return true;   // 别刷玩家身上
+    return false;
+  }
+  function nearestFront(o, list){
+    let best = null, bestGap = Infinity;
+    for(const q of list){
+      if(q === o || q.dead) continue;
+      if(Math.abs(q.x - o.x) > (o.w + q.w) / 2 + 2) continue;  // 横向盒子重叠（含擦边、变道中途）
+      if(q.y <= o.y) continue;                                  // 只看前方
+      const gap = q.y - o.y - (o.h + q.h) / 2;                  // 前车尾 到 本车头 的净距
+      if(gap < bestGap){ bestGap = gap; best = q; }
+    }
+    return best ? { obj: best, gap: bestGap } : null;
+  }
+
   function refill(){
     const ahead = player.y + H + 420;
     const diff = clamp((stage - 1) * 0.18 + distance / 26000, 0, 1);
@@ -414,7 +456,7 @@
     if(!first){ input.touching = false; input.touchGas = false; input.targetX = null; return; }
     input.touching = true;
     input.targetX = clamp(first.x, ROAD_L - 20, ROAD_R + 20);
-    input.touchGas = first.y < (TOUCH_TOP + H) / 2;        // 上半 = 高速
+    input.touchGas = first.y < TOUCH_MID;                  // 分界线以上 = 高速档（常规区更大）
   }
   function onPoint(kind, id, cx, cy){
     const r = cv.getBoundingClientRect();
@@ -518,9 +560,30 @@
     if(fuel <= 0 && player.v <= 50 && !reason){ reason = '油尽'; floats.push({ x: W/2, y: H*0.42, t: 0, txt:'油尽！找加油车', color:'#ffd166' }); }
 
     /* ---- 交通对象 ---- */
+    // 玩家也算一个"前车"，让后方快车排队而不是穿过去
+    fronts.length = 0;
+    for(const o of objs) fronts.push(o);
+    fronts.push({ x: player.x, y: player.y, w: CAR_W, h: CAR_H, v: player.v, dead: false, isPlayer: true });
+
     for(const o of objs){
       if(o.dead) continue;
-      o.y += o.v * dt;
+      if(o.vWant !== undefined){
+        o.v = Math.min(o.vWant, o.v + 300 * dt);            // 速度回归本车型固定巡航速度
+        const front = nearestFront(o, fronts);
+        o.blocked = 0;
+        if(front){
+          const soft = front.obj.v + Math.max(0, front.gap - 8) * 2.4;   // 贴越近限速越低
+          if(o.v > soft){ o.v = soft; o.blocked = 1; }
+        }
+        o.y += o.v * dt;
+        if(front){                                           // ★ 硬性不穿透
+          const cap = front.obj.y - (o.h + front.obj.h) / 2 - MIN_GAP;
+          if(o.y > cap){ o.y = cap; o.v = Math.min(o.v, front.obj.v); o.blocked = 1; }
+        }
+      }else{
+        o.y += o.v * dt;                                     // 静止障碍（v=0）直接不动
+      }
+
       // ★ 只有变道车会变道，且必须「先亮灯 SIGNAL_T 秒」——玩家看得见就能预判
       if(o.kind === 'weaver'){
         if(o.signal > 0){                              // 亮灯预告中
@@ -529,8 +592,10 @@
         }else if(o.drift <= 0 && o.changeT > 0){
           o.changeT -= dt;
           if(o.changeT <= 0){
-            const cand = [o.lane - 1, o.lane + 1].filter(l => l >= 0 && l < LANES &&
-              !objs.some(q => !q.dead && q !== o && q.lane === l && Math.abs(q.y - o.y) < 150));
+            const cand = [o.lane - 1, o.lane + 1].filter(l => l >= 0 && l < LANES && !objs.some(q =>
+              !q.dead && q !== o &&
+              Math.abs(q.x - laneX(l)) < (q.w + o.w) / 2 + 8 &&      // 按位置判，覆盖变道中途
+              Math.abs(q.y - o.y) < 190));
             if(cand.length){
               const nl = cand[(rng() * cand.length) | 0];
               o.signalSide = nl > o.lane ? 1 : -1;     // 灯打向哪边
@@ -549,6 +614,18 @@
       }
       // 超越计数
       if(!o.counted && o.y < player.y - 30){ o.counted = true; passed++; }
+    }
+
+    // ★ 位置修正第二遍（2 轮）：跟车限速用的是前车本帧更新前的速度，会有约 1 帧滞后，
+    //   这里用移动后的真实位置做硬性钳制，保证"不穿透"与遍历顺序无关。
+    for(let pass = 0; pass < 2; pass++){
+      for(const o of objs){
+        if(o.dead || o.vWant === undefined) continue;
+        const front = nearestFront(o, fronts);
+        if(!front) continue;
+        const cap = front.obj.y - (o.h + front.obj.h) / 2 - MIN_GAP;
+        if(o.y > cap){ o.y = cap; o.v = Math.min(o.v, front.obj.v); o.blocked = 1; }
+      }
     }
     refill();
 
@@ -984,7 +1061,7 @@
 
   /* ---------- 触控按钮 ---------- */
   function drawTouchZone(){
-    const zt = TOUCH_TOP, zb = H, mid = (zt + zb) / 2;
+    const zt = TOUCH_TOP, zb = TOUCH_BOTTOM, mid = TOUCH_MID;
     const g = ctx.createLinearGradient(0, zt, 0, zb);
     g.addColorStop(0, 'rgba(10,14,24,.62)');
     g.addColorStop(1, 'rgba(10,14,24,.88)');
@@ -1145,6 +1222,7 @@
       '横向x=' + (player ? player.x.toFixed(0) : '—') + '（路面 ' + ROAD_L + '~' + ROAD_R + '，车道宽 ' + LANE_W.toFixed(0) + '）',
       '距离=' + Math.floor(distance) + '米 本段进度=' + (player ? ((player.y - stageStartY) / STAGE_LEN * 100).toFixed(0) : '0') + '%',
       '油=' + Math.round(fuel * 100) + '%  时间=' + timeLeft.toFixed(1) + 's  超越=' + passed + '  场上对象=' + (objs ? objs.length : 0),
+      '触控区=' + TOUCH_TOP + '..' + TOUCH_BOTTOM + '（分界 ' + TOUCH_MID + ' 上高速/下常规） 车屏y=' + Math.round(PY),
       '场上车型=' + (objs ? (['truck','sedan','sports','weaver','fuel','cone','barrel']
         .map(k => { const n = objs.filter(o => !o.dead && o.kind === k).length; return n ? (ENEMY[k] ? ENEMY[k].name : k) + n : null; })
         .filter(Boolean).join(' ') || '—') : '—'),
@@ -1203,12 +1281,13 @@
   window.__racer = () => ({
     state, reason, hp, stage, distance, passed, fuel, timeLeft,
     player: { x: player.x, y: player.y, v: player.v, invuln: player.invuln },
-    PY, W, H, HUD_H, HFIX, BOTTOM_BAND, TOUCH_TOP, FOLLOW, ROAD_L, ROAD_R, LANES, LANE_W,
+    PY, W, H, HUD_H, HFIX, BOTTOM_BAND, TOUCH_TOP, TOUCH_BOTTOM, TOUCH_MID, FOLLOW, MIN_GAP,
+    ROAD_L, ROAD_R, LANES, LANE_W,
     V_BASE, V_MAX, KMH, STAGE_LEN, TIME_START, TIME_BONUS, HP_START, FUEL_RATE,
     CAR_W, CAR_H,
     objs: objs.map(o => ({ id:o.id, kind:o.kind, lane:o.lane, x:o.x, y:o.y, v:o.v, w:o.w, h:o.h,
                            dead:o.dead, drift:o.drift, changeT:o.changeT, targetX:o.targetX,
-                           signal:o.signal, signalSide:o.signalSide })),
+                           signal:o.signal, signalSide:o.signalSide, vWant:o.vWant, blocked:o.blocked })),
     input: Object.assign({}, input, { gasOn: input.gas || (input.touching && input.touchGas) }),
     best, hintOn, fieldSeed, soundOn, engine: !!engineOsc,
   });

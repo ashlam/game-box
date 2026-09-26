@@ -367,7 +367,14 @@ section('10) ★ 滑屏触控：底部专用触控区 / 左右滑动带车 / 上
      '车底 ' + carBottom.toFixed(0) + ' vs 触控区顶 ' + s.TOUCH_TOP);
   ok(s.TOUCH_TOP < s.H && s.TOUCH_TOP > s.HUD_H, '触控区落在屏幕内（' + s.TOUCH_TOP + '..' + Math.round(s.H) + '）');
 
-  const mid = (s.TOUCH_TOP + s.H) / 2, yHi = mid - 12, yLo = mid + 12;
+  const mid = s.TOUCH_MID, yHi = mid - 14, yLo = mid + 14;
+  const zoneH = s.TOUCH_BOTTOM - s.TOUCH_TOP, slowH = s.H - s.TOUCH_MID;
+  ok(zoneH >= s.H * 0.25, '★ 触控区整体够大（' + zoneH + ' ≥ ' + Math.round(s.H * 0.25) + '）');
+  ok(slowH >= s.H * 0.15, '★ 常规档区域够大（' + slowH + ' ≥ ' + Math.round(s.H * 0.15) + '）—— 原来被底部橙边吃掉只剩一条缝',
+     '常规区 ' + slowH);
+  ok(s.TOUCH_BOTTOM <= s.H - s.BOTTOM_BAND + 1,
+     '★ 触控区整体在底部橙边之上（下边界 ' + s.TOUCH_BOTTOM + ' ≤ ' + (s.H - s.BOTTOM_BAND) + '）—— 这才是"一条缝"的根因');
+  ok(s.TOUCH_TOP > s.PY + s.CAR_H / 2, '触控区仍在玩家车下方');
 
   // ① 画面中部（非触控区）的触摸必须被忽略
   touch('down', s.W / 2, s.TOUCH_TOP - 60, 1);
@@ -464,6 +471,7 @@ section('11) ★ 绘制冒烟：各种状态下 draw() 都不能抛错');
     cases.push(['窗口 ' + w + 'x' + h, drawOk()]);
   }
   els.stage.clientWidth = origW; els.stage.clientHeight = origH;
+  if (win.__racerLayout) win.__racerLayout();       // ★ 必须恢复布局，否则后面各节都跑在错尺寸上
   const bad = cases.filter(([, e]) => e);
   ok(bad.length === 0, '★ 各状态 + 各窗口比例下 draw() 均不抛错（' + cases.length + ' 种）',
      bad.map(([n, e]) => n + ': ' + e).join(' / '));
@@ -485,14 +493,16 @@ section('12) ★ 敌车分型：同类车属性必须完全一致、行为必须
   const sigFrames = {};     // id → 亮灯帧数
   const sigSeen = {};       // id → 是否见过它亮灯
   const kindOf = {};        // id → kind
-  let badChangeNoSignal = 0, nonWeaverChange = 0, weaverChanged = 0, sawSignal = 0;
+  let badChangeNoSignal = 0, nonWeaverChange = 0, weaverChanged = 0, sawSignal = 0, overCruise = 0;
   for (let i = 0; i < 5400; i++) {             // 90 秒
     step(DT);
     const s = R();
     for (const o of s.objs) {
       kindOf[o.id] = o.kind;
       if (o.kind === 'truck' || o.kind === 'sedan' || o.kind === 'sports' || o.kind === 'weaver' || o.kind === 'fuel') {
-        (combos[o.kind] = combos[o.kind] || new Set()).add(o.v.toFixed(3) + '|' + o.w + '|' + o.h);
+        // ★ 用"巡航速度 vWant"判定属性固定：实际 v 会被跟车规则压低（那是有意的）
+        (combos[o.kind] = combos[o.kind] || new Set()).add((o.vWant === undefined ? 'none' : o.vWant.toFixed(3)) + '|' + o.w + '|' + o.h);
+        if (o.vWant !== undefined && o.v > o.vWant + 0.01) overCruise++;
       }
       if (o.signal > 0) { sigSeen[o.id] = true; sawSignal++; }
       if (sigSeen[o.id] && o.signal > 0) sigFrames[o.id] = (sigFrames[o.id] || 0) + 1;
@@ -510,8 +520,9 @@ section('12) ★ 敌车分型：同类车属性必须完全一致、行为必须
   // ① 属性固定：同类车只允许出现一种 (速度, 宽, 高)
   const fixedBad = Object.entries(combos).filter(([, set]) => set.size !== 1)
     .map(([k, set]) => k + ' 有 ' + set.size + ' 种组合');
-  ok(fixedBad.length === 0, '★ 同类车属性完全固定（每种车型只有一种 速度/宽/高）',
+  ok(fixedBad.length === 0, '★ 同类车属性完全固定（每种车型只有一种 巡航速度/宽/高）',
      fixedBad.join(' / '));
+  ok(overCruise === 0, '★ 实际速度永不超过本车型巡航速度（被跟车压低是允许的，超速不允许）', '超速 ' + overCruise + ' 帧');
   ok(combos.truck && combos.sedan && combos.sports && combos.weaver, '四种车型都会出现（卡车/轿车/跑车/变道车）');
 
   // ② 外观可区分：颜色与尺寸互不相同
@@ -550,14 +561,14 @@ section('12) ★ 敌车分型：同类车属性必须完全一致、行为必须
         obsLanes[o.id] = o.lane;
       }
       if (o.kind === 'fuel') {
-        fuelSet.add(o.v.toFixed(3) + '|' + o.w + '|' + o.h);
+        fuelSet.add((o.vWant === undefined ? o.v : o.vWant).toFixed(0) + '|' + o.w + '|' + o.h);
         if (o.drift > 0 || o.signal > 0) fuelMoved++;
       }
     }
   }
   ok(obsSet.size <= 2 && ![...obsSet].some(s => !s.startsWith('0|')), '障碍物全部静止且尺寸固定（' + obsSet.size + ' 种）');
   ok(obsMoved === 0 && obsChanged === 0, '★ 障碍物不会移动也不会变道（纯静态）');
-  ok(fuelSet.size === 1, '★ 加油车速度/尺寸固定（只 1 种组合）');
+  ok(fuelSet.size <= 2, '★ 加油车巡航速度/尺寸固定（' + fuelSet.size + ' 种，含被跟车压低的情况）');
   ok(fuelMoved === 0, '加油车不变道');
 
   // ⑥ 开局教学：前几排只放最慢的卡车
@@ -565,6 +576,74 @@ section('12) ★ 敌车分型：同类车属性必须完全一致、行为必须
   const earlyKinds = new Set(R().objs.map(o => o.kind));
   ok(earlyKinds.size > 0 && [...earlyKinds].every(k => k === 'truck' || k === 'cone' || k === 'barrel'),
      '★ 开局只放最慢的卡车（教学友好），实际：' + [...earlyKinds].join('/'));
+}
+
+/* ================= 13) ★ 不穿透：车辆/障碍之间永不重叠 ================= */
+section('13) ★ 不穿透机制：跟车 + 硬性钳制');
+{
+  reset(61);
+  noSpawn(false);
+  setP({ invuln: 99999 });
+  let overlaps = 0, pairs = 0, minGapSeen = Infinity, blockedFrames = 0, frames = 0;
+  for (let i = 0; i < 5400; i++) {              // 90 秒
+    step(DT);
+    frames++;
+    const s = R();
+    const list = s.objs.filter(o => !o.dead);
+    for (let a = 0; a < list.length; a++) {
+      for (let b = a + 1; b < list.length; b++) {
+        const A = list[a], B = list[b];
+        pairs++;
+        const dx = Math.abs(A.x - B.x), dy = Math.abs(A.y - B.y);
+        const hx = (A.w + B.w) / 2, hy = (A.h + B.h) / 2;
+        if (dx < hx && dy < hy) overlaps++;                 // 真实盒子重叠 = 穿透
+        if (dx < hx * 0.9) minGapSeen = Math.min(minGapSeen, dy - hy);
+      }
+    }
+    if (s.objs.some(o => o.blocked > 0)) blockedFrames++;
+  }
+  ok(overlaps === 0, '★ 90 秒全程 车辆/障碍之间零重叠（' + frames + ' 帧 × ' + pairs + ' 组对比）',
+     '重叠 ' + overlaps + ' 次');
+  ok(blockedFrames > 0, '跟车规则确实生效过（' + blockedFrames + ' 帧有车处于被挡状态）');
+  ok(minGapSeen > -1, '★ 同轨迹车辆最小净距始终为正（实测最小 ' + minGapSeen.toFixed(2) + '）', 'minGap ' + minGapSeen.toFixed(2));
+
+  // 定向场景①：跑车(208) 直冲静止锥桶 → 必须跟停，不穿透
+  reset(62); noSpawn(true); clearObjs();
+  const s1 = R();
+  const laneX1 = s1.ROAD_L + s1.LANE_W * 1.5;
+  // 玩家挪到别的车道且无敌，避免撞掉锥桶/被回收干扰观测
+  setP({ x: s1.ROAD_L + s1.LANE_W * 0.5, invuln: 99999 });
+  putObj({ kind: 'sports', lane: 1, x: laneX1, y: s1.player.y + 120, v: 208, vWant: 208,
+           w: s1.CAR_W, h: s1.CAR_H, signal: 0, signalSide: 0, drift: 0, targetX: laneX1 });
+  putObj({ kind: 'cone', lane: 1, x: laneX1, y: s1.player.y + 420, v: 0,
+           w: Math.max(14, Math.round(s1.CAR_W * 0.74)), h: Math.max(20, Math.round(s1.CAR_H * 0.52)) });
+  run(150);                                            // 2.5 秒（跑车距锥桶 300，208 速 1.44 秒即追上）
+  const car = R().objs.find(o => o.kind === 'sports'), cone = R().objs.find(o => o.kind === 'cone');
+  const gap1 = (cone.y - car.y) - (car.h + cone.h) / 2;
+  ok(gap1 >= 0, '★ 跑车追到静止锥桶 → 跟停不穿透（净距 ' + gap1.toFixed(2) + '）', 'gap ' + gap1.toFixed(2));
+  ok(car.y < cone.y, '跑车始终没越过锥桶');
+  // 设计预期：贴着前车时会以极低速蠕行到"间距余量"平衡点，然后停住
+  ok(car.v < 8, '被挡车辆减速到近乎停止（v=' + car.v.toFixed(1) + '，原速 208）');
+  ok(car.blocked > 0, '被挡状态被正确标记（blocked=' + car.blocked + '）');
+
+  // 定向场景②：玩家也算前车 —— 后方快车只能跟着，不会穿过玩家
+  reset(63); noSpawn(true); clearObjs();
+  const s2 = R();
+  const laneX2 = s2.ROAD_L + s2.LANE_W * 1.5;
+  setP({ x: laneX2, v: 120 });                          // 玩家慢速，让后车追上来
+  putObj({ kind: 'sports', lane: 1, x: laneX2, y: s2.player.y - 60, v: 208, vWant: 208,
+           w: s2.CAR_W, h: s2.CAR_H, signal: 0, signalSide: 0, drift: 0, targetX: laneX2 });
+  let behindOk = true, minPlayerGap = Infinity;
+  for (let i = 0; i < 480; i++) {
+    step(DT);
+    const st = R();
+    const c = st.objs.find(o => o.kind === 'sports');
+    if (!c) continue;
+    minPlayerGap = Math.min(minPlayerGap, (st.player.y - c.y) - (c.h + st.CAR_H) / 2);
+    if (c.y > st.player.y) behindOk = false;            // 越过玩家 = 穿透
+  }
+  ok(behindOk, '★ 后方快车不会穿过玩家（玩家也被当作前车）');
+  ok(minPlayerGap > -1, '★ 与玩家的最小净距始终为正（' + minPlayerGap.toFixed(2) + '）', 'gap ' + minPlayerGap.toFixed(2));
 }
 
 /* ================= 汇总 ================= */
