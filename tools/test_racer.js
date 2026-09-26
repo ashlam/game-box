@@ -702,7 +702,7 @@ section('14) ★ 可辨识性：唯一能被吃的东西必须"视觉上跳出�
   setP({ x: R().ROAD_L + R().LANE_W * 1.5, invuln: 0 });
   const px = R().player.x, py = R().player.y;
   putObj({ kind: 'fuel', lane: 1, x: px, y: py + 110, v: 100, vWant: 100, pickup: true,
-           w: Math.round(R().CAR_W * 0.95), h: Math.round(R().CAR_H * 1.05),
+           w: Math.round(R().CAR_W * 0.62), h: Math.round(R().CAR_H * 0.80),
            signal: 0, signalSide: 0, drift: 0, targetX: px });
   let eaten = false;
   for (let i = 0; i < 200 && !eaten; i++) { step(DT); eaten = R().objs.some(o => o.kind === 'fuel' && o.dead); }
@@ -756,6 +756,71 @@ section('15) ★ 排间距：按最高速留足换道时间');
   let worst = 0;
   for (const y of ys) worst = Math.max(worst, new Set(traffic.filter(r => Math.round(r.y) === y).map(r => r.lane)).size);
   ok(worst <= R().LANES - 2, '★ 每排最多占 ' + worst + ' 条道（4 车道至少留 2 条空）', 'worst=' + worst);
+}
+
+/* ================= 16) ★ 体积/判定：不许贴着分界线从两车之间穿过去 ================= */
+section('16) ★ 车身体积与判定盒：无处可钻');
+{
+  const s0 = R();
+  // ① 几何条件：相邻两车道之间的缝必须小于车身宽，否则就能钻
+  const gap = s0.LANE_W - s0.CAR_W;
+  ok(s0.CAR_W > s0.LANE_W / 2,
+     '★ 车身宽 > 半个车道（车宽 ' + s0.CAR_W + ' vs 半道 ' + (s0.LANE_W / 2).toFixed(1) + '）',
+     'CAR_W=' + s0.CAR_W + ' LANE_W=' + s0.LANE_W.toFixed(1));
+  ok(gap < s0.CAR_W,
+     '★ 相邻车道之间的缝(' + gap.toFixed(0) + ') < 车身宽(' + s0.CAR_W + ') → 塞不进去',
+     'gap=' + gap.toFixed(1) + ' CAR_W=' + s0.CAR_W);
+  // 最宽的敌车也满足（卡车占道更满）
+  const E = win.__racerEnemy();
+  const truckW = Math.round(s0.CAR_W * E.truck.wf);
+  ok(truckW <= s0.LANE_W * 0.9, '最宽的卡车也不越出车道（' + truckW + ' ≤ ' + (s0.LANE_W * 0.9).toFixed(0) + '）');
+
+  // ② 定向：贴着 0/1 车道分界线正中开，撞向并排两车 → 必须撞上（修前能穿过去）
+  reset(91); noSpawn(true); clearObjs();
+  {
+    const s = R();
+    const midX = s.ROAD_L + s.LANE_W;            // 0 号与 1 号车道之间的分界线
+    setP({ x: midX, invuln: 0, v: 200 });
+    const y0 = s.player.y;
+    putObj({ kind: 'sedan', lane: 0, x: s.ROAD_L + s.LANE_W * 0.5, y: y0 + 300, v: 0, vWant: 0,
+             w: s.CAR_W, h: s.CAR_H, signal: 0, signalSide: 0, drift: 0, targetX: s.ROAD_L + s.LANE_W * 0.5 });
+    putObj({ kind: 'sedan', lane: 1, x: s.ROAD_L + s.LANE_W * 1.5, y: y0 + 300, v: 0, vWant: 0,
+             w: s.CAR_W, h: s.CAR_H, signal: 0, signalSide: 0, drift: 0, targetX: s.ROAD_L + s.LANE_W * 1.5 });
+    run(240);                                     // 4 秒，足够开到并排两车处
+    ok(R().hp < 3,
+       '★ 贴着分界线正中开，撞向并排两车 → 撞上（不再从两车之间穿过去）',
+       'hp=' + R().hp + '（3=穿过去了）');
+  }
+
+  // ③ 定向：判定盒 = 画出来的盒子（横向只重叠 0.5 个单位也算撞）
+  reset(92); noSpawn(true); clearObjs();
+  {
+    const s = R();
+    const cx = s.ROAD_L + s.LANE_W * 1.5;
+    // ★ 敌车放在"正前方"，否则它会被"不穿透"机制当成在玩家正后方而推开（我自己踩过的坑）
+    setP({ x: cx, invuln: 0, v: 200 });
+    const dx = s.CAR_W - 0.5;                     // 横向重叠仅 0.5 单位（旧判定 -4 会漏掉）
+    putObj({ kind: 'sedan', lane: 1, x: cx - dx, y: s.player.y + 150, v: 0, vWant: 0,
+             w: s.CAR_W, h: s.CAR_H, signal: 0, signalSide: 0, drift: 0, targetX: cx - dx });
+    run(90);                                      // 1.5 秒，足够开 150 距离
+    ok(R().hp === 2,
+       '★ 判定盒与画面严格一致：横向仅重叠 0.5 单位也判定撞车（旧的 -4 宽容会让它穿过去）',
+       'hp=' + R().hp);
+  }
+
+  // ④ 油桶仍保持"擦到就算吃到"（拾取物故意宽容，与敌车相反）
+  reset(93); noSpawn(true); clearObjs();
+  {
+    const s = R();
+    const cx = s.ROAD_L + s.LANE_W * 1.5;
+    setP({ x: cx, invuln: 99999, fuel: 0.4 });
+    const drillW = Math.round(s.CAR_W * 0.62);
+    putObj({ kind: 'fuel', lane: 1, x: cx + (drillW + s.CAR_W) / 2 + 5, y: s.player.y, v: 0, vWant: 0,
+             w: drillW, h: Math.round(s.CAR_H * 0.80), signal: 0, signalSide: 0, drift: 0, targetX: cx });
+    run(3);
+    const o = R().objs.find(q => q.kind === 'fuel');
+    ok(o && o.dead && R().fuel > 0.9, '★ 油桶仍是"擦到就算吃到"（拾取物故意宽容）');
+  }
 }
 
 /* ================= 汇总 ================= */

@@ -149,7 +149,8 @@
     LANE_W = clamp(laneWant, 56, 96);
     const roadW = LANE_W * LANES;
     ROAD_L = (W - roadW) / 2; ROAD_R = ROAD_L + roadW;
-    CAR_W = Math.round(LANE_W * 0.44); CAR_H = Math.round(CAR_W * 1.72);
+    // ★ 车身占车道 72%：相邻两车道之间的缝只剩 LANE_W−CAR_W（约 18）< 车身宽 → 无法贴着分界线穿过
+    CAR_W = Math.round(LANE_W * 0.72); CAR_H = Math.round(CAR_W * 1.66);
     HUD_H = Math.max(54, Math.round(H * 0.115));
     BOTTOM_BAND = Math.max(40, Math.round(H * 0.082));
     BAND_W = Math.max(26, Math.min(60, ROAD_L - 8));
@@ -217,7 +218,7 @@
    * -------------------------------------------------------------------- */
   // ★ 敌车统一"低饱和交通色"：视觉上退到背景，把唯一高饱和的绿色加油车衬出来
   const ENEMY = {
-    truck:  { name:'卡车',   color:'#b9c2cc', lite:'#d8dee6', wf:1.17, hf:1.50, v:88,  signal:0,   label:'最慢 · 不变道 · 货箱大' },
+    truck:  { name:'卡车',   color:'#b9c2cc', lite:'#d8dee6', wf:1.15, hf:1.42, v:88,  signal:0,   label:'最慢 · 不变道 · 货箱大' },
     sedan:  { name:'轿车',   color:'#7d6a9c', lite:'#a596c0', wf:1.00, hf:1.00, v:150, signal:0,   label:'中速 · 不变道' },
     sports: { name:'跑车',   color:'#c2a545', lite:'#ddc777', wf:1.00, hf:0.87, v:208, signal:0,   label:'最快 · 低矮 · 会跑掉' },
     weaver: { name:'变道车', color:'#c1703a', lite:'#d99a68', wf:1.00, hf:1.00, v:132, signal:0.7, label:'★ 先亮琥珀转向灯再变道' },
@@ -308,9 +309,9 @@
   }
   function spawnFuel(y){
     const lane = (rng() * LANES) | 0;
-    if(occupied(laneX(lane), y, CAR_W * 0.95)) return;    // ★ 生成安全（原来漏了，会把加油车刷在别人车上造成穿透）
+    if(occupied(laneX(lane), y, CAR_W * 0.62)) return;    // ★ 生成安全（原来漏了，会把加油车刷在别人车上造成穿透）
     objs.push({ id: nextObjId++, kind: 'fuel', lane, x: laneX(lane), y, v: FUEL_V, vWant: FUEL_V,   // ★ 固定速度
-                w: Math.round(CAR_W * 0.95), h: Math.round(CAR_H * 1.05),   // 油桶尺寸（比方正的车略小）
+                w: Math.round(CAR_W * 0.62), h: Math.round(CAR_H * 0.80),   // 油桶尺寸（明显比车小）
                 dead: false, changeT: 0, signal: 0, signalSide: 0, drift: 0, targetX: laneX(lane) });
   }
   /* ============================================================
@@ -635,8 +636,9 @@
     refill();
 
     /* ---- 碰撞 ---- */
-    const overlap = o => Math.abs(o.x - player.x) < (o.w + CAR_W) / 2 - 4 &&
-                          Math.abs(o.y - player.y) < (o.h + CAR_H) / 2 - 6;
+    // ★ 判定盒子 = 画出来的盒子（原来横向 -4 / 纵向 -6 的宽容量，会让"看着撞上了却没撞"）
+    const overlap = o => Math.abs(o.x - player.x) < (o.w + CAR_W) / 2 &&
+                          Math.abs(o.y - player.y) < (o.h + CAR_H) / 2;
     // 加油桶：无敌闪烁期间也能吃（不该被无敌挡掉）
     // ★ 判定放宽：擦到就算吃到（原来是 -4/-6 的"宽容量"，比敌车还紧，才会出现"看着碰到了却没吃掉"）
     for(const o of objs){
@@ -1254,6 +1256,8 @@
       '油=' + Math.round(fuel * 100) + '%  时间=' + timeLeft.toFixed(1) + 's  超越=' + passed + '  场上对象=' + (objs ? objs.length : 0),
       '触控区=' + TOUCH_TOP + '..' + TOUCH_BOTTOM + '（高速 ' + ZONE_HI + ' / 常规 ' + ZONE_LO +
         '，分界 ' + TOUCH_MID + '） 车屏y=' + Math.round(PY),
+      '车道宽=' + LANE_W.toFixed(1) + ' 车身=' + CAR_W + '×' + CAR_H +
+        '（占道 ' + (CAR_W / LANE_W * 100).toFixed(0) + '%，相邻车道缝 ' + (LANE_W - CAR_W).toFixed(0) + ' < 车宽 → 穿不过去）',
       '场上车型=' + (objs ? (['truck','sedan','sports','weaver','fuel','cone','barrel']
         .map(k => { const n = objs.filter(o => !o.dead && o.kind === k).length; return n ? (ENEMY[k] ? ENEMY[k].name : k) + n : null; })
         .filter(Boolean).join(' ') || '—') : '—'),
