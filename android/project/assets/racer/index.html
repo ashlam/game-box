@@ -84,7 +84,7 @@
   <div class="big" id="overScore">0</div>
   <div class="unit">最远距离（米）</div>
   <p id="overText"></p>
-  <div class="rule">玩法：自动前进 · 左右躲车躲障碍<br>按住油门冲高速（400 km/h，风险也大）<br>碰到绿色加油车回满油 · 到终点加时进下一段</div>
+  <div class="rule">玩法：自动前进 · 左右躲车躲障碍<br>底部区域按住左右滑动转向（手指不挡车）<br>手指在区域内上半 = 高速 400 km/h<br>碰到绿色加油车回满油 · 到终点加时进下一段</div>
   <button class="pri" id="overRetry">再来一次</button>
 </div></div>
 
@@ -133,6 +133,7 @@
   let ROAD_L = 39, ROAD_R = 303, LANE_W = 66;
   let CAR_W = 29, CAR_H = 50;
   let HUD_H = 64, BOTTOM_BAND = 46, BAND_W = 35;
+  let TOUCH_TOP = 441;                 // ★ 底部触控区上边界：始终在玩家车下方（手指不挡视线）
   const LANES = 4;
   const laneX = i => ROAD_L + LANE_W * (i + 0.5);
   function refit(){
@@ -147,12 +148,13 @@
     HUD_H = Math.max(54, Math.round(H * 0.115));
     BOTTOM_BAND = Math.max(40, Math.round(H * 0.082));
     BAND_W = Math.max(26, Math.min(60, ROAD_L - 8));
-    PY = H - BOTTOM_BAND - CAR_H * 1.6;
-    layoutButtons();
+    PY = H - BOTTOM_BAND - CAR_H * 2.2;              // 车抬高，给底部触控区腾地方
+    TOUCH_TOP = Math.round(PY + CAR_H / 2 + 12);     // ★ 触控区起点 = 车身下缘再留 12
   }
   const V_BASE = 180, V_MAX = 320, KMH = 1.25;   // 320×1.25 = 400 km/h（对齐资料里的 400）
   const ACC = 300, DEC = 560;                    // 提速/回落速率（两档手感）
-  const STEER = 196;                             // 横向速度
+  const STEER = 196;                             // 键盘横向速度
+  const FOLLOW = 620;                            // ★ 滑屏跟手的最大横向速度（66 宽车道约 0.11s 到位）
   const FUEL_RATE = 0.0115;                      // 每秒耗油（按速度加权）
   const STAGE_LEN = 3600;                        // 每段距离
   const TIME_START = 55, TIME_BONUS = 32;        // 初始倒计时 / 过关加时
@@ -186,12 +188,32 @@
     playerLite: '#7fa8ff',
     glass:      '#cfeaff',
     tire:       '#1a1c20',
-    traffic:    ['#f2842b', '#f2c53d', '#f6f7f9', '#4fbf6a', '#9a63d8', '#e8629b'],
     truckBox:   '#e8ecf2',
+    sportsLite: '#ffe89a',
+    weaver:     '#f2842b',
+    weaverLite: '#ffb066',
+    signal:     '#ffb300',   // 变道车转向灯（琥珀）
+    cab:        '#3b7dd8',   // 卡车驾驶室
     fuelCar:    '#3fbf5a',   // 加油车（本作自定的绿车，游戏机制需要）
     cone:       '#f2842b',
     barrel:     '#eef1f6',
   };
+
+  /* ---------- ★ 敌人分型表（外观分类 + 固定属性 + 固定行为） ----------
+   * 一个车型 = 一种颜色 + 一种尺寸 + 一个固定速度 + 一种行为。
+   * 玩家看颜色/大小就知道它多快、会不会变道，不必靠反应赌运气。
+   *   v：逻辑单位/秒（显示 km/h = v × 1.25）
+   *   wf/hf：相对标准车身的宽/高倍率
+   *   signal：变道前先亮灯的秒数（0 = 绝不变道）—— "可预判"的关键
+   * -------------------------------------------------------------------- */
+  const ENEMY = {
+    truck:  { name:'卡车',   color:'#e8ecf2', lite:'#ffffff', wf:1.17, hf:1.50, v:88,  signal:0,   label:'最慢 · 不变道 · 货箱大' },
+    sedan:  { name:'轿车',   color:'#9a63d8', lite:'#c9a6f2', wf:1.00, hf:1.00, v:150, signal:0,   label:'中速 · 不变道' },
+    sports: { name:'跑车',   color:'#f2c53d', lite:'#ffe89a', wf:1.00, hf:0.87, v:208, signal:0,   label:'最快 · 低矮 · 会跑掉' },
+    weaver: { name:'变道车', color:'#f2842b', lite:'#ffb066', wf:1.00, hf:1.00, v:132, signal:0.7, label:'★ 先亮琥珀转向灯再变道' },
+  };
+  const FUEL_V = 100;                    // 加油车固定速度
+  const SIGNAL_T = 0.7;                  // 变道车亮灯时长（秒）
   /* ---------- 状态 ---------- */
   let state = 'ready';        // ready | play | over
   let spawnOff = false;       // 测试钩子：关掉刷车（测速/测转向时排除交通干扰）
@@ -219,7 +241,8 @@
     seedRng = mulberry32(fieldSeed);
     player = { x: laneX(1), v: V_BASE, y: 0, invuln: 0, crashT: 0 };
     objs = [];
-    input = { left: false, right: false, gas: false };
+    input = { left: false, right: false, gas: false, touchGas: false, touching: false, targetX: null };
+    active.clear();
     fuel = 1; timeLeft = TIME_START; hp = HP_START;
     stage = 1; distance = 0; passed = 0;
     stageStartY = 0; nextRowY = 900; nextFuelY = 1900;
@@ -235,36 +258,44 @@
   }
 
   /* ---------- 交通生成（★ 公平性：每排必留至少一条空车道） ---------- */
+  /** 按难度加权选车型：越往后跑车/变道车越多、卡车越少（可预判的难度曲线） */
+  function pickType(diff){
+    const w = { truck: 22 - 10 * diff, sedan: 38 - 8 * diff, sports: 20 + 10 * diff, weaver: 20 + 8 * diff };
+    let total = 0; for(const k in w) total += w[k];
+    let r = rng() * total;
+    for(const k in w){ r -= w[k]; if(r <= 0) return k; }
+    return 'sedan';
+  }
   function spawnRow(y, easy){
     const diff = clamp((stage - 1) * 0.18 + distance / 26000, 0, 1);
     const lanes = [0, 1, 2, 3];
-    // 洗牌
     for(let i = lanes.length - 1; i > 0; i--){ const j = Math.floor(rng() * (i + 1)); const t = lanes[i]; lanes[i] = lanes[j]; lanes[j] = t; }
-    // 每排最多占 LANES-1 条，保证必有空道可过
     const maxOcc = easy ? 1 : (rng() < 0.35 + 0.4 * diff ? 2 : 1);
     const n = Math.min(maxOcc, LANES - 1);
     for(let k = 0; k < n; k++){
       const lane = lanes[k];
-      const r = rng();
-      if(r < 0.18 + 0.18 * diff){                      // 施工障碍（静止）
+      if(rng() < 0.18 + 0.18 * diff){                  // 施工障碍（固定：静止、绝不变道）
         objs.push({ id: nextObjId++, kind: rng() < 0.5 ? 'cone' : 'barrel', lane, x: laneX(lane), y,
-                    v: 0, w: 22, h: 26, dead: false, changeT: 0 });
+                    v: 0, w: Math.max(14, Math.round(CAR_W * 0.74)), h: Math.max(20, Math.round(CAR_H * 0.52)),
+                    dead: false, changeT: 0, signal: 0, signalSide: 0, drift: 0, targetX: laneX(lane) });
       }else{
-        const truck = rng() < 0.28;
-        const changer = rng() < 0.16 + 0.22 * diff;     // ★「冷不丁变道」的车
-        objs.push({ id: nextObjId++, kind: truck ? 'truck' : 'car', lane, x: laneX(lane), y,
-                    v: 55 + rng() * (truck ? 45 : 85),
-                    w: truck ? Math.round(CAR_W * 1.17) : CAR_W, h: truck ? Math.round(CAR_H * 1.5) : CAR_H,
-                    color: PALETTE.traffic[(rng() * PALETTE.traffic.length) | 0],
-                    dead: false, changeT: (changer && !truck) ? 0.8 + rng() * 1.6 : 0,
-                    laneT: lane, targetX: laneX(lane), drift: 0 });
+        const ty = easy ? 'truck' : pickType(diff);    // 开局只放最慢的卡车，教学用
+        const E = ENEMY[ty];
+        objs.push({
+          id: nextObjId++, kind: ty, lane, x: laneX(lane), y,
+          v: E.v,                                      // ★ 固定速度：同类车永远一样快
+          w: Math.round(CAR_W * E.wf), h: Math.round(CAR_H * E.hf),
+          dead: false, signal: 0, signalSide: 0, drift: 0, targetX: laneX(lane),
+          changeT: E.signal ? 1.2 + rng() * 2.4 : 0,    // ★ 只有变道车有变道计时
+        });
       }
     }
   }
   function spawnFuel(y){
     const lane = (rng() * LANES) | 0;
-    objs.push({ id: nextObjId++, kind: 'fuel', lane, x: laneX(lane), y, v: 70 + rng() * 30,
-                w: Math.round(CAR_W * 1.17), h: Math.round(CAR_H * 1.46), dead: false, changeT: 0 });
+    objs.push({ id: nextObjId++, kind: 'fuel', lane, x: laneX(lane), y, v: FUEL_V,   // ★ 固定速度
+                w: Math.round(CAR_W * 1.17), h: Math.round(CAR_H * 1.46),
+                dead: false, changeT: 0, signal: 0, signalSide: 0, drift: 0, targetX: laneX(lane) });
   }
   function refill(){
     const ahead = player.y + H + 420;
@@ -367,63 +398,59 @@
   /* ============================================================
      输入：左下 左右按钮 · 右下 油门（触屏 / 鼠标 / 键盘）
      ============================================================ */
-  const BTN = {
-    L: { x: 16,        y: 0, r: 30 },   // 这些坐标在 layoutButtons() 里按 H 算
-    R: { x: 84,        y: 0, r: 30 },
-    G: { x: W - 62,    y: 0, r: 34 },
-  };
-  function layoutButtons(){
-    const by = H - Math.round(H * 0.104);
-    const r1 = clamp(Math.round(W * 0.078), 22, 32), r2 = clamp(Math.round(W * 0.09), 26, 38);
-    BTN.L.x = 12 + r1; BTN.L.y = by;   BTN.L.r = r1;
-    BTN.R.x = BTN.L.x + r1 * 2 + 10;   BTN.R.y = by;   BTN.R.r = r1;
-    BTN.G.x = W - 12 - r2; BTN.G.y = by - 4; BTN.G.r = r2;
-    // 中间 36%~78% 留空放 RACING CAR 牌
+  /* ============================================================
+     输入：★ 底部触控区滑动操控（不用虚拟按键）
+       · 左右滑动 = 车横向跟随手指（判定区是底部整条，不是车身 —— 手指不挡车）
+       · 触控区上半 = 高速档，下半 = 常规档（松手回常规）
+       · 触控区之外（画面中部）的触摸不参与操控，避免误触挡视线
+     事件用 Pointer Events 统一处理（Android Chrome/WebView 全支持），
+     顺便修掉旧代码两处脆弱点：TouchList 用 for...of 遍历、多指 id 互相覆盖。
+     键盘（← → ↑/空格）保留给桌面调试。
+     ============================================================ */
+  const active = new Map();            // 触点 id → { x, y }（逻辑坐标）
+  function applyTouch(){
+    let first = null;
+    for(const v of active.values()){ first = v; break; }   // 单指滑动为主，多指取最先按下的
+    if(!first){ input.touching = false; input.touchGas = false; input.targetX = null; return; }
+    input.touching = true;
+    input.targetX = clamp(first.x, ROAD_L - 20, ROAD_R + 20);
+    input.touchGas = first.y < (TOUCH_TOP + H) / 2;        // 上半 = 高速
   }
-  function inBtn(b, x, y){
-    const dx = x - b.x, dy = y - b.y;
-    return dx * dx + dy * dy <= (b.r + 10) * (b.r + 10);
-  }
-  const touches = new Map();          // id → 按钮名
-  function pointFromEvent(e){
+  function onPoint(kind, id, cx, cy){
     const r = cv.getBoundingClientRect();
-    return { x: (e.clientX - r.left) / (r.width / W), y: (e.clientY - r.top) / (r.height / H) };
-  }
-  function hitWhich(x, y){
-    if(inBtn(BTN.L, x, y)) return 'L';
-    if(inBtn(BTN.R, x, y)) return 'R';
-    if(inBtn(BTN.G, x, y)) return 'G';
-    return null;
-  }
-  function applyInput(){
-    input.left = false; input.right = false; input.gas = false;
-    for(const v of touches.values()){
-      if(v === 'L') input.left = true;
-      else if(v === 'R') input.right = true;
-      else if(v === 'G') input.gas = true;
+    if(!r.width || !r.height) return;
+    const x = (cx - r.left) / (r.width / W);
+    const y = (cy - r.top) / (r.height / H);
+    if(kind === 'down'){
+      if(y < TOUCH_TOP) return;                 // 只在底部触控区生效
+      if(hintOn) hintOn = false;
+      audio();
+      active.set(id, { x, y });
+      applyTouch();
+    }else if(kind === 'move'){
+      if(!active.has(id)) return;
+      active.set(id, { x, y });
+      applyTouch();
+    }else{
+      if(active.delete(id)) applyTouch();
     }
   }
-  function onDown(e){
-    if(state === 'over') return;
-    if(hintOn) hintOn = false;
-    audio();
-    const p = pointFromEvent(e);
-    const which = hitWhich(p.x, p.y);
-    if(which){
-      e.preventDefault();
-      touches.set(e.pointerId !== undefined ? e.pointerId : 'm', which);
-      applyInput();
-    }
+  function bindPointer(){
+    cv.addEventListener('pointerdown', e => { e.preventDefault(); onPoint('down', e.pointerId, e.clientX, e.clientY); }, { passive:false });
+    cv.addEventListener('pointermove', e => { if(active.has(e.pointerId)) e.preventDefault(); onPoint('move', e.pointerId, e.clientX, e.clientY); }, { passive:false });
+    cv.addEventListener('pointerup', e => onPoint('up', e.pointerId, e.clientX, e.clientY));
+    cv.addEventListener('pointercancel', e => onPoint('up', e.pointerId, e.clientX, e.clientY));
+    // 兜底：老 WebView 没有 PointerEvent 时用 Touch 事件（★ 索引遍历，不依赖 TouchList 可迭代）
+    cv.addEventListener('touchstart', e => { e.preventDefault(); for(let i = 0; i < e.changedTouches.length; i++){ const q = e.changedTouches[i]; onPoint('down', q.identifier, q.clientX, q.clientY); } }, { passive:false });
+    cv.addEventListener('touchmove',  e => { e.preventDefault(); for(let i = 0; i < e.changedTouches.length; i++){ const q = e.changedTouches[i]; onPoint('move', q.identifier, q.clientX, q.clientY); } }, { passive:false });
+    cv.addEventListener('touchend',   e => { e.preventDefault(); for(let i = 0; i < e.changedTouches.length; i++){ const q = e.changedTouches[i]; onPoint('up', q.identifier, q.clientX, q.clientY); } }, { passive:false });
+    cv.addEventListener('touchcancel', e => { for(let i = 0; i < e.changedTouches.length; i++){ const q = e.changedTouches[i]; onPoint('up', q.identifier, q.clientX, q.clientY); } }, { passive:true });
+    cv.addEventListener('mousedown', e => { e.preventDefault(); onPoint('down', 'mouse', e.clientX, e.clientY); });
+    window.addEventListener('mousemove', e => onPoint('move', 'mouse', e.clientX, e.clientY));
+    window.addEventListener('mouseup', e => onPoint('up', 'mouse', e.clientX, e.clientY));
   }
-  function onUp(e){
-    const id = e.pointerId !== undefined ? e.pointerId : 'm';
-    if(touches.delete(id)) applyInput();
-  }
-  cv.addEventListener('touchstart', e => { e.preventDefault(); for(const t of e.changedTouches) onDown(t); }, { passive:false });
-  cv.addEventListener('touchend',   e => { e.preventDefault(); for(const t of e.changedTouches) onUp(t); },   { passive:false });
-  cv.addEventListener('touchcancel', e => { for(const t of e.changedTouches) onUp(t); }, { passive:true });
-  cv.addEventListener('mousedown', e => { e.preventDefault(); onDown(e); });
-  window.addEventListener('mouseup', e => onUp(e));
+  bindPointer();
+
   // 键盘（桌面调试）
   document.addEventListener('keydown', e => {
     if(e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A'){ input.left = true; if(hintOn) hintOn = false; }
@@ -453,7 +480,8 @@
 
     /* ---- 速度（两档 + 脱路 + 油尽） ---- */
     const offRoad = player.x < ROAD_L || player.x > ROAD_R;
-    let tv = input.gas ? V_MAX : V_BASE;
+    const gasOn = input.gas || (input.touching && input.touchGas);   // 键盘油门 / 触控区上半
+    let tv = gasOn ? V_MAX : V_BASE;
     if(offRoad) tv = Math.min(tv, V_BASE * 0.6);
     if(fuel <= 0) tv = Math.min(tv, 46);
     const prevV = player.v;
@@ -470,8 +498,13 @@
     if(player.invuln > 0) player.invuln = Math.max(0, player.invuln - dt);
 
     /* ---- 转向 ---- */
-    const steer = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-    if(steer) player.x += steer * STEER * dt;
+    if(input.touching && input.targetX !== null){
+      // ★ 滑屏操控：车快速跟随手指横向位置（不是瞬移，保留"车"的手感）
+      player.x += clamp(input.targetX - player.x, -FOLLOW * dt, FOLLOW * dt);
+    }else{
+      const steer = (input.right ? 1 : 0) - (input.left ? 1 : 0);   // 键盘
+      if(steer) player.x += steer * STEER * dt;
+    }
     player.x = clamp(player.x, ROAD_L - 20, ROAD_R + 20);
 
     /* ---- 燃油 / 倒计时 ---- */
@@ -488,18 +521,31 @@
     for(const o of objs){
       if(o.dead) continue;
       o.y += o.v * dt;
-      if(o.changeT > 0){
-        o.changeT -= dt;
-        if(o.changeT <= 0 && o.kind !== 'truck'){
-          const cand = [o.lane - 1, o.lane + 1].filter(l => l >= 0 && l < LANES && !objs.some(q => !q.dead && q !== o && q.lane === l && Math.abs(q.y - o.y) < 140));
-          if(cand.length){
-            const nl = cand[(rng() * cand.length) | 0];
-            o.lane = nl; o.targetX = laneX(nl); o.changeT = 0; o.drift = 1;
-          }else o.changeT = 0.6;
+      // ★ 只有变道车会变道，且必须「先亮灯 SIGNAL_T 秒」——玩家看得见就能预判
+      if(o.kind === 'weaver'){
+        if(o.signal > 0){                              // 亮灯预告中
+          o.signal -= dt;
+          if(o.signal <= 0) o.drift = 1;               // 灯灭即开始横向移动
+        }else if(o.drift <= 0 && o.changeT > 0){
+          o.changeT -= dt;
+          if(o.changeT <= 0){
+            const cand = [o.lane - 1, o.lane + 1].filter(l => l >= 0 && l < LANES &&
+              !objs.some(q => !q.dead && q !== o && q.lane === l && Math.abs(q.y - o.y) < 150));
+            if(cand.length){
+              const nl = cand[(rng() * cand.length) | 0];
+              o.signalSide = nl > o.lane ? 1 : -1;     // 灯打向哪边
+              o.lane = nl; o.targetX = laneX(nl);
+              o.signal = SIGNAL_T;                     // ★ 先亮灯，0.7 秒后才动
+            }else o.changeT = 0.6;
+          }
         }
-      }else if(o.drift > 0){                        // 变道过程（横向平移）
+      }
+      if(o.drift > 0){                               // 变道过程（横向平移）
         o.x += clamp(o.targetX - o.x, -110 * dt, 110 * dt);
-        if(Math.abs(o.targetX - o.x) < 1.5){ o.x = o.targetX; o.drift = 0; }
+        if(Math.abs(o.targetX - o.x) < 1.5){
+          o.x = o.targetX; o.drift = 0; o.signalSide = 0;
+          o.changeT = 2.6 + rng() * 3.4;             // 之后还可能再变一次
+        }
       }
       // 超越计数
       if(!o.counted && o.y < player.y - 30){ o.counted = true; passed++; }
@@ -615,8 +661,12 @@
       const kind = ((n % 3) + 3) % 3;
       for(const side of [0, 1]){
         const bw = BAND_W;
-        const bx = side ? ROAD_R + 6 : ROAD_L - 6 - bw;
-        if(kind === 0){
+        const outer = side ? (W - ROAD_R - 6) : (ROAD_L - 6);       // 该侧可用宽度
+        const nTiles = Math.min(4, Math.max(1, Math.ceil(outer / bw)));   // 最多 4 块，别铺成花被子
+        for(let k = 0; k < nTiles; k++){
+        const bx = side ? ROAD_R + 6 + k * bw : ROAD_L - 6 - bw - k * bw;
+        const kk = ((n + k * 2) % 3 + 3) % 3;                       // 相邻块换款式，像城市街区
+        if(kk === 0){
           // 树丛
           ctx.fillStyle = PALETTE.trunk;
           ctx.fillRect(bx + (side ? 14 : 26), sy + 50, 5, 30);
@@ -626,7 +676,7 @@
           ctx.beginPath(); ctx.arc(bx + (side ? 24 : 20), sy + 33, 16, 0, 7); ctx.fill();
           ctx.fillStyle = 'rgba(255,255,255,.18)';
           ctx.beginPath(); ctx.arc(bx + (side ? 28 : 16), sy + 27, 7, 0, 7); ctx.fill();
-        }else if(kind === 1){
+        }else if(kk === 1){
           // 橙白施工条纹围栏（照片里那种斜纹板）
           for(let i = 0; i < 5; i++){
             ctx.fillStyle = (i % 2 === 0) ? PALETTE.stripeA : PALETTE.stripeB;
@@ -636,7 +686,7 @@
           ctx.fillRect(bx, sy, bw, 3);
         }else{
           // 彩色楼房 + 亮窗
-          ctx.fillStyle = side ? PALETTE.buildB : PALETTE.buildA;
+          ctx.fillStyle = (side ? PALETTE.buildB : PALETTE.buildA);
           ctx.fillRect(bx, sy, bw, tile);
           ctx.fillStyle = PALETTE.buildWin;
           for(let r = 0; r < 3; r++) for(let c = 0; c < 2; c++)
@@ -645,6 +695,7 @@
           ctx.fillRect(bx, sy, bw, 4);
           ctx.fillStyle = 'rgba(0,0,0,.18)';
           ctx.fillRect(bx, sy + tile - 4, bw, 4);
+        }
         }
       }
     }
@@ -697,12 +748,27 @@
       ctx.fillStyle = lite;
       roundRect(cx - w * 0.44, cy - h * 0.52, w * 0.88, h * 0.08, 2); ctx.fill();
     }
-    if(o.truck){                                 // 卡车货箱
+    if(o.truck){                                 // 卡车：白货箱 + 蓝驾驶室（一眼区分慢车）
       ctx.fillStyle = PALETTE.truckBox;
       roundRect(cx - w * 0.46, cy - h * 0.42, w * 0.92, h * 0.62, 3); ctx.fill();
       ctx.strokeStyle = 'rgba(30,36,44,.4)';
       roundRect(cx - w * 0.46, cy - h * 0.42, w * 0.92, h * 0.62, 3); ctx.stroke();
+      ctx.fillStyle = PALETTE.cab;
+      roundRect(cx - w * 0.46, cy + h * 0.20, w * 0.92, h * 0.20, 3); ctx.fill();
     }
+  }
+
+  /** 变道车的转向灯：琥珀箭头，闪烁，指向即将变过去的一侧 */
+  function drawSignal(cx, cy, w, h, side){
+    if(!side || Math.floor(tGlobal * 7) % 2) return;      // 闪烁
+    const sx = cx + side * (w * 0.52), sy2 = cy - h * 0.26;
+    ctx.fillStyle = PALETTE.signal;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy2);
+    ctx.lineTo(sx + side * 10, sy2 + 7);
+    ctx.lineTo(sx, sy2 + 14);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(70,35,0,.65)'; ctx.lineWidth = 1.2; ctx.stroke();
   }
 
   function drawObjects(){
@@ -736,8 +802,13 @@
         ctx.quadraticCurveTo(o.x + 8, sy - 6, o.x, sy - 1);
         ctx.quadraticCurveTo(o.x - 8, sy - 6, o.x, sy - 16);
         ctx.fill();
+      }else if(o.kind === 'weaver'){
+        const E2 = ENEMY.weaver;
+        drawCarShape(o.x, sy, o.w, o.h, E2.color, E2.lite, { toy: true });
+        if(o.signal > 0 || o.drift > 0) drawSignal(o.x, sy, o.w, o.h, o.signalSide);
       }else{
-        drawCarShape(o.x, sy, o.w, o.h, o.color, 'rgba(255,255,255,.45)', { truck: o.kind === 'truck', toy: true });
+        const E2 = ENEMY[o.kind] || ENEMY.sedan;
+        drawCarShape(o.x, sy, o.w, o.h, E2.color, E2.lite, { truck: o.kind === 'truck', toy: true });
       }
     }
   }
@@ -896,8 +967,7 @@
 
     // 底部「RACING CAR」镭射牌（照照片那张贴纸）
     const bw2 = Math.min(100, Math.round(W * 0.29)), bh2 = 26;
-    const gapL = BTN.R.x + BTN.R.r, gapR = BTN.G.x - BTN.G.r;      // 两簇按钮之间的空档
-    const bx2 = clamp(W / 2 - bw2 / 2, gapL + 6, gapR - bw2 - 6), by2 = H - BOTTOM_BAND + 10;
+    const bx2 = (W - bw2) / 2, by2 = H - BOTTOM_BAND + 10;         // 虚拟按键已去掉，牌直接底部居中
     const g2 = ctx.createLinearGradient(bx2, by2, bx2 + bw2, by2 + bh2);
     g2.addColorStop(0, '#2b3fa8'); g2.addColorStop(0.5, '#6678e0'); g2.addColorStop(1, '#2b3fa8');
     ctx.fillStyle = g2;
@@ -913,47 +983,65 @@
   }
 
   /* ---------- 触控按钮 ---------- */
-  function drawButtons(){
-    const draw = (b, label, active, color) => {
-      ctx.globalAlpha = active ? 0.95 : 0.6;
-      const g = ctx.createRadialGradient(b.x - b.r * 0.3, b.y - b.r * 0.3, 2, b.x, b.y, b.r);
-      g.addColorStop(0, color.lite); g.addColorStop(1, color.main);
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill();
-      ctx.strokeStyle = 'rgba(10,14,20,.55)'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.stroke();
-      ctx.fillStyle = '#fff';
-      ctx.font = '800 ' + (label.length > 1 ? 15 : 26) + 'px ' + FONT;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(label, b.x, b.y + 1);
-      ctx.textBaseline = 'alphabetic';
-      ctx.globalAlpha = 1;
-    };
-    draw(BTN.L, '◀', input.left,  { main: PALETTE.grip, lite: PALETTE.gripLite });
-    draw(BTN.R, '▶', input.right, { main: PALETTE.grip, lite: PALETTE.gripLite });
-    draw(BTN.G, input.gas ? '高速' : '油门', input.gas,
-         { main: input.gas ? '#e0342b' : PALETTE.grip, lite: input.gas ? '#ff8a7a' : PALETTE.gripLite });
-    ctx.textAlign = 'left';
+  function drawTouchZone(){
+    const zt = TOUCH_TOP, zb = H, mid = (zt + zb) / 2;
+    const g = ctx.createLinearGradient(0, zt, 0, zb);
+    g.addColorStop(0, 'rgba(10,14,24,.62)');
+    g.addColorStop(1, 'rgba(10,14,24,.88)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, zt, W, zb - zt);
+    ctx.fillStyle = 'rgba(255,255,255,.34)';
+    ctx.fillRect(0, zt, W, 1.5);
+    ctx.strokeStyle = 'rgba(255,255,255,.22)';
+    ctx.setLineDash([7, 7]); ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(10, mid); ctx.lineTo(W - 10, mid); ctx.stroke();
+    ctx.setLineDash([]);
+    const hi = input.touching && input.touchGas;
+    ctx.textAlign = 'left'; ctx.font = '700 11px ' + FONT;
+    ctx.fillStyle = hi ? '#7dffa0' : 'rgba(214,228,244,.5)';
+    ctx.fillText('高速', 12, mid - 7);
+    ctx.fillStyle = (input.touching && !hi) ? '#ffd166' : 'rgba(214,228,244,.5)';
+    ctx.fillText('常规', 12, mid + 17);
+    if(input.touching){
+      const kx = clamp(input.targetX, 16, W - 16);
+      ctx.strokeStyle = 'rgba(255,209,102,.55)'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(kx, zt + 3); ctx.lineTo(kx, zb - 3); ctx.stroke();
+      ctx.fillStyle = '#ffd166';
+      ctx.beginPath(); ctx.arc(kx, mid, 8, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(kx, mid, 8, 0, 7); ctx.stroke();
+    }else{
+      ctx.fillStyle = 'rgba(232,240,250,.72)'; ctx.font = '700 12px ' + FONT;
+      ctx.textAlign = 'right';
+      ctx.fillText('在这条区域按住左右滑动 →', W - 12, mid + 4);
+      ctx.textAlign = 'left';
+    }
   }
-
   function drawHint(){
     const cy = H * 0.42;
     const hw = Math.min(126, (W - 20) / 2);
     ctx.save();
     ctx.fillStyle = 'rgba(255,247,238,.96)';
     ctx.strokeStyle = PALETTE.frame; ctx.lineWidth = 2.5;
-    roundRect(W / 2 - hw, cy - 66, hw * 2, 150, 14); ctx.fill(); ctx.stroke();
+    roundRect(W / 2 - hw, cy - 66, hw * 2, 176, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = PALETTE.grip; ctx.font = '800 22px ' + FONT;
     ctx.fillText('火箭车', W / 2, cy - 38);
     ctx.fillStyle = '#2b3a4a'; ctx.font = '700 12px ' + FONT;
-    ctx.fillText('左下 ◀ ▶ 转向', W / 2, cy - 12);
-    ctx.fillText('右下「油门」按住冲高速', W / 2, cy + 8);
+    ctx.fillText('底部区域按住，左右滑动转向', W / 2, cy - 12);
+    ctx.fillText('手指在上半 = 高速 400', W / 2, cy + 6);
+    // 车型图例（★ 让玩家"看懂再玩"）
+    ctx.strokeStyle = 'rgba(242,130,32,.35)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(W / 2 - hw + 16, cy + 18); ctx.lineTo(W / 2 + hw - 16, cy + 18); ctx.stroke();
     ctx.fillStyle = '#5c7186'; ctx.font = '11px ' + FONT;
-    ctx.fillText('躲开前方车辆与施工障碍', W / 2, cy + 30);
-    ctx.fillText('碰绿色加油车回满油 · 到终点加时', W / 2, cy + 48);
+    ctx.fillText('卡车最慢 · 轿车中速 · 跑车最快会跑掉', W / 2, cy + 36);
+    ctx.fillStyle = '#c05f0d'; ctx.font = '700 11px ' + FONT;
+    ctx.fillText('★ 橙色车亮琥珀灯 = 即将变道', W / 2, cy + 54);
+    ctx.fillStyle = '#5c7186'; ctx.font = '11px ' + FONT;
+    ctx.fillText('按颜色认车 → 提前预判', W / 2, cy + 72);
+    ctx.fillText('绿车加油 · 到终点加时进下一段', W / 2, cy + 90);
     ctx.fillStyle = '#c0392b'; ctx.font = '700 11px ' + FONT;
-    ctx.fillText('自动前进 —— 时间到 / 撞光三条命即结束', W / 2, cy + 68);
+    ctx.fillText('时间到 / 撞光三条命即结束', W / 2, cy + 110);
     ctx.restore();
     ctx.textAlign = 'left';
   }
@@ -973,9 +1061,9 @@
     drawPlayer();
     drawEffects();
     ctx.restore();
+    drawTouchZone();
     drawFrame();
     drawDash();
-    drawButtons();
     if(hintOn && state === 'play') drawHint();
   }
 
@@ -1049,11 +1137,18 @@
       '页面总高=' + document.documentElement.scrollHeight + '/' + window.innerHeight,
       '状态=' + state + ' 原因=' + (reason || '—') + ' 段=' + stage + ' 命=' + hp,
       '速度=' + Math.round(player ? player.v : 0) + '（' + Math.round((player ? player.v : 0) * KMH) + 'km/h） 车速比=' +
-        (player ? (player.v / V_MAX).toFixed(2) : '—') + ' 油门=' + (input && input.gas ? '按' : '松'),
+        (player ? (player.v / V_MAX).toFixed(2) : '—') + ' 档位=' +
+        ((input.gas || (input.touching && input.touchGas)) ? '高速' : '常规') + (input.gas ? '(键盘)' : ''),
+      '触控区=' + TOUCH_TOP + '..' + Math.round(H) + '（车底缘 ' + Math.round(PY + CAR_H / 2) + '，★ 在车下方）' +
+        ' 触控中=' + (input.touching ? '是' : '否') + ' 触点数=' + active.size +
+        ' 目标x=' + (input.targetX === null ? '—' : input.targetX.toFixed(0)),
       '横向x=' + (player ? player.x.toFixed(0) : '—') + '（路面 ' + ROAD_L + '~' + ROAD_R + '，车道宽 ' + LANE_W.toFixed(0) + '）',
       '距离=' + Math.floor(distance) + '米 本段进度=' + (player ? ((player.y - stageStartY) / STAGE_LEN * 100).toFixed(0) : '0') + '%',
       '油=' + Math.round(fuel * 100) + '%  时间=' + timeLeft.toFixed(1) + 's  超越=' + passed + '  场上对象=' + (objs ? objs.length : 0),
-      '输入=' + JSON.stringify(input) + '  触点数=' + touches.size + '  种子=' + fieldSeed,
+      '场上车型=' + (objs ? (['truck','sedan','sports','weaver','fuel','cone','barrel']
+        .map(k => { const n = objs.filter(o => !o.dead && o.kind === k).length; return n ? (ENEMY[k] ? ENEMY[k].name : k) + n : null; })
+        .filter(Boolean).join(' ') || '—') : '—'),
+      '输入=' + JSON.stringify(input) + '  种子=' + fieldSeed,
       '音效=' + (soundOn ? '开' : '关') + ' 引擎=' + (engineOsc ? '响' : '停'),
       'UA=' + navigator.userAgent,
     ].join('\n');
@@ -1103,24 +1198,38 @@
   if(!raf) raf = requestAnimationFrame(frame);
 
   /* ---------- 测试钩子 ---------- */
+  // ★ 教训：删 UI 元素后必须 grep 其常量（BTN 曾被 RACING CAR 牌定位残留引用，
+  //   每帧 ReferenceError，而 Node 测试不跑 draw() 所以漏了 —— 现已加绘制冒烟测试）
   window.__racer = () => ({
     state, reason, hp, stage, distance, passed, fuel, timeLeft,
     player: { x: player.x, y: player.y, v: player.v, invuln: player.invuln },
-    PY, W, H, HUD_H, HFIX, BOTTOM_BAND, ROAD_L, ROAD_R, LANES, LANE_W,
+    PY, W, H, HUD_H, HFIX, BOTTOM_BAND, TOUCH_TOP, FOLLOW, ROAD_L, ROAD_R, LANES, LANE_W,
     V_BASE, V_MAX, KMH, STAGE_LEN, TIME_START, TIME_BONUS, HP_START, FUEL_RATE,
     CAR_W, CAR_H,
-    objs: objs.map(o => ({ id:o.id, kind:o.kind, lane:o.lane, x:o.x, y:o.y, v:o.v, w:o.w, h:o.h, dead:o.dead, drift:o.drift, changeT:o.changeT, targetX:o.targetX })),
-    input: Object.assign({}, input),
+    objs: objs.map(o => ({ id:o.id, kind:o.kind, lane:o.lane, x:o.x, y:o.y, v:o.v, w:o.w, h:o.h,
+                           dead:o.dead, drift:o.drift, changeT:o.changeT, targetX:o.targetX,
+                           signal:o.signal, signalSide:o.signalSide })),
+    input: Object.assign({}, input, { gasOn: input.gas || (input.touching && input.touchGas) }),
     best, hintOn, fieldSeed, soundOn, engine: !!engineOsc,
   });
   window.__racerStep = dt => step(dt);
+  window.__racerDraw = () => { draw(); return 'ok'; };   // 测试钩子：绘制冒烟
+  window.__racerLayout = () => { layout(); return 'ok'; };   // 测试钩子：重排
   window.__racerReset = seed => { engineStop(); reset(seed); };
   window.__racerInput = o => { if('left' in o) input.left = !!o.left; if('right' in o) input.right = !!o.right; if('gas' in o) input.gas = !!o.gas; };
   window.__racerSetPlayer = o => { if('x' in o) player.x = o.x; if('y' in o) player.y = o.y; if('v' in o) player.v = o.v; if('fuel' in o) fuel = o.fuel; if('timeLeft' in o) timeLeft = o.timeLeft; if('hp' in o) hp = o.hp; if('invuln' in o) player.invuln = o.invuln; };
   window.__racerClearObjs = () => { objs.length = 0; };
   window.__racerNoSpawn = v => { spawnOff = !!v; };   // 测试钩子
+  // 测试钩子：按逻辑坐标模拟触点（走真实的 pointer 换算路径）
+  window.__racerTouch = (kind, lx, ly, id) => {
+    const r = cv.getBoundingClientRect();
+    onPoint(kind, id === undefined ? 1 : id, r.left + lx * (r.width / W), r.top + ly * (r.height / H));
+    return { touching: input.touching, gasOn: input.gas || (input.touching && input.touchGas),
+             targetX: input.targetX, activeCount: active.size };
+  };
   window.__racerPutObj = o => { objs.push(Object.assign({ id: nextObjId++, v: 0, w: CAR_W, h: CAR_H, dead: false, changeT: 0, lane: 0, drift: 0 }, o)); };
   window.__racerConst = { V_BASE, V_MAX, KMH, LANE_W, ROAD_L, ROAD_R, CAR_W, CAR_H, STAGE_LEN };
+  window.__racerEnemy = () => JSON.parse(JSON.stringify(ENEMY));   // 分型表（测试对照用）
 })();
 </script>
 </body>

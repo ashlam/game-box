@@ -188,12 +188,32 @@
     playerLite: '#7fa8ff',
     glass:      '#cfeaff',
     tire:       '#1a1c20',
-    traffic:    ['#f2842b', '#f2c53d', '#f6f7f9', '#4fbf6a', '#9a63d8', '#e8629b'],
     truckBox:   '#e8ecf2',
+    sportsLite: '#ffe89a',
+    weaver:     '#f2842b',
+    weaverLite: '#ffb066',
+    signal:     '#ffb300',   // 变道车转向灯（琥珀）
+    cab:        '#3b7dd8',   // 卡车驾驶室
     fuelCar:    '#3fbf5a',   // 加油车（本作自定的绿车，游戏机制需要）
     cone:       '#f2842b',
     barrel:     '#eef1f6',
   };
+
+  /* ---------- ★ 敌人分型表（外观分类 + 固定属性 + 固定行为） ----------
+   * 一个车型 = 一种颜色 + 一种尺寸 + 一个固定速度 + 一种行为。
+   * 玩家看颜色/大小就知道它多快、会不会变道，不必靠反应赌运气。
+   *   v：逻辑单位/秒（显示 km/h = v × 1.25）
+   *   wf/hf：相对标准车身的宽/高倍率
+   *   signal：变道前先亮灯的秒数（0 = 绝不变道）—— "可预判"的关键
+   * -------------------------------------------------------------------- */
+  const ENEMY = {
+    truck:  { name:'卡车',   color:'#e8ecf2', lite:'#ffffff', wf:1.17, hf:1.50, v:88,  signal:0,   label:'最慢 · 不变道 · 货箱大' },
+    sedan:  { name:'轿车',   color:'#9a63d8', lite:'#c9a6f2', wf:1.00, hf:1.00, v:150, signal:0,   label:'中速 · 不变道' },
+    sports: { name:'跑车',   color:'#f2c53d', lite:'#ffe89a', wf:1.00, hf:0.87, v:208, signal:0,   label:'最快 · 低矮 · 会跑掉' },
+    weaver: { name:'变道车', color:'#f2842b', lite:'#ffb066', wf:1.00, hf:1.00, v:132, signal:0.7, label:'★ 先亮琥珀转向灯再变道' },
+  };
+  const FUEL_V = 100;                    // 加油车固定速度
+  const SIGNAL_T = 0.7;                  // 变道车亮灯时长（秒）
   /* ---------- 状态 ---------- */
   let state = 'ready';        // ready | play | over
   let spawnOff = false;       // 测试钩子：关掉刷车（测速/测转向时排除交通干扰）
@@ -238,36 +258,44 @@
   }
 
   /* ---------- 交通生成（★ 公平性：每排必留至少一条空车道） ---------- */
+  /** 按难度加权选车型：越往后跑车/变道车越多、卡车越少（可预判的难度曲线） */
+  function pickType(diff){
+    const w = { truck: 22 - 10 * diff, sedan: 38 - 8 * diff, sports: 20 + 10 * diff, weaver: 20 + 8 * diff };
+    let total = 0; for(const k in w) total += w[k];
+    let r = rng() * total;
+    for(const k in w){ r -= w[k]; if(r <= 0) return k; }
+    return 'sedan';
+  }
   function spawnRow(y, easy){
     const diff = clamp((stage - 1) * 0.18 + distance / 26000, 0, 1);
     const lanes = [0, 1, 2, 3];
-    // 洗牌
     for(let i = lanes.length - 1; i > 0; i--){ const j = Math.floor(rng() * (i + 1)); const t = lanes[i]; lanes[i] = lanes[j]; lanes[j] = t; }
-    // 每排最多占 LANES-1 条，保证必有空道可过
     const maxOcc = easy ? 1 : (rng() < 0.35 + 0.4 * diff ? 2 : 1);
     const n = Math.min(maxOcc, LANES - 1);
     for(let k = 0; k < n; k++){
       const lane = lanes[k];
-      const r = rng();
-      if(r < 0.18 + 0.18 * diff){                      // 施工障碍（静止）
+      if(rng() < 0.18 + 0.18 * diff){                  // 施工障碍（固定：静止、绝不变道）
         objs.push({ id: nextObjId++, kind: rng() < 0.5 ? 'cone' : 'barrel', lane, x: laneX(lane), y,
-                    v: 0, w: 22, h: 26, dead: false, changeT: 0 });
+                    v: 0, w: Math.max(14, Math.round(CAR_W * 0.74)), h: Math.max(20, Math.round(CAR_H * 0.52)),
+                    dead: false, changeT: 0, signal: 0, signalSide: 0, drift: 0, targetX: laneX(lane) });
       }else{
-        const truck = rng() < 0.28;
-        const changer = rng() < 0.16 + 0.22 * diff;     // ★「冷不丁变道」的车
-        objs.push({ id: nextObjId++, kind: truck ? 'truck' : 'car', lane, x: laneX(lane), y,
-                    v: 55 + rng() * (truck ? 45 : 85),
-                    w: truck ? Math.round(CAR_W * 1.17) : CAR_W, h: truck ? Math.round(CAR_H * 1.5) : CAR_H,
-                    color: PALETTE.traffic[(rng() * PALETTE.traffic.length) | 0],
-                    dead: false, changeT: (changer && !truck) ? 0.8 + rng() * 1.6 : 0,
-                    laneT: lane, targetX: laneX(lane), drift: 0 });
+        const ty = easy ? 'truck' : pickType(diff);    // 开局只放最慢的卡车，教学用
+        const E = ENEMY[ty];
+        objs.push({
+          id: nextObjId++, kind: ty, lane, x: laneX(lane), y,
+          v: E.v,                                      // ★ 固定速度：同类车永远一样快
+          w: Math.round(CAR_W * E.wf), h: Math.round(CAR_H * E.hf),
+          dead: false, signal: 0, signalSide: 0, drift: 0, targetX: laneX(lane),
+          changeT: E.signal ? 1.2 + rng() * 2.4 : 0,    // ★ 只有变道车有变道计时
+        });
       }
     }
   }
   function spawnFuel(y){
     const lane = (rng() * LANES) | 0;
-    objs.push({ id: nextObjId++, kind: 'fuel', lane, x: laneX(lane), y, v: 70 + rng() * 30,
-                w: Math.round(CAR_W * 1.17), h: Math.round(CAR_H * 1.46), dead: false, changeT: 0 });
+    objs.push({ id: nextObjId++, kind: 'fuel', lane, x: laneX(lane), y, v: FUEL_V,   // ★ 固定速度
+                w: Math.round(CAR_W * 1.17), h: Math.round(CAR_H * 1.46),
+                dead: false, changeT: 0, signal: 0, signalSide: 0, drift: 0, targetX: laneX(lane) });
   }
   function refill(){
     const ahead = player.y + H + 420;
@@ -493,18 +521,31 @@
     for(const o of objs){
       if(o.dead) continue;
       o.y += o.v * dt;
-      if(o.changeT > 0){
-        o.changeT -= dt;
-        if(o.changeT <= 0 && o.kind !== 'truck'){
-          const cand = [o.lane - 1, o.lane + 1].filter(l => l >= 0 && l < LANES && !objs.some(q => !q.dead && q !== o && q.lane === l && Math.abs(q.y - o.y) < 140));
-          if(cand.length){
-            const nl = cand[(rng() * cand.length) | 0];
-            o.lane = nl; o.targetX = laneX(nl); o.changeT = 0; o.drift = 1;
-          }else o.changeT = 0.6;
+      // ★ 只有变道车会变道，且必须「先亮灯 SIGNAL_T 秒」——玩家看得见就能预判
+      if(o.kind === 'weaver'){
+        if(o.signal > 0){                              // 亮灯预告中
+          o.signal -= dt;
+          if(o.signal <= 0) o.drift = 1;               // 灯灭即开始横向移动
+        }else if(o.drift <= 0 && o.changeT > 0){
+          o.changeT -= dt;
+          if(o.changeT <= 0){
+            const cand = [o.lane - 1, o.lane + 1].filter(l => l >= 0 && l < LANES &&
+              !objs.some(q => !q.dead && q !== o && q.lane === l && Math.abs(q.y - o.y) < 150));
+            if(cand.length){
+              const nl = cand[(rng() * cand.length) | 0];
+              o.signalSide = nl > o.lane ? 1 : -1;     // 灯打向哪边
+              o.lane = nl; o.targetX = laneX(nl);
+              o.signal = SIGNAL_T;                     // ★ 先亮灯，0.7 秒后才动
+            }else o.changeT = 0.6;
+          }
         }
-      }else if(o.drift > 0){                        // 变道过程（横向平移）
+      }
+      if(o.drift > 0){                               // 变道过程（横向平移）
         o.x += clamp(o.targetX - o.x, -110 * dt, 110 * dt);
-        if(Math.abs(o.targetX - o.x) < 1.5){ o.x = o.targetX; o.drift = 0; }
+        if(Math.abs(o.targetX - o.x) < 1.5){
+          o.x = o.targetX; o.drift = 0; o.signalSide = 0;
+          o.changeT = 2.6 + rng() * 3.4;             // 之后还可能再变一次
+        }
       }
       // 超越计数
       if(!o.counted && o.y < player.y - 30){ o.counted = true; passed++; }
@@ -621,7 +662,7 @@
       for(const side of [0, 1]){
         const bw = BAND_W;
         const outer = side ? (W - ROAD_R - 6) : (ROAD_L - 6);       // 该侧可用宽度
-        const nTiles = Math.max(1, Math.ceil(outer / bw));
+        const nTiles = Math.min(4, Math.max(1, Math.ceil(outer / bw)));   // 最多 4 块，别铺成花被子
         for(let k = 0; k < nTiles; k++){
         const bx = side ? ROAD_R + 6 + k * bw : ROAD_L - 6 - bw - k * bw;
         const kk = ((n + k * 2) % 3 + 3) % 3;                       // 相邻块换款式，像城市街区
@@ -707,12 +748,27 @@
       ctx.fillStyle = lite;
       roundRect(cx - w * 0.44, cy - h * 0.52, w * 0.88, h * 0.08, 2); ctx.fill();
     }
-    if(o.truck){                                 // 卡车货箱
+    if(o.truck){                                 // 卡车：白货箱 + 蓝驾驶室（一眼区分慢车）
       ctx.fillStyle = PALETTE.truckBox;
       roundRect(cx - w * 0.46, cy - h * 0.42, w * 0.92, h * 0.62, 3); ctx.fill();
       ctx.strokeStyle = 'rgba(30,36,44,.4)';
       roundRect(cx - w * 0.46, cy - h * 0.42, w * 0.92, h * 0.62, 3); ctx.stroke();
+      ctx.fillStyle = PALETTE.cab;
+      roundRect(cx - w * 0.46, cy + h * 0.20, w * 0.92, h * 0.20, 3); ctx.fill();
     }
+  }
+
+  /** 变道车的转向灯：琥珀箭头，闪烁，指向即将变过去的一侧 */
+  function drawSignal(cx, cy, w, h, side){
+    if(!side || Math.floor(tGlobal * 7) % 2) return;      // 闪烁
+    const sx = cx + side * (w * 0.52), sy2 = cy - h * 0.26;
+    ctx.fillStyle = PALETTE.signal;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy2);
+    ctx.lineTo(sx + side * 10, sy2 + 7);
+    ctx.lineTo(sx, sy2 + 14);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(70,35,0,.65)'; ctx.lineWidth = 1.2; ctx.stroke();
   }
 
   function drawObjects(){
@@ -746,8 +802,13 @@
         ctx.quadraticCurveTo(o.x + 8, sy - 6, o.x, sy - 1);
         ctx.quadraticCurveTo(o.x - 8, sy - 6, o.x, sy - 16);
         ctx.fill();
+      }else if(o.kind === 'weaver'){
+        const E2 = ENEMY.weaver;
+        drawCarShape(o.x, sy, o.w, o.h, E2.color, E2.lite, { toy: true });
+        if(o.signal > 0 || o.drift > 0) drawSignal(o.x, sy, o.w, o.h, o.signalSide);
       }else{
-        drawCarShape(o.x, sy, o.w, o.h, o.color, 'rgba(255,255,255,.45)', { truck: o.kind === 'truck', toy: true });
+        const E2 = ENEMY[o.kind] || ENEMY.sedan;
+        drawCarShape(o.x, sy, o.w, o.h, E2.color, E2.lite, { truck: o.kind === 'truck', toy: true });
       }
     }
   }
@@ -962,18 +1023,25 @@
     ctx.save();
     ctx.fillStyle = 'rgba(255,247,238,.96)';
     ctx.strokeStyle = PALETTE.frame; ctx.lineWidth = 2.5;
-    roundRect(W / 2 - hw, cy - 66, hw * 2, 150, 14); ctx.fill(); ctx.stroke();
+    roundRect(W / 2 - hw, cy - 66, hw * 2, 176, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = PALETTE.grip; ctx.font = '800 22px ' + FONT;
     ctx.fillText('火箭车', W / 2, cy - 38);
     ctx.fillStyle = '#2b3a4a'; ctx.font = '700 12px ' + FONT;
     ctx.fillText('底部区域按住，左右滑动转向', W / 2, cy - 12);
-    ctx.fillText('手指在区域内上半 = 高速 400', W / 2, cy + 8);
+    ctx.fillText('手指在上半 = 高速 400', W / 2, cy + 6);
+    // 车型图例（★ 让玩家"看懂再玩"）
+    ctx.strokeStyle = 'rgba(242,130,32,.35)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(W / 2 - hw + 16, cy + 18); ctx.lineTo(W / 2 + hw - 16, cy + 18); ctx.stroke();
     ctx.fillStyle = '#5c7186'; ctx.font = '11px ' + FONT;
-    ctx.fillText('躲开前方车辆与施工障碍', W / 2, cy + 30);
-    ctx.fillText('碰绿色加油车回满油 · 到终点加时', W / 2, cy + 48);
+    ctx.fillText('卡车最慢 · 轿车中速 · 跑车最快会跑掉', W / 2, cy + 36);
+    ctx.fillStyle = '#c05f0d'; ctx.font = '700 11px ' + FONT;
+    ctx.fillText('★ 橙色车亮琥珀灯 = 即将变道', W / 2, cy + 54);
+    ctx.fillStyle = '#5c7186'; ctx.font = '11px ' + FONT;
+    ctx.fillText('按颜色认车 → 提前预判', W / 2, cy + 72);
+    ctx.fillText('绿车加油 · 到终点加时进下一段', W / 2, cy + 90);
     ctx.fillStyle = '#c0392b'; ctx.font = '700 11px ' + FONT;
-    ctx.fillText('自动前进 —— 时间到 / 撞光三条命即结束', W / 2, cy + 68);
+    ctx.fillText('时间到 / 撞光三条命即结束', W / 2, cy + 110);
     ctx.restore();
     ctx.textAlign = 'left';
   }
@@ -1077,6 +1145,9 @@
       '横向x=' + (player ? player.x.toFixed(0) : '—') + '（路面 ' + ROAD_L + '~' + ROAD_R + '，车道宽 ' + LANE_W.toFixed(0) + '）',
       '距离=' + Math.floor(distance) + '米 本段进度=' + (player ? ((player.y - stageStartY) / STAGE_LEN * 100).toFixed(0) : '0') + '%',
       '油=' + Math.round(fuel * 100) + '%  时间=' + timeLeft.toFixed(1) + 's  超越=' + passed + '  场上对象=' + (objs ? objs.length : 0),
+      '场上车型=' + (objs ? (['truck','sedan','sports','weaver','fuel','cone','barrel']
+        .map(k => { const n = objs.filter(o => !o.dead && o.kind === k).length; return n ? (ENEMY[k] ? ENEMY[k].name : k) + n : null; })
+        .filter(Boolean).join(' ') || '—') : '—'),
       '输入=' + JSON.stringify(input) + '  种子=' + fieldSeed,
       '音效=' + (soundOn ? '开' : '关') + ' 引擎=' + (engineOsc ? '响' : '停'),
       'UA=' + navigator.userAgent,
@@ -1135,7 +1206,9 @@
     PY, W, H, HUD_H, HFIX, BOTTOM_BAND, TOUCH_TOP, FOLLOW, ROAD_L, ROAD_R, LANES, LANE_W,
     V_BASE, V_MAX, KMH, STAGE_LEN, TIME_START, TIME_BONUS, HP_START, FUEL_RATE,
     CAR_W, CAR_H,
-    objs: objs.map(o => ({ id:o.id, kind:o.kind, lane:o.lane, x:o.x, y:o.y, v:o.v, w:o.w, h:o.h, dead:o.dead, drift:o.drift, changeT:o.changeT, targetX:o.targetX })),
+    objs: objs.map(o => ({ id:o.id, kind:o.kind, lane:o.lane, x:o.x, y:o.y, v:o.v, w:o.w, h:o.h,
+                           dead:o.dead, drift:o.drift, changeT:o.changeT, targetX:o.targetX,
+                           signal:o.signal, signalSide:o.signalSide })),
     input: Object.assign({}, input, { gasOn: input.gas || (input.touching && input.touchGas) }),
     best, hintOn, fieldSeed, soundOn, engine: !!engineOsc,
   });
@@ -1156,6 +1229,7 @@
   };
   window.__racerPutObj = o => { objs.push(Object.assign({ id: nextObjId++, v: 0, w: CAR_W, h: CAR_H, dead: false, changeT: 0, lane: 0, drift: 0 }, o)); };
   window.__racerConst = { V_BASE, V_MAX, KMH, LANE_W, ROAD_L, ROAD_R, CAR_W, CAR_H, STAGE_LEN };
+  window.__racerEnemy = () => JSON.parse(JSON.stringify(ENEMY));   // 分型表（测试对照用）
 })();
 </script>
 </body>

@@ -472,6 +472,101 @@ function hintOnForce(){
   // 让提示卡重新显示（reset 后 hintOn=true；上面触控过会关掉）
   try { win.__racerReset(42); } catch (e) {}
 }
+/* ================= 12) ★ 敌车分型：外观分类 + 固定属性 + 固定行为 ================= */
+section('12) ★ 敌车分型：同类车属性必须完全一致、行为必须可预判');
+{
+  const E = win.__racerEnemy();
+  reset(51);
+  noSpawn(false);
+  setP({ invuln: 99999 });                     // 观测用：别被撞死打断
+  // 采样：每个车型出现过的 (速度|宽|高) 组合、变道情况、亮灯→变道时序
+  const combos = {};        // kind → Set("v|w|h")
+  const lanes = {};         // id → lane
+  const sigFrames = {};     // id → 亮灯帧数
+  const sigSeen = {};       // id → 是否见过它亮灯
+  const kindOf = {};        // id → kind
+  let badChangeNoSignal = 0, nonWeaverChange = 0, weaverChanged = 0, sawSignal = 0;
+  for (let i = 0; i < 5400; i++) {             // 90 秒
+    step(DT);
+    const s = R();
+    for (const o of s.objs) {
+      kindOf[o.id] = o.kind;
+      if (o.kind === 'truck' || o.kind === 'sedan' || o.kind === 'sports' || o.kind === 'weaver' || o.kind === 'fuel') {
+        (combos[o.kind] = combos[o.kind] || new Set()).add(o.v.toFixed(3) + '|' + o.w + '|' + o.h);
+      }
+      if (o.signal > 0) { sigSeen[o.id] = true; sawSignal++; }
+      if (sigSeen[o.id] && o.signal > 0) sigFrames[o.id] = (sigFrames[o.id] || 0) + 1;
+      const prev = lanes[o.id];
+      if (prev !== undefined && o.lane !== prev) {          // 观察到一次"换道"
+        if (o.kind !== 'weaver') nonWeaverChange++;
+        else {
+          weaverChanged++;
+          if (!sigSeen[o.id]) badChangeNoSignal++;          // ★ 没亮灯就变道 = 犯规
+        }
+      }
+      lanes[o.id] = o.lane;
+    }
+  }
+  // ① 属性固定：同类车只允许出现一种 (速度, 宽, 高)
+  const fixedBad = Object.entries(combos).filter(([, set]) => set.size !== 1)
+    .map(([k, set]) => k + ' 有 ' + set.size + ' 种组合');
+  ok(fixedBad.length === 0, '★ 同类车属性完全固定（每种车型只有一种 速度/宽/高）',
+     fixedBad.join(' / '));
+  ok(combos.truck && combos.sedan && combos.sports && combos.weaver, '四种车型都会出现（卡车/轿车/跑车/变道车）');
+
+  // ② 外观可区分：颜色与尺寸互不相同
+  const sigs = ['truck', 'sedan', 'sports', 'weaver'].map(k => E[k].color + '|' + E[k].w * E[k].wf + 'x' + E[k].hf);
+  ok(new Set(sigs).size === 4, '★ 四种车型的外观（颜色+尺寸）互不相同，一眼可辨');
+
+  // ③ 速度是固定值且符合"慢→快"认知
+  ok(E.truck.v < E.weaver.v && E.weaver.v < E.sedan.v && E.sedan.v < E.sports.v,
+     '速度排序：卡车 ' + E.truck.v + ' < 变道车 ' + E.weaver.v + ' < 轿车 ' + E.sedan.v + ' < 跑车 ' + E.sports.v);
+  ok(E.sports.v > R().V_BASE,
+     '★ 跑车(' + (E.sports.v * R().KMH).toFixed(0) + 'km/h) 比玩家常规速(' + (R().V_BASE * R().KMH).toFixed(0) + 'km/h) 还快 → 常规速追不上，必须用高速档');
+  ok(E.truck.hf > E.sedan.hf && E.truck.wf > E.sedan.wf, '卡车体积明显更大（远看就能认出）');
+  ok(E.sports.hf < E.sedan.hf, '跑车明显低矮（一眼区分）');
+
+  // ④ 只有变道车会变道，且变道必定先亮灯
+  ok(nonWeaverChange === 0, '★ 90 秒内生成了大量车，除变道车外没有任何车变道（行为固定可预判）',
+     '非变道车变道 ' + nonWeaverChange + ' 次');
+  ok(weaverChanged > 0, '★ 变道车确实会变道（观测到 ' + weaverChanged + ' 次）');
+  ok(badChangeNoSignal === 0, '★ 每次变道前都亮过琥珀转向灯（没亮灯就变道 = ' + badChangeNoSignal + ' 次）');
+  ok(sawSignal > 0, '转向灯确实亮过（累计 ' + sawSignal + ' 帧）');
+  const okSigFrames = Object.values(sigFrames).filter(n => n >= 30).length;   // ≥0.5s
+  ok(okSigFrames > 0, '亮灯时长足够玩家反应（有 ' + okSigFrames + ' 辆车亮了 ≥0.5 秒）');
+
+  // ⑤ 障碍物与加油车：静止/固定速度、绝不主动变道
+  const obsSet = new Set(), fuelSet = new Set();
+  reset(52); setP({ invuln: 99999 });
+  const obsLanes = {};
+  let obsMoved = 0, fuelMoved = 0, obsChanged = 0;
+  for (let i = 0; i < 3600; i++) {
+    step(DT);
+    for (const o of R().objs) {
+      if (o.kind === 'cone' || o.kind === 'barrel') {
+        obsSet.add(o.v + '|' + o.w + '|' + o.h);
+        if (o.v !== 0) obsMoved++;
+        if (obsLanes[o.id] !== undefined && o.lane !== obsLanes[o.id]) obsChanged++;
+        obsLanes[o.id] = o.lane;
+      }
+      if (o.kind === 'fuel') {
+        fuelSet.add(o.v.toFixed(3) + '|' + o.w + '|' + o.h);
+        if (o.drift > 0 || o.signal > 0) fuelMoved++;
+      }
+    }
+  }
+  ok(obsSet.size <= 2 && ![...obsSet].some(s => !s.startsWith('0|')), '障碍物全部静止且尺寸固定（' + obsSet.size + ' 种）');
+  ok(obsMoved === 0 && obsChanged === 0, '★ 障碍物不会移动也不会变道（纯静态）');
+  ok(fuelSet.size === 1, '★ 加油车速度/尺寸固定（只 1 种组合）');
+  ok(fuelMoved === 0, '加油车不变道');
+
+  // ⑥ 开局教学：前几排只放最慢的卡车
+  reset(53);
+  const earlyKinds = new Set(R().objs.map(o => o.kind));
+  ok(earlyKinds.size > 0 && [...earlyKinds].every(k => k === 'truck' || k === 'cone' || k === 'barrel'),
+     '★ 开局只放最慢的卡车（教学友好），实际：' + [...earlyKinds].join('/'));
+}
+
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');
