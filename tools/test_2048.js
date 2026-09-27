@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 1024（2048 玩法）逻辑回归测试
+ * 2048（经典 2048 玩法）逻辑回归测试
  *
  * 覆盖：
  *   1) 开局：2 个方块、值为 2 或 4、分数 0
@@ -24,7 +24,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const HTML = process.argv[2] || path.join(__dirname, '..', 'web', '1024', 'index.html');
+const HTML = process.argv[2] || path.join(__dirname, '..', 'web', '2048', 'index.html');
 const script = fs.readFileSync(HTML, 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
 
 /* ---------------- 桩 ---------------- */
@@ -102,18 +102,18 @@ sandbox.window.isSecureContext = false;
 sandbox.window.screen = { width: 411, height: 915 };
 
 vm.createContext(sandbox);
-vm.runInContext(script, sandbox, { filename: 'g1024-inline.js' });
+vm.runInContext(script, sandbox, { filename: 'g2048-inline.js' });
 
 /* ---------------- 驱动 ---------------- */
 const win = sandbox.window;
-const R = () => win.__g1024();
-const reset = seed => win.__g1024Reset(seed);
-const move = dir => win.__g1024Move(dir);
-const setGrid = arr => win.__g1024SetGrid(arr);
-const swipe = (x1, y1, x2, y2, id) => win.__g1024Swipe(x1, y1, x2, y2, id);
-const setScore = v => win.__g1024SetScore(v);
+const R = () => win.__g2048();
+const reset = seed => win.__g2048Reset(seed);
+const move = dir => win.__g2048Move(dir);
+const setGrid = arr => win.__g2048SetGrid(arr);
+const swipe = (x1, y1, x2, y2, id) => win.__g2048Swipe(x1, y1, x2, y2, id);
+const setScore = v => win.__g2048SetScore(v);
 const DT = 1 / 60;
-function run(n, dt = DT){ for(let i = 0; i < n; i++) win.__g1024Step(dt); }
+function run(n, dt = DT){ for(let i = 0; i < n; i++) win.__g2048Step(dt); }
 function empty(){ return [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]; }
 function nonZero(g){ let n = 0; for(const row of g) for(const v of row) if(v) n++; return n; }
 
@@ -130,7 +130,7 @@ section('1) 开局');
   reset(1);
   const s = R();
   ok(s.gridSize === 4, '棋盘 4×4');
-  ok(s.target === 1024, '目标 1024');
+  ok(s.target === 2048, '目标 2048');
   ok(s.tiles.length === 2, '开局 2 个方块（实际 ' + s.tiles.length + '）');
   ok(s.score === 0 && s.moves === 0, '开局分数 0、移动 0 次');
   ok(s.tiles.every(t => t.v === 2 || t.v === 4), '开局方块都是 2 或 4');
@@ -243,15 +243,15 @@ section('7) 生成概率 90% 2 / 10% 4');
 }
 
 /* ================= 8) 通关 1024 ================= */
-section('8) ★ 合成 1024 通关');
+section('8) ★ 合成 2048 通关');
 {
-  reset(12); setGrid([[512,512,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]); setScore(0);
+  reset(12); setGrid([[1024,1024,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]); setScore(0);
   ok(!R().won, '合之前未通关');
   move('left');
   const s = R();
-  ok(s.grid[0][0] === 1024, '512+512 → 1024');
-  ok(s.won === true, '★ 合成 1024 → 标记通关');
-  ok(s.score === 1024, '得分 +1024（实际 ' + s.score + '）');
+  ok(s.grid[0][0] === 2048, '1024+1024 → 2048');
+  ok(s.won === true, '★ 合成 2048 → 标记通关');
+  ok(s.score === 2048, '得分 +2048（实际 ' + s.score + '）');
   ok((els.over.classList.contains('on')), '通关面板已弹出');
   // 继续玩
   els.overKeep.onclick();
@@ -264,10 +264,10 @@ section('9) ★ 死局判定');
 {
   // 满盘但还有可合并 → 没死
   reset(13); setGrid([[2,4,8,16],[32,64,128,256],[512,1024,2,4],[8,16,32,32]]);
-  ok(win.__g1024HasMoves() === true, '满盘但右边有两个 32 可合并 → 还没死');
+  ok(win.__g2048HasMoves() === true, '满盘但右边有两个 32 可合并 → 还没死');
   // 满盘且无可合并 → 死
   reset(14); setGrid([[2,4,8,16],[32,64,128,256],[512,1024,2,4],[8,16,32,64]]);
-  ok(win.__g1024HasMoves() === false, '满盘且无可合并 → 无路可走');
+  ok(win.__g2048HasMoves() === false, '满盘且无可合并 → 无路可走');
   ok(R().state === 'play', '（此刻还没触发结束，等玩家尝试移动）');
   const ret = move('left');                       // ★ 无效移动也必须触发死局
   ok(ret === false, '无解时移动返回 false');
@@ -367,14 +367,14 @@ section('12) ★ 滑动输入映射');
 /* ================= 13) 绘制冒烟 ================= */
 section('13) ★ 绘制冒烟：各种状态 × 窗口比例都不抛错');
 {
-  const drawOk = () => { try{ win.__g1024Draw(); return null; }catch(e){ return String((e && e.message) || e); } };
+  const drawOk = () => { try{ win.__g2048Draw(); return null; }catch(e){ return String((e && e.message) || e); } };
   const cases = [];
   reset(40); cases.push(['开局', drawOk()]);
   setGrid([[2,4,8,16],[32,64,128,256],[512,1024,2,4],[8,16,32,64]]);
   cases.push(['满盘大数字', drawOk()]);
   reset(41); move('left'); cases.push(['动画进行中', drawOk()]);
   run(10); cases.push(['动画结束', drawOk()]);
-  reset(42); setGrid([[512,512,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]); move('left');
+  reset(42); setGrid([[1024,1024,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]); move('left');
   cases.push(['通关瞬间', drawOk()]);
   reset(43); setGrid([[2,4,8,16],[32,64,128,256],[512,1024,2,4],[8,16,32,64]]);
   move('left'); cases.push(['死局结束', drawOk()]);
@@ -383,11 +383,11 @@ section('13) ★ 绘制冒烟：各种状态 × 窗口比例都不抛错');
   const oW = els.stage.clientWidth, oH = els.stage.clientHeight;
   for(const [w, h] of sizes){
     els.stage.clientWidth = w; els.stage.clientHeight = h;
-    win.__g1024Layout();
+    win.__g2048Layout();
     cases.push(['窗口 ' + w + '×' + h, drawOk()]);
   }
   els.stage.clientWidth = oW; els.stage.clientHeight = oH;
-  win.__g1024Layout();
+  win.__g2048Layout();
   const bad = cases.filter(([, e]) => e);
   ok(bad.length === 0, '★ ' + cases.length + ' 种状态/窗口下 draw() 均不抛错',
      bad.map(([n, e]) => n + ': ' + e).join(' / '));
@@ -403,21 +403,21 @@ section('14) 音效（FakeCtx 计数）');
 {
   reset(50); setGrid([[2,2,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]);
   const n0 = sndNodes;
-  win.__g1024Move('left');
+  win.__g2048Move('left');
   ok(sndNodes > n0, '合并有声（+' + (sndNodes - n0) + '）');
   reset(51); setGrid([[2,4,8,16],[32,64,128,256],[512,1024,2,4],[8,16,32,32]]);
   const n1 = sndNodes;
-  win.__g1024Move('right');
+  win.__g2048Move('right');
   ok(sndNodes >= n1, '普通滑动不报错（+' + (sndNodes - n1) + '）');
-  reset(52); setGrid([[512,512,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]);
+  reset(52); setGrid([[1024,1024,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]);
   const n2 = sndNodes;
-  win.__g1024Move('left');
+  win.__g2048Move('left');
   ok(sndNodes - n2 >= 3, '通关有音效（+' + (sndNodes - n2) + '）');
   // 静音
   els.btnSound.onclick();
   const n3 = sndNodes;
   reset(53); setGrid([[2,2,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]);
-  win.__g1024Move('left');
+  win.__g2048Move('left');
   ok(sndNodes === n3, '关掉音效后完全不发声');
   els.btnSound.onclick();
   ok(R().soundOn === true, '重新打开音效');
@@ -447,7 +447,7 @@ section('15) ★ 连续快速输入不被动画吞掉');
 /* ================= 16) ★ 音效补强 + 节奏放慢 ================= */
 section('16) ★ 音效补强 + 动画节奏放慢');
 {
-  const c = win.__g1024Const();
+  const c = win.__g2048Const();
   ok(c && c.ANIM_DUR >= 0.18, '★ 动画时长已放慢（' + (c && c.ANIM_DUR) + 's ≥ 0.18）');
 
   // 纯滑动（无合并）：应有 滑动 whoosh + 新块出现音

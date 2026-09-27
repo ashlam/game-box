@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#0f1115">
-<title>1024 · 小游戏盒子</title>
+<title>2048 · 小游戏盒子</title>
 <style>
   :root{ --bg:#0f1115; --card:#191d26; --line:#2b3242; --txt:#e8ecf3; --dim:#8b95a7; --acc:#5b8cff; }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
@@ -33,7 +33,7 @@
   .panel{position:relative;width:100%;max-width:330px;background:#faf8ef;border:2px solid #bbada0;
           border-radius:18px;padding:24px 20px 16px;text-align:center;color:#776e65;
           box-shadow:0 20px 50px rgba(0,0,0,.5)}
-  .panel::after{content:"1024";position:absolute;right:12px;top:8px;font-size:13px;font-weight:800;color:#bbada0}
+  .panel::after{content:"2048";position:absolute;right:12px;top:8px;font-size:13px;font-weight:800;color:#bbada0}
   .panel h2{margin:0 0 8px;font-size:22px;color:#8f7a66;letter-spacing:3px;font-weight:800}
   .panel .big{font-size:44px;font-weight:800;color:#776e65;font-variant-numeric:tabular-nums;line-height:1.1;margin:6px 0 2px}
   .panel .unit{font-size:13px;color:#a39489;font-weight:700;letter-spacing:3px}
@@ -61,7 +61,7 @@
 
 <div class="top">
   <a href="/">‹</a>
-  <h1>1024</h1>
+  <h1>2048</h1>
   <button id="btnSound">🔊 音效</button>
   <button id="btnDiag" title="复制诊断信息">诊断</button>
 </div>
@@ -75,7 +75,7 @@
   <div class="big" id="overScore">0</div>
   <div class="unit">本局得分</div>
   <p id="overText"></p>
-  <div class="rule">玩法：上下左右<b>滑动屏幕</b>合并相同数字<br>2+2=4、4+4=8 …… 目标合成 <b>1024</b><br>每次有效移动后会随机出现一个新数字</div>
+  <div class="rule">玩法：上下左右<b>滑动屏幕</b>合并相同数字<br>2+2=4、4+4=8 …… 目标合成 <b>2048</b><br>每次有效移动后会随机出现一个新数字</div>
   <button class="pri" id="overRetry">再来一局</button>
   <button id="overKeep">继续玩这局</button>
 </div></div>
@@ -84,7 +84,7 @@
 (function(){
   'use strict';
   /* ============================================================
-     1024 —— 经典 2048 玩法的触控版（目标合成 1024）
+     2048 —— 经典 2048 玩法的触控版（目标合成 2048）
 
      规则（完全按经典规则，不自行加机制）：
        · 4×4 格，开局随机 2 个方块（90% 是 2，10% 是 4）
@@ -92,7 +92,7 @@
        · ★ 一次移动中，每个方块最多只能参与一次合并（[2,2,2,2] 左移 → [4,4]，不是 8）
        · ★ 只有发生了位移/合并才生成新方块（无效移动不生成）
        · 得分 = 每次合并所得数字之和
-       · 合成 1024 即通关（可选择继续玩）；无空格且无可合并则结束
+       · 合成 2048 即通关（可选择继续玩）；无空格且无可合并则结束
 
      ★ 踩过的坑：canvas 变换必须 S*dpr；逻辑高固定、宽度随屏反推；
        触摸用 Pointer Events（部分 WebView 的 TouchList 不可迭代）。
@@ -106,7 +106,7 @@
 
   /* ---------- 玩法常数 ---------- */
   const N = 4;                       // 4×4
-  const TARGET = 1024;               // 通关目标
+  const TARGET = 2048;               // 通关目标
   const P2 = 0.9;                    // 生成 2 的概率（其余为 4）
   const SWIPE_MIN = 22;              // 滑动判定的最小位移（逻辑单位）
   const ANIM_DUR = 0.20;             // ★ 节奏放慢（用户要求）：滑动/合并动画时长（秒）
@@ -121,8 +121,8 @@
   let grid, tiles, ghosts, nextId, score, best, won, keepPlaying, moves, fieldSeed, seedRng;
   let anim, effect, tGlobal = 0, shake = 0, soundOn = true, lastTs = 0, raf = 0, hintOn = true;
 
-  best = parseInt(localStorage.getItem('g1024_best') || '0', 10) || 0;
-  soundOn = localStorage.getItem('g1024_sound') !== '0';
+  best = parseInt(localStorage.getItem('g2048_best') || '0', 10) || 0;
+  soundOn = localStorage.getItem('g2048_sound') !== '0';
 
   function mulberry32(a){
     return function(){
@@ -240,7 +240,7 @@
     tiles = tiles.filter(t => !t.eaten);
     for(const g of tiles) g.eaten = false;
     score += gained;
-    if(score > best){ best = score; try{ localStorage.setItem('g1024_best', String(best)); }catch(e){} }
+    if(score > best){ best = score; try{ localStorage.setItem('g2048_best', String(best)); }catch(e){} }
     moves++;
     rebuildGrid();
     anim = { t: 0, active: true };
@@ -516,7 +516,7 @@
     };
     card(bx1, '得分', score, score > 0 && score === best);
     card(bx2, '最高', best, false);
-    // 左侧：目标进度（当前最大方块 → 1024）
+    // 左侧：目标进度（当前最大方块 → 2048）
     let mx = 0; for(const t of tiles) mx = Math.max(mx, t.v);
     ctx.fillStyle = '#e8ecf3'; ctx.font = '800 22px ' + FONT;
     ctx.fillText(mx ? String(mx) : '—', 12, 30);
@@ -541,12 +541,12 @@
     roundRect(W / 2 - hw, cy - 60, hw * 2, 128, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = '#8f7a66'; ctx.font = '800 22px ' + FONT;
-    ctx.fillText('1024', W / 2, cy - 32);
+    ctx.fillText('2048', W / 2, cy - 32);
     ctx.fillStyle = '#776e65'; ctx.font = '700 12px ' + FONT;
     ctx.fillText('上下左右滑动屏幕', W / 2, cy - 6);
     ctx.fillText('相同数字碰在一起就合并', W / 2, cy + 14);
     ctx.fillStyle = '#a39489'; ctx.font = '11px ' + FONT;
-    ctx.fillText('2+2=4 · 4+4=8 …… 目标合成 1024', W / 2, cy + 36);
+    ctx.fillText('2+2=4 · 4+4=8 …… 目标合成 2048', W / 2, cy + 36);
     ctx.fillStyle = '#f65e3b'; ctx.font = '800 12px ' + FONT;
     ctx.fillText('滑动开始 →', W / 2, cy + 58);
     ctx.restore();
@@ -660,7 +660,7 @@
   };
   $('btnSound').onclick = () => {
     soundOn = !soundOn;
-    try{ localStorage.setItem('g1024_sound', soundOn ? '1' : '0'); }catch(e){}
+    try{ localStorage.setItem('g2048_sound', soundOn ? '1' : '0'); }catch(e){}
     $('btnSound').textContent = soundOn ? '🔊 音效' : '🔇 音效';
     if(soundOn) sndClick();
     toast(soundOn ? '音效已开' : '音效已关');
@@ -680,7 +680,7 @@
     }catch(e){}
     const rows = grid.map(r => r.map(t => t ? String(t.v) : '.').join(' ')).join(' / ');
     return [
-      '【1024·诊断】' + new Date().toLocaleString('zh-CN'),
+      '【2048·诊断】' + new Date().toLocaleString('zh-CN'),
       '视口=' + window.innerWidth + '×' + window.innerHeight + '  朝向=' + (window.innerWidth >= window.innerHeight ? '横屏' : '竖屏') + '  dpr=' + dpr,
       '高度探针: 100vh=' + vh100 + ' 与可视差=' + (vh100 === '?' ? '?' : (vh100 - window.innerHeight)) + 'px',
       '画布css=' + cv.style.width + '×' + cv.style.height + '  物理=' + cv.width + '×' + cv.height,
@@ -691,7 +691,7 @@
       '格子: ' + rows,
       '方块数=' + tiles.length + ' 残影=' + ghosts.length + ' 动画=' + (anim.active ? '进行中' : '空闲'),
       '触点数=' + active.size + ' 滑动阈值=' + SWIPE_MIN + ' 生成2概率=' + P2 + ' 种子=' + fieldSeed,
-      '动画时长=' + ANIM_DUR + 's（节奏）  音效节点累计=' + (window.__g1024SndCount ? window.__g1024SndCount() : '—'),
+      '动画时长=' + ANIM_DUR + 's（节奏）  目标=' + TARGET,
       '音效=' + (soundOn ? '开' : '关'),
       'UA=' + navigator.userAgent,
     ].join('\n');
@@ -736,7 +736,7 @@
   if(!raf) raf = requestAnimationFrame(frame);
 
   /* ---------- 测试钩子 ---------- */
-  window.__g1024 = () => ({
+  window.__g2048 = () => ({
     state, won, keepPlaying, score, best, moves, gridSize: N, target: TARGET,
     grid: grid.map(r => r.map(t => t ? t.v : 0)),
     tiles: tiles.map(t => ({ id:t.id, v:t.v, r:t.r, c:t.c, fr:t.fr, fc:t.fc })),
@@ -745,14 +745,14 @@
     W, H, HFIX, HUD_H, BOARD, BX, BY, GAP, CELL, SWIPE_MIN, P2,
     hintOn, soundOn, fieldSeed, effect: effect.length,
   });
-  window.__g1024Reset = seed => reset(seed);
-  window.__g1024Move = dir => doMove(dir);
-  window.__g1024Step = dt => step(dt);
-  window.__g1024Draw = () => { draw(); return 'ok'; };
-  window.__g1024Layout = () => { layout(); return 'ok'; };
-  window.__g1024HasMoves = () => hasMoves();
-  window.__g1024AnyMove = () => anyMove();
-  window.__g1024SetGrid = arr => {
+  window.__g2048Reset = seed => reset(seed);
+  window.__g2048Move = dir => doMove(dir);
+  window.__g2048Step = dt => step(dt);
+  window.__g2048Draw = () => { draw(); return 'ok'; };
+  window.__g2048Layout = () => { layout(); return 'ok'; };
+  window.__g2048HasMoves = () => hasMoves();
+  window.__g2048AnyMove = () => anyMove();
+  window.__g2048SetGrid = arr => {
     // 测试用：直接注入棋盘（0 表示空），并清空动画/残影
     tiles = []; ghosts = []; nextId = 1;
     for(let r = 0; r < N; r++) for(let c = 0; c < N; c++){
@@ -763,7 +763,7 @@
     anim = { t: ANIM_DUR, active: false };
     return tiles.length;
   };
-  window.__g1024Swipe = (x1, y1, x2, y2, id) => {
+  window.__g2048Swipe = (x1, y1, x2, y2, id) => {
     const r = cv.getBoundingClientRect();
     const toCx = (lx, ly) => ({ cx: r.left + lx * (r.width / W), cy: r.top + ly * (r.height / H) });
     const a = toCx(x1, y1), b = toCx(x2, y2);
@@ -771,9 +771,9 @@
     onPoint('up',   id === undefined ? 1 : id, b.cx, b.cy);
     return true;
   };
-  window.__g1024SetScore = v => { score = v; };
-  window.__g1024Const = () => ({ ANIM_DUR, N, TARGET, P2, SWIPE_MIN, HFIX });
-  window.__g1024ClearEffects = () => { effect = []; };
+  window.__g2048SetScore = v => { score = v; };
+  window.__g2048Const = () => ({ ANIM_DUR, N, TARGET, P2, SWIPE_MIN, HFIX });
+  window.__g2048ClearEffects = () => { effect = []; };
 })();
 </script>
 </body>
