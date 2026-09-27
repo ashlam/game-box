@@ -109,7 +109,7 @@
   const TARGET = 1024;               // 通关目标
   const P2 = 0.9;                    // 生成 2 的概率（其余为 4）
   const SWIPE_MIN = 22;              // 滑动判定的最小位移（逻辑单位）
-  const ANIM_DUR = 0.11;             // 滑动动画时长（秒）
+  const ANIM_DUR = 0.20;             // ★ 节奏放慢（用户要求）：滑动/合并动画时长（秒）
 
   /* ---------- 坐标系（固定逻辑高，宽度随屏） ---------- */
   const HFIX = 560;
@@ -193,7 +193,7 @@
     if(state !== 'play') return false;
     // ★ 不吞输入：上一次滑动动画还没播完就直接收尾，立刻处理这一次
     if(anim.active) finishAnim();
-    let moved = false, gained = 0, maxMerged = 0;
+    let moved = false, gained = 0, maxMerged = 0, merges = 0;
     const map = new Map();                       // tile → 落位信息
     for(const line of linesFor(dir)){
       const seq = [];
@@ -221,7 +221,7 @@
       if(m.eaten){ t.eaten = true; moved = true; }
       if(m.eat){                                  // 合并：保留者翻倍
         const v = m.eat.v * 2;
-        gained += v;
+        gained += v; merges++;
         t.v = v; t.pop = 1;
         maxMerged = Math.max(maxMerged, v);
         m.eat.eaten = true;
@@ -229,6 +229,7 @@
       }
     }
     if(!moved){
+      sndBlocked();                                  // ★ 无效滑动也给个反馈音
       // ★ 无效移动也要检查死局：满盘且无可合并时，玩家再滑动就该结束（否则会卡住没有任何反应）
       if(state === 'play' && !hasMoves()){ state = 'over'; sndOver(); showPanel('over'); }
       return false;
@@ -244,12 +245,12 @@
     rebuildGrid();
     anim = { t: 0, active: true };
     const nt = spawnTile();                        // ★ 只有有效移动才生成
-    if(nt) nt.isNew = 1;
+    if(nt){ nt.isNew = 1; sndNew(nt.v); }          // ★ 新方块出现音（原来这个函数定义了却没被调用）
     rebuildGrid();
 
     if(gained){
-      const lv = clamp(Math.log2(Math.max(2, gained)) - 1, 0, 10);
-      sndMerge(lv);
+      const lv = clamp(Math.log2(Math.max(2, maxMerged || gained)) - 1, 0, 10);
+      sndMerge(merges, lv);                          // ★ 按合并次数错开成琶音
       effect.push({ x: BX + BOARD / 2, y: BY + BOARD * 0.42, t: 0, txt: '+' + gained, color: '#f67c5f' });
     }else{
       sndSlide();
@@ -361,24 +362,74 @@
   function tone(freq, dur, opt){
     const o = opt || {};
     if(!soundOn) return;
-    const c = audio(); if(!c) return;
-    const t0 = c.currentTime + (o.at || 0);
-    const osc = c.createOscillator(), g = c.createGain();
-    osc.type = o.type || 'sine';
-    osc.frequency.setValueAtTime(freq, t0);
-    if(o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, o.to), t0 + dur);
-    const vol = (o.gain === undefined ? 0.12 : o.gain);
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    osc.connect(g); g.connect(c.destination);
-    osc.start(t0); osc.stop(t0 + dur + 0.03);
+    try{
+      const c = audio(); if(!c) return;
+      const t0 = c.currentTime + (o.at || 0);
+      const osc = c.createOscillator(), g = c.createGain();
+      osc.type = o.type || 'sine';
+      osc.frequency.setValueAtTime(freq, t0);
+      if(o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, o.to), t0 + dur);
+      const vol = (o.gain === undefined ? 0.12 : o.gain);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(g); g.connect(c.destination);
+      osc.start(t0); osc.stop(t0 + dur + 0.03);
+    }catch(e){}
   }
-  function sndMerge(lv){ tone(300 * Math.pow(1.12, lv), 0.14, { type:'triangle', gain: 0.10 }); }
-  function sndSlide(){ tone(180, 0.06, { type:'sine', gain: 0.05 }); }
-  function sndNew(){ tone(520, 0.07, { type:'sine', gain: 0.06 }); }
-  function sndWin(){ [72, 76, 79, 84, 88].forEach((f, i) => tone(f, 0.22, { type:'triangle', gain: 0.11, at: i * 0.1 })); }
-  function sndOver(){ [64, 60, 55].forEach((f, i) => tone(f, 0.3, { type:'triangle', gain: 0.1, at: i * 0.16 })); }
+  /* 噪声（滑动 whoosh / 轻响）—— 缓冲区只造一次 */
+  let noiseBuf = null;
+  function noise(dur, opt){
+    const o = opt || {};
+    if(!soundOn) return;
+    try{
+      const c = audio(); if(!c) return;
+      const t0 = c.currentTime + (o.at || 0);
+      if(!noiseBuf || noiseBuf.__sr !== c.sampleRate){
+        noiseBuf = c.createBuffer(1, Math.max(1, Math.floor(c.sampleRate * 0.4)), c.sampleRate);
+        noiseBuf.__sr = c.sampleRate;
+        const d = noiseBuf.getChannelData(0);
+        let s = 12345;
+        for(let i = 0; i < d.length; i++){ s = (s * 1103515245 + 12345) & 0x7fffffff; d[i] = (s / 0x3fffffff) - 1; }
+      }
+      const src = c.createBufferSource(); src.buffer = noiseBuf;
+      const f = c.createBiquadFilter();
+      f.type = o.type || 'bandpass';
+      f.frequency.setValueAtTime(o.freq || 900, t0);
+      if(o.to) f.frequency.exponentialRampToValueAtTime(Math.max(1, o.to), t0 + dur);
+      if(f.Q) f.Q.setValueAtTime(o.q === undefined ? 1.2 : o.q, t0);
+      const g = c.createGain();
+      const vol = o.gain === undefined ? 0.06 : o.gain;
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(vol, t0 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      src.connect(f); f.connect(g); g.connect(c.destination);
+      src.start(t0); src.stop(t0 + dur + 0.02);
+    }catch(e){}
+  }
+  /** 滑动：柔和 whoosh（滤波噪声快速下滑） */
+  function sndSlide(){ noise(0.12, { type:'bandpass', freq: 1400, to: 480, gain: 0.05, q: 0.9 }); }
+  /** 新方块出现：轻快小点（音高随 2/4 略变） */
+  function sndNew(v){ tone(v >= 4 ? 690 : 580, 0.09, { type:'sine', gain: 0.05, at: 0.015 }); }
+  /** 无效滑动（棋盘没动）：闷闷一下，给个"收到了但走不了"的反馈 */
+  function sndBlocked(){ tone(126, 0.13, { type:'sine', gain: 0.055, to: 86 }); noise(0.09, { type:'lowpass', freq: 320, gain: 0.028 }); }
+  /** 合并：按本次合并次数错开成琶音，数字越大音越高；大数字再叠低频垫 */
+  function sndMerge(n, lv){
+    const base = 300 * Math.pow(1.12, lv);
+    for(let i = 0; i < Math.min(n, 4); i++){
+      tone(base * Math.pow(1.06, i), 0.16, { type:'triangle', gain: 0.10, at: i * 0.055 });
+    }
+    if(n > 1) tone(base * 2, 0.10, { type:'sine', gain: 0.05, at: 0.05 });          // 叠加泛音
+    if(lv >= 6) tone(base * 0.5, 0.42, { type:'sine', gain: 0.07, at: 0.02 });      // 128+ 低频垫
+  }
+  /** 面板弹出 / 按钮点击 */
+  function sndClick(){ tone(660, 0.06, { type:'sine', gain: 0.05 }); }
+  function sndPanel(){ tone(520, 0.10, { type:'sine', gain: 0.07 }); tone(780, 0.13, { type:'sine', gain: 0.06, at: 0.08 }); }
+  function sndWin(){
+    [72, 76, 79, 84, 88, 91].forEach((f, i) => tone(f, 0.26, { type:'triangle', gain: 0.11, at: i * 0.11 }));
+    noise(0.55, { type:'highpass', freq: 1200, gain: 0.05 });
+  }
+  function sndOver(){ [64, 60, 55, 50].forEach((f, i) => tone(f, 0.34, { type:'triangle', gain: 0.1, at: i * 0.17 })); }
 
   /* ============================================================
      绘制
@@ -598,9 +649,11 @@
     $('overText').className = isNew ? 'rec' : '';
     $('overKeep').style.display = kind === 'win' ? '' : 'none';
     $('over').classList.add('on');
+    sndPanel();                                    // ★ 面板弹出音
   }
-  $('overRetry').onclick = () => { reset(); };
+  $('overRetry').onclick = () => { sndClick(); reset(); };
   $('overKeep').onclick = () => {
+    sndClick();
     keepPlaying = true; state = 'play';
     $('over').classList.remove('on');
     if(!hasMoves()){ state = 'over'; showPanel('over'); }
@@ -609,6 +662,7 @@
     soundOn = !soundOn;
     try{ localStorage.setItem('g1024_sound', soundOn ? '1' : '0'); }catch(e){}
     $('btnSound').textContent = soundOn ? '🔊 音效' : '🔇 音效';
+    if(soundOn) sndClick();
     toast(soundOn ? '音效已开' : '音效已关');
   };
   $('btnSound').textContent = soundOn ? '🔊 音效' : '🔇 音效';
@@ -637,6 +691,7 @@
       '格子: ' + rows,
       '方块数=' + tiles.length + ' 残影=' + ghosts.length + ' 动画=' + (anim.active ? '进行中' : '空闲'),
       '触点数=' + active.size + ' 滑动阈值=' + SWIPE_MIN + ' 生成2概率=' + P2 + ' 种子=' + fieldSeed,
+      '动画时长=' + ANIM_DUR + 's（节奏）  音效节点累计=' + (window.__g1024SndCount ? window.__g1024SndCount() : '—'),
       '音效=' + (soundOn ? '开' : '关'),
       'UA=' + navigator.userAgent,
     ].join('\n');
@@ -717,6 +772,7 @@
     return true;
   };
   window.__g1024SetScore = v => { score = v; };
+  window.__g1024Const = () => ({ ANIM_DUR, N, TARGET, P2, SWIPE_MIN, HFIX });
   window.__g1024ClearEffects = () => { effect = []; };
 })();
 </script>

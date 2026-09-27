@@ -183,8 +183,16 @@
     return lines;
   }
 
+  /** 立刻结束进行中的动画（用于"新输入到来时先把上一次收尾"，避免吞掉玩家的快速连划） */
+  function finishAnim(){
+    anim.active = false; anim.t = ANIM_DUR;
+    ghosts = [];
+    for(const t of tiles){ t.fr = t.r; t.fc = t.c; t.isNew = 0; t.pop = 0; }
+  }
   function doMove(dir){
-    if(state !== 'play' || anim.active) return false;
+    if(state !== 'play') return false;
+    // ★ 不吞输入：上一次滑动动画还没播完就直接收尾，立刻处理这一次
+    if(anim.active) finishAnim();
     let moved = false, gained = 0, maxMerged = 0;
     const map = new Map();                       // tile → 落位信息
     for(const line of linesFor(dir)){
@@ -523,11 +531,7 @@
     tGlobal += dt;
     if(anim.active){
       anim.t += dt;
-      if(anim.t >= ANIM_DUR){
-        anim.active = false; anim.t = ANIM_DUR;
-        ghosts = [];
-        for(const t of tiles){ t.fr = t.r; t.fc = t.c; t.isNew = 0; }
-      }
+      if(anim.t >= ANIM_DUR) finishAnim();
     }else{
       for(const t of tiles) if(t.pop > 0) t.pop = Math.max(0, t.pop - dt * 5);
     }

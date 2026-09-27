@@ -60,7 +60,8 @@ const cvEl = mkEl('canvas'); cvEl.getContext = () => mkCtx(); els.cv = cvEl;
 const stageEl = mkEl('div'); stageEl.clientWidth = 390; stageEl.clientHeight = 660; els.stage = stageEl;
 
 const store = {};
-let sndNodes = 0;
+let sndNodes = 0;        // 振荡器（音调）节点数
+let noiseNodes = 0;      // 噪声源节点数
 class FakeCtx {
   constructor(){ this.state = 'suspended'; this.currentTime = 0; this.sampleRate = 44100; this.destination = {}; }
   createOscillator(){
@@ -68,8 +69,14 @@ class FakeCtx {
              connect(){}, start(){ sndNodes++; }, stop(){} };
   }
   createGain(){ return { gain:{ setValueAtTime(){}, exponentialRampToValueAtTime(){}, setTargetAtTime(){}, value:0 }, connect(){} }; }
+  createBuffer(ch, len){ return { numberOfChannels: ch, length: len, __sr: this.sampleRate,
+                                  getChannelData: () => new Float32Array(len) }; }
+  createBufferSource(){ return { buffer: null, connect(){}, start(){ noiseNodes++; }, stop(){} }; }
+  createBiquadFilter(){ return { type:'', frequency:{ value:0, setValueAtTime(){}, exponentialRampToValueAtTime(){} },
+                                 Q:{ setValueAtTime(){} }, connect(){} }; }
   resume(){ this.state = 'running'; return Promise.resolve(); }
 }
+const allNodes = () => sndNodes + noiseNodes;
 const sandbox = {
   console, setTimeout, clearTimeout, setInterval, clearInterval,
   performance: { now: () => 1000 },
@@ -435,6 +442,57 @@ section('15) ★ 连续快速输入不被动画吞掉');
   let applied = 0;
   for(const d of dirs) if(move(d)) applied++;
   ok(applied >= 4, '★ 连续 8 次移动至少生效 4 次（实际 ' + applied + '）—— 快速连划不被吞');
+}
+
+/* ================= 16) ★ 音效补强 + 节奏放慢 ================= */
+section('16) ★ 音效补强 + 动画节奏放慢');
+{
+  const c = win.__g1024Const();
+  ok(c && c.ANIM_DUR >= 0.18, '★ 动画时长已放慢（' + (c && c.ANIM_DUR) + 's ≥ 0.18）');
+
+  // 纯滑动（无合并）：应有 滑动 whoosh + 新块出现音
+  reset(70); setGrid([[0,0,0,2],[0,0,0,0],[0,0,0,0],[0,0,0,0]]);
+  const a0 = allNodes(); const nz0 = noiseNodes;
+  move('left');
+  const a1 = allNodes();
+  ok(a1 - a0 >= 2, '★ 一次普通移动至少 2 个音效节点（滑动 + 新块），实际 +' + (a1 - a0));
+  ok(noiseNodes > nz0, '★ 滑动用了噪声源（whoosh）');
+
+  // 无效滑动：有"走不了"的反馈音
+  reset(71); setGrid([[2,4,8,16],[32,64,128,256],[512,1024,2,4],[8,16,32,64]]);
+  const b0 = allNodes();
+  const ret = move('left');
+  ok(ret === false, '（构造的是无效移动）');
+  ok(allNodes() - b0 >= 2, '★ 无效滑动给出反馈音（+' + (allNodes() - b0) + '）');
+
+  // 合并次数越多，音效节点越多（琶音）
+  reset(72); setGrid([[2,2,8,8],[0,0,0,0],[0,0,0,0],[0,0,0,0]]);
+  const c0 = sndNodes; move('left'); const two = sndNodes - c0;      // 两次合并
+  reset(73); setGrid([[2,2,4,8],[0,0,0,0],[0,0,0,0],[0,0,0,0]]);
+  const c1 = sndNodes; move('left'); const one = sndNodes - c1;      // 一次合并
+  ok(two > one, '★ 合并次数越多音效越丰富（琶音）：两次合并 ' + two + ' 个节点 > 一次 ' + one + ' 个');
+
+  // 大合并加低频垫（128 及以上）
+  reset(74); setGrid([[64,64,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]);
+  const d0 = sndNodes; move('left'); const big = sndNodes - d0;
+  reset(75); setGrid([[2,2,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]);
+  const d1 = sndNodes; move('left'); const small = sndNodes - d1;
+  ok(big > small, '★ 合成 128 的音效比合成 4 更厚（' + big + ' > ' + small + '）');
+
+  // 动画节奏确实拉长
+  reset(76); setGrid([[0,0,0,2],[0,0,0,0],[0,0,0,0],[0,0,0,0]]);
+  move('left');
+  ok(R().animActive === true, '移动后进入动画状态');
+  run(Math.max(1, Math.round(c.ANIM_DUR / DT) - 3));
+  ok(R().animActive === true, '★ ' + c.ANIM_DUR + 's 动画未走完前仍在进行（节奏确实放慢）');
+  run(7);
+  ok(R().animActive === false, '动画按时结束');
+
+  // 但快速连划仍然不被吞（节奏放慢后更关键）
+  reset(77); setGrid([[2,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,2,0]]);
+  let applied = 0;
+  for(const d of ['left','up','right','down','left','up']) if(move(d)) applied++;
+  ok(applied >= 3, '★ 节奏放慢后连续输入依旧不被吞（6 次生效 ' + applied + ' 次）');
 }
 
 /* ================= 汇总 ================= */
