@@ -61,9 +61,9 @@
 火箭车下次打开会自动读取这里的参数。<span id="state" class="badge">当前：默认值</span></p>
 
 <div class="card">
-  <div class="row"><label>正常加速上限</label><span class="val"><b id="vVmax">500</b> km/h</span></div>
-  <input type="range" id="rVmax" min="200" max="800" step="10" value="500">
-  <div class="ticks"><span>200</span><span>500</span><span>800</span></div>
+  <div class="row"><label>正常加速上限</label><span class="val"><b id="vVmax">800</b> km/h</span></div>
+  <input type="range" id="rVmax" min="200" max="1200" step="10" value="800">
+  <div class="ticks"><span>200</span><span>700</span><span>1200</span></div>
   <div class="sub">按住油门能跑到的最高速度</div>
 </div>
 
@@ -82,15 +82,15 @@
 </div>
 
 <div class="card">
-  <div class="row"><label>红星加速上限</label><span class="val hot"><b id="vBoost">1000</b> km/h</span></div>
-  <input type="range" id="rBoost" class="hot" min="500" max="2500" step="25" value="1000">
+  <div class="row"><label>红星加速上限</label><span class="val hot"><b id="vBoost">1100</b> km/h</span></div>
+  <input type="range" id="rBoost" class="hot" min="500" max="2500" step="25" value="1100">
   <div class="ticks"><span>500</span><span>1500</span><span>2500</span></div>
   <div class="sub">吃到红色五角星后的最高速度（等于「正常上限 × 倍率」）</div>
 </div>
 
 <div class="card">
-  <div class="row"><label>红星持续时间</label><span class="val hot"><b id="vBoostT">4.0</b> 秒</span></div>
-  <input type="range" id="rBoostT" class="hot" min="1" max="15" step="0.5" value="4">
+  <div class="row"><label>红星持续时间</label><span class="val hot"><b id="vBoostT">8.0</b> 秒</span></div>
+  <input type="range" id="rBoostT" class="hot" min="1" max="15" step="0.5" value="8">
   <div class="ticks"><span>1</span><span>8</span><span>15</span></div>
   <div class="sub">吃到红星后高速维持多久</div>
 </div>
@@ -113,8 +113,8 @@
   const $ = id => document.getElementById(id);
   const KEY = 'gracer_cfg';
   const KMH = 1.25;                       // 逻辑速度 → km/h 的换算（与游戏一致）
-  const DEF = { vMaxKmh: 500, timeStart: 55, timeBonus: 32, boostKmh: 1000, boostTime: 4 };
-  const RANGES = { vMaxKmh: [200, 800], timeStart: [10, 150], timeBonus: [0, 90], boostKmh: [500, 2500], boostTime: [1, 15] };
+  const DEF = { vMaxKmh: 800, timeStart: 55, timeBonus: 32, boostKmh: 1100, boostTime: 8 };
+  const RANGES = { vMaxKmh: [200, 1200], timeStart: [10, 150], timeBonus: [0, 90], boostKmh: [500, 2500], boostTime: [1, 15] };
 
   function read(){
     let c = null;

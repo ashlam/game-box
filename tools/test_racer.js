@@ -130,8 +130,8 @@ section('1) ★ 静止起步 · 按住油门才逐渐加速（按用户要求）
   input({ gas: false });            // 本节专测静止起步：先松开油门
   const a = R();
   ok(a.state === 'play', '开局即 play');
-  ok(a.V_BASE === 180 && a.V_MAX === 400, '速度常数（参考巡航 ' + a.V_BASE + ' / 油门上限 ' + a.V_MAX + '）');
-  ok(a.BOOST_MULT === 2.0, '★ 红星加速倍率 ×' + a.BOOST_MULT + ' → 800 逻辑 = ' +
+  ok(a.V_BASE === 180 && a.V_MAX === 640, '速度常数（参考巡航 ' + a.V_BASE + ' / 油门上限 ' + a.V_MAX + ' = 800 km/h）');
+  ok(a.BOOST_MULT === 1.38, '★ 红星加速倍率 ×' + a.BOOST_MULT + ' → ' +
      Math.round(a.V_MAX * a.BOOST_MULT * a.KMH) + ' km/h');
   ok(a.player.v === 0, '★ 开局车速为 0（静止起步）');
 
@@ -148,9 +148,9 @@ section('1) ★ 静止起步 · 按住油门才逐渐加速（按用户要求）
   const v1 = R().player.v;
   ok(v1 > 0 && v1 < a.V_MAX * 0.6,
      '★ 按下油门后开始加速（0.1 秒 ' + v1.toFixed(0) + '，没瞬移到顶）', 'v=' + v1.toFixed(1));
-  run(84);                                       // 累计 1.5 秒
+  run(Math.ceil((a.V_MAX - 0) / 300 * 60) + 30);  // 按参数推算爬坡时间（调参后不用改）
   ok(Math.abs(R().player.v - a.V_MAX) < 0.5,
-     '★ 按住油门约 1.4 秒加速到上限 ' + Math.round(a.V_MAX * a.KMH) + ' km/h（实测 ' +
+     '★ 按住油门逐渐加速到上限 ' + Math.round(a.V_MAX * a.KMH) + ' km/h（实测 ' +
        Math.round(R().player.v * a.KMH) + '）');
   const yG = R().player.y;
   run(60);
@@ -198,6 +198,7 @@ section('3) 燃油消耗 · 碰加油车回满');
 {
   reset(2);
   clearObjs();
+  noSpawn(true);                              // ★ 关掉交通：本节只测"加油车本身无害"
   run(300);                                   // 5 秒
   const f = R().fuel;
   ok(f < 1 && f > 0.85, '燃油随时间消耗（5 秒后 ' + (f * 100).toFixed(1) + '%）');
@@ -410,8 +411,8 @@ input({ gas: false });                      // ★ 本节只测触控：先关�
   // ② 触控区上半 = 高速档
   ok(touch('down', s.W / 2, yHi, 1).touching === true, '在触控区按住 → 进入触控操控');
   ok(touch('move', s.W / 2, yHi, 1).gasOn === true, '★ 手指在触控区上半 → 高速档');
-  run(90);
-  ok(Math.abs(R().player.v - R().V_MAX) < 0.5, '高速档到位（' + R().player.v.toFixed(0) + ' = 400km/h）');
+  run(Math.ceil(R().V_MAX / 300 * 60) + 40);   // 按参数推算爬坡时间
+  ok(Math.abs(R().player.v - R().V_MAX) < 0.5, '高速档到位（' + Math.round(R().player.v * R().KMH) + ' km/h = 上限）');
 
   // ③ 下半 = 常规档
   ok(touch('move', s.W / 2, yLo, 1).gasOn === true, '★ 手指按在操作区最下沿 → 仍然是高速档（已无低速区）');
@@ -893,7 +894,7 @@ section('17) ★ 红色五角星：加油 + 限时高速（上限 = 原二段 80
 {
   reset(101); quiet();
   const s0 = R();
-  ok(s0.BOOST_MULT === 2.0 && s0.BOOST_TIME === 4.0,
+  ok(s0.BOOST_MULT === 1.38 && s0.BOOST_TIME === 8.0,
      '常数：红星加速倍率 ×' + s0.BOOST_MULT + ' / 持续 ' + s0.BOOST_TIME + ' 秒');
   ok(s0.player.boost === 0, '开局没有加速（boost = 0）');
   ok(s0.BOOST_HOLD === undefined && s0.ZONE_HI === undefined,
@@ -931,7 +932,7 @@ section('17) ★ 红色五角星：加油 + 限时高速（上限 = 原二段 80
        Math.round(R().player.v * s0.KMH) + '）');
 
   // 到期回落
-  run(300);
+  run(Math.ceil(s0.BOOST_TIME / DT) + 40);
   ok(R().player.boost === 0, '★ 加速时间耗尽（' + s0.BOOST_TIME + ' 秒）后结束');
   ok(Math.abs(R().player.v - s0.V_MAX) < 0.5,
      '★ 到期自动回落到 ' + Math.round(s0.V_MAX * s0.KMH) + ' km/h');

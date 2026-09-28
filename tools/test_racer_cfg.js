@@ -78,13 +78,13 @@ section('1) 没调过参数 → 用默认值');
 {
   const win = load({});
   const s = win.__racer();
-  ok(s.V_MAX === 400, '默认 V_MAX = 400（' + Math.round(s.V_MAX * s.KMH) + ' km/h）');
-  ok(s.BOOST_MULT === 2.0, '默认 BOOST_MULT = 2.0（红星 ' + Math.round(s.V_MAX * s.BOOST_MULT * s.KMH) + ' km/h）');
-  ok(s.BOOST_TIME === 4.0, '默认 BOOST_TIME = 4.0 秒');
+  ok(s.V_MAX === 640, '默认 V_MAX = 640（' + Math.round(s.V_MAX * s.KMH) + ' km/h）');
+  ok(s.BOOST_MULT === 1.38, '默认 BOOST_MULT = 1.38（红星 ' + Math.round(s.V_MAX * s.BOOST_MULT * s.KMH) + ' km/h）');
+  ok(s.BOOST_TIME === 8.0, '默认 BOOST_TIME = 8.0 秒');
   ok(s.TIME_START === 55 && s.TIME_BONUS === 32, '默认时间 55 秒 / 过关加时 32 秒');
   // 按住油门到顶
   holdGas(win, 200);
-  ok(Math.abs(win.__racer().player.v - 400) < 0.5, '按油门到顶 = 500 km/h');
+  ok(Math.abs(win.__racer().player.v - 640) < 0.5, '按油门到顶 = ' + Math.round(640 * 1.25) + ' km/h');
 }
 
 /* ================= 2) 调参生效 ================= */
@@ -126,7 +126,7 @@ section('3) 存了坏数据 → 安全回退默认值');
     ok(!err, '坏数据 ' + JSON.stringify(bad) + ' 不会崩（' + (err || 'ok') + '）');
     if(win){
       const s = win.__racer();
-      ok(s.V_MAX === 400 && s.BOOST_MULT === 2.0, '  → 回退到默认值（V_MAX=' + s.V_MAX + '）');
+      ok(s.V_MAX === 640 && s.BOOST_MULT === 1.38, '  → 回退到默认值（V_MAX=' + s.V_MAX + '）');
     }
   }
 }
@@ -142,9 +142,9 @@ section('4) 调参页字段与游戏默认值一致');
   const dm = editorHtml.match(/const DEF = \{([^}]+)\}/);
   ok(!!dm, '调参页定义了默认值表');
   const defSrc = dm[1];
-  ok(/vMaxKmh:\s*500/.test(defSrc), '调参页默认正常上限 500 km/h（= 游戏 V_MAX 400）');
-  ok(/boostKmh:\s*1000/.test(defSrc), '调参页默认红星上限 1000 km/h（= 游戏 400×2.0）');
-  ok(/boostTime:\s*4/.test(defSrc), '调参页默认红星持续 4 秒（= 游戏 BOOST_TIME）');
+  ok(/vMaxKmh:\s*800/.test(defSrc), '调参页默认正常上限 800 km/h（= 游戏 V_MAX 640）');
+  ok(/boostKmh:\s*1100/.test(defSrc), '调参页默认红星上限 1100 km/h');
+  ok(/boostTime:\s*8/.test(defSrc), '调参页默认红星持续 8 秒（= 游戏 BOOST_TIME）');
   ok(/timeStart:\s*55/.test(defSrc) && /timeBonus:\s*32/.test(defSrc),
      '调参页默认时间 55/32 秒（= 游戏 TIME_START/TIME_BONUS）');
   ok(/editor\.html/.test(gameHtml), '游戏顶栏有调参页入口');
