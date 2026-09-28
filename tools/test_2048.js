@@ -495,6 +495,55 @@ section('16) ★ 音效补强 + 动画节奏放慢');
   ok(applied >= 3, '★ 节奏放慢后连续输入依旧不被吞（6 次生效 ' + applied + ' 次）');
 }
 
+/* ================= 17) ★ 底部里程碑进度条 ================= */
+section('17) ★ 底部里程碑进度条（2-4-8-…-1024-2048）');
+{
+  const bars = win.__g2048Bars();
+  reset(80); setGrid([[2,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]);
+  const s0 = R();
+  ok(s0.milestones.length === 11 && s0.milestones[0] === 2 && s0.milestones[10] === 2048,
+     '里程碑序列 = 2,4,8,…,1024,2048（11 档）', JSON.stringify(s0.milestones));
+
+  reset(81);
+  ok(R().litCount === 0, '★ 开局 11 盏全暗（0/11）');
+
+  reset(82); setGrid([[4,4,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]); move('left');
+  let s = R();
+  ok(s.maxEver === 8 && s.litCount === 3, '★ 合出 8 → 点亮 3 盏（2/4/8）', 'maxEver=' + s.maxEver + ' lit=' + s.litCount);
+
+  setGrid([[8,8,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]); move('left');
+  s = R();
+  ok(s.maxEver === 16 && s.litCount === 4, '★ 再合成 16 → 亮 4 盏（8 那盏不熄灭）');
+
+  setGrid([[256,256,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]); move('left');
+  s = R();
+  ok(s.maxEver === 512 && s.litCount === 9, '一次合出 512 → 2..512 共 9 盏连亮');
+
+  reset(83);
+  s = R();
+  ok(s.litCount === 0 && s.maxEver === 0, '★ 开新一局 → 灯全部重新熄灭');
+
+  reset(84); setGrid([[1024,1024,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]); move('left');
+  s = R();
+  ok(s.maxEver === 2048 && s.litCount === 11, '★ 合成 2048 → 11 盏全亮');
+
+  // 位置：必须在棋盘下方、且不出屏
+  ok(s.BOT_H > 0 && bars.barY >= s.BY + s.BOARD - 0.5,
+     '★ 里程碑条位于棋盘下方（条顶 ' + bars.barY.toFixed(0) + ' ≥ 棋盘底 ' + (s.BY + s.BOARD) + '）');
+  ok(bars.barBottom <= s.H + 0.5, '里程碑条不出屏（底 ' + bars.barBottom.toFixed(0) + ' ≤ ' + s.H + '）');
+  ok(s.BY + s.BOARD <= s.H - s.BOT_H + 0.5, '棋盘不侵入底条预留区');
+  ok(s.BY > s.HUD_H * 0.5, '棋盘仍在仪表台之下（BY=' + s.BY + '）');
+
+  // 多窗口比例下绘制不抛错
+  const errs = [];
+  for(const [w2, h2] of [[390,300],[390,660],[760,700]]){
+    els.stage.clientWidth = w2; els.stage.clientHeight = h2; win.__g2048Layout();
+    try{ win.__g2048Draw(); }catch(e){ errs.push(w2 + 'x' + h2 + ': ' + e.message); }
+  }
+  els.stage.clientWidth = 390; els.stage.clientHeight = 660; win.__g2048Layout();
+  ok(errs.length === 0, '里程碑条在多种窗口比例下绘制不抛错', errs.join(' / '));
+}
+
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');

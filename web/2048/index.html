@@ -120,6 +120,9 @@
   let state = 'play';                // play | over
   let grid, tiles, ghosts, nextId, score, best, won, keepPlaying, moves, fieldSeed, seedRng;
   let anim, effect, tGlobal = 0, shake = 0, soundOn = true, lastTs = 0, raf = 0, hintOn = true;
+  let maxEver = 0;      // ★ 本局达到过的最大方块（里程碑点灯依据，只增不减）
+  const MILESTONES = (() => { const a = []; for(let v = 2; v <= TARGET; v *= 2) a.push(v); return a; })();
+  const BOT_H = 36;     // ★ 底部里程碑条占用的高度（棋盘布局会让出这块空间）
 
   best = parseInt(localStorage.getItem('g2048_best') || '0', 10) || 0;
   soundOn = localStorage.getItem('g2048_sound') !== '0';
@@ -157,6 +160,7 @@
     fieldSeed = (seed === undefined) ? ((Math.random() * 1e9) | 0) : seed;
     seedRng = mulberry32(fieldSeed);
     tiles = []; ghosts = []; nextId = 1; score = 0; won = false; keepPlaying = false; moves = 0;
+    maxEver = 0;                                   // ★ 新一局：里程碑全部熄灭
     anim = { t: 0, active: false }; effect = []; shake = 0; hintOn = true;
     state = 'play';
     $('over').classList.remove('on');
@@ -240,6 +244,7 @@
     tiles = tiles.filter(t => !t.eaten);
     for(const g of tiles) g.eaten = false;
     score += gained;
+    for(const t of tiles) if(t.v > maxEver) maxEver = t.v;   // ★ 推进里程碑（合并后必是更大值 → 只增不减）
     if(score > best){ best = score; try{ localStorage.setItem('g2048_best', String(best)); }catch(e){} }
     moves++;
     rebuildGrid();
@@ -521,16 +526,45 @@
     ctx.fillStyle = '#e8ecf3'; ctx.font = '800 22px ' + FONT;
     ctx.fillText(mx ? String(mx) : '—', 12, 30);
     ctx.fillStyle = '#8b95a7'; ctx.font = '600 10px ' + FONT;
-    ctx.fillText('最大方块 / 目标 ' + TARGET, 12, 45);
-    // 进度条
-    const pw = Math.min(120, W - cardW * 2 - 40);
-    ctx.fillStyle = 'rgba(0,0,0,.35)';
-    roundRect(12, 52, pw, 6, 3); ctx.fill();
-    let prog = 0, v = mx;
-    while(v >= 2 && v > 0){ v /= 2; prog++; }
-    const total = Math.log2(TARGET);
-    ctx.fillStyle = mx >= TARGET ? '#edc22e' : '#7fc4ff';
-    roundRect(12, 52, Math.max(3, pw * clamp(prog / total, 0, 1)), 6, 3); ctx.fill();
+    ctx.fillText('最大方块', 12, 45);
+  }
+
+  /** ★ 底部里程碑进度条：2-4-8-…-1024-2048 一盏一档
+   *  开始全暗；达到哪一档就点亮哪一盏（点亮后不再熄灭，记录本局走过的路） */
+  function drawMilestones(){
+    const n = MILESTONES.length;
+    const padX = Math.max(8, W * 0.025);
+    const barH = Math.max(15, Math.min(20, H * 0.032));
+    const barY = H - BOT_H + (BOT_H - barH) / 2;
+    const gap = Math.max(1.5, (W - padX * 2) * 0.009);
+    const cw = (W - padX * 2 - gap * (n - 1)) / n;
+    const fs = Math.max(7, Math.min(10.5, cw * 0.40));
+    for(let i = 0; i < n; i++){
+      const v = MILESTONES[i];
+      const x = padX + i * (cw + gap);
+      const lit = maxEver >= v;
+      const isLatest = lit && v === maxEver;
+      const rr = Math.min(barH * 0.34, cw * 0.34);
+      if(lit){
+        ctx.save();
+        ctx.shadowColor = tileBg(v);
+        ctx.shadowBlur = isLatest ? 13 : 5;
+        ctx.fillStyle = tileBg(v);
+        roundRect(x, barY, cw, barH, rr); ctx.fill();
+        ctx.restore();
+        ctx.fillStyle = tileFg(v);
+      }else{
+        ctx.fillStyle = 'rgba(255,255,255,.055)';
+        roundRect(x, barY, cw, barH, rr); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,.10)'; ctx.lineWidth = 1;
+        roundRect(x, barY, cw, barH, rr); ctx.stroke();
+        ctx.fillStyle = '#556072';
+      }
+      ctx.font = '800 ' + fs.toFixed(1) + 'px ' + FONT;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(v), x + cw / 2, barY + barH / 2 + 0.5);
+      ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+    }
   }
   function drawHint(){
     const cy = BY + BOARD * 0.36;
@@ -574,6 +608,7 @@
     ctx.restore();
     drawEffects();
     drawHUD();
+    drawMilestones();
     if(hintOn && state === 'play' && moves === 0) drawHint();
   }
 
@@ -607,10 +642,10 @@
     H = HFIX;
     HUD_H = Math.max(52, Math.round(H * 0.10));
     const pad = Math.max(10, Math.round(W * 0.045));
-    const avail = Math.min(W - pad * 2, H - HUD_H - pad * 2 - 16);
+    const avail = Math.min(W - pad * 2, H - HUD_H - pad * 2 - BOT_H - 4);   // ★ 底部留给里程碑条
     BOARD = Math.round(avail);
     BX = Math.round((W - BOARD) / 2);
-    BY = Math.round(HUD_H + pad + Math.max(0, (H - HUD_H - pad * 2 - 16 - BOARD) / 2));
+    BY = Math.round(HUD_H + pad + Math.max(0, (H - HUD_H - pad * 2 - BOT_H - 4 - BOARD) / 2));
     GAP = Math.max(5, Math.round(BOARD * 0.028));
     CELL = (BOARD - GAP * (N + 1)) / N;
   }
@@ -688,6 +723,8 @@
       '棋盘=' + BOARD + ' 单元=' + CELL.toFixed(1) + ' 间距=' + GAP + ' 左上=(' + BX + ',' + BY + ')',
       '页面总高=' + document.documentElement.scrollHeight + '/' + window.innerHeight,
       '状态=' + state + ' 通关=' + won + ' 分数=' + score + ' 最高=' + best + ' 移动=' + moves,
+      '里程碑=' + MILESTONES.filter(v => maxEver >= v).length + '/' + MILESTONES.length + '（已亮 ' +
+        (MILESTONES.filter(v => maxEver >= v).join(',') || '无') + '）  本局最大=' + maxEver + '  底条高=' + BOT_H,
       '格子: ' + rows,
       '方块数=' + tiles.length + ' 残影=' + ghosts.length + ' 动画=' + (anim.active ? '进行中' : '空闲'),
       '触点数=' + active.size + ' 滑动阈值=' + SWIPE_MIN + ' 生成2概率=' + P2 + ' 种子=' + fieldSeed,
@@ -744,6 +781,8 @@
     animActive: anim.active,
     W, H, HFIX, HUD_H, BOARD, BX, BY, GAP, CELL, SWIPE_MIN, P2,
     hintOn, soundOn, fieldSeed, effect: effect.length,
+    maxEver, milestones: MILESTONES.slice(), litCount: MILESTONES.filter(v => maxEver >= v).length,
+    BOT_H,
   });
   window.__g2048Reset = seed => reset(seed);
   window.__g2048Move = dir => doMove(dir);
@@ -772,7 +811,9 @@
     return true;
   };
   window.__g2048SetScore = v => { score = v; };
-  window.__g2048Const = () => ({ ANIM_DUR, N, TARGET, P2, SWIPE_MIN, HFIX });
+  window.__g2048Const = () => ({ ANIM_DUR, N, TARGET, P2, SWIPE_MIN, HFIX, BOT_H });
+  window.__g2048Bars = () => { const bh = Math.max(15, Math.min(20, H * 0.032));
+    const by = H - BOT_H + (BOT_H - bh) / 2; return { barH: bh, barY: by, barBottom: by + bh }; };
   window.__g2048ClearEffects = () => { effect = []; };
 })();
 </script>
