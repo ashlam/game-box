@@ -84,7 +84,7 @@
   <div class="big" id="overScore">0</div>
   <div class="unit">最远距离（米）</div>
   <p id="overText"></p>
-  <div class="rule">玩法：自动前进 · 左右躲车躲障碍<br>底部区域按住左右滑动转向 · <b>按住就是高速 500 km/h</b><br>★ 绿色五角星 = 加油（油箱回满）<br>★ 红色五角星 = 加油 + 限时 4 秒加速到 800 km/h<br>其余全是敌人 · 到终点加时进下一段</div>
+  <div class="rule">玩法：自动前进 · 左右躲车躲障碍<br>底部区域按住左右滑动转向 · <b>按住 = 油门（最高 500 km/h）</b><br>★ 绿色五角星 = 加油（油箱回满）<br>★ 红色五角星 = 加油 + 限时 4 秒加速到 1000 km/h<br>其余全是敌人 · 到终点加时进下一段</div>
   <button class="pri" id="overRetry">再来一次</button>
 </div></div>
 
@@ -158,8 +158,9 @@
     TOUCH_TOP = TOUCH_BOTTOM - ZONE_H;                      // ★ 整块都是高速操作区
     PY = TOUCH_TOP - CAR_H / 2 - 14;                        // 车始终在触控区上方
   }
-  const V_BASE = 180, V_MAX = 400, KMH = 1.25;   // 一档上限 400×1.25 = 500 km/h
-  const BOOST_MULT = 1.6;                        // ★ 红色五角星加速上限倍率：400×1.6 = 640 逻辑 = 800 km/h
+  const V_BASE = 180, V_MAX = 400, KMH = 1.25;   // 油门上限 400×1.25 = 500 km/h
+  //  ★ V_BASE 现在只作"参考巡航速度"用于脱路/撞车限速，不再用于自动前进（开局静止，按油门才加速）
+  const BOOST_MULT = 2.0;                        // ★ 红色五角星加速上限：400×2.0 = 800 逻辑 = 1000 km/h
   const BOOST_TIME = 4.0;                        // ★ 吃到红星后的高速持续时间（秒）
   const ACC = 300, DEC = 560;                    // 提速/回落速率（两档手感）
   const STEER = 196;                             // 键盘横向速度
@@ -251,7 +252,7 @@
   function reset(seed){
     fieldSeed = (seed === undefined) ? ((Math.random() * 1e9) | 0) : seed;
     seedRng = mulberry32(fieldSeed);
-    player = { x: laneX(1), v: V_BASE, y: 0, invuln: 0, crashT: 0, boost: 0 };   // ★ boost = 剩余加速时间
+    player = { x: laneX(1), v: 0, y: 0, invuln: 0, crashT: 0, boost: 0 };   // ★ 开局静止；boost = 剩余加速时间
     objs = [];
     input = { left: false, right: false, gas: false, touching: false, targetX: null };
     active.clear();
@@ -370,8 +371,10 @@
       spawnBoost(nextBoostY);
       nextBoostY += 2600 + rng() * 1100;
     }
-    // 回收身后
-    for(let i = objs.length - 1; i >= 0; i--) if(objs[i].y < player.y - 260) objs.splice(i, 1);
+    // 回收身后 + ★ 回收远去的（开局静止后车会自己跑很远，不回收会一直堆在数组里）
+    for(let i = objs.length - 1; i >= 0; i--){
+      if(objs[i].y < player.y - 260 || objs[i].y > player.y + H * 4) objs.splice(i, 1);
+    }
   }
 
   /* ============================================================
@@ -555,11 +558,11 @@
     const gasOn = input.gas || input.touching;      // ★ 操作区合并：按住就是高速（键盘同理）
 
     /* ★ 限时加速来自「红色五角星」（原来的"高速顶 2.5 秒自动升二档"已按用户要求去掉）：
-     *   吃到红星 → boost 计时开始，这段时间上限 = V_MAX × BOOST_MULT（640 逻辑 = 800 km/h），
+     *   吃到红星 → boost 计时开始，这段时间上限 = V_MAX × BOOST_MULT（800 逻辑 = 1000 km/h），
      *   靠正常加速度"逐渐"升上去；时间耗尽后自动回落到 V_MAX（500 km/h）。 */
     if(player.boost > 0) player.boost = Math.max(0, player.boost - dt);
     const vCap = player.boost > 0 ? V_MAX * BOOST_MULT : V_MAX;
-    let tv = gasOn ? vCap : V_BASE;
+    let tv = gasOn ? vCap : 0;              // ★ 不踩油门 → 减速停下（开局静止、按住才逐渐加速）
     if(offRoad) tv = Math.min(tv, V_BASE * 0.6);
     if(fuel <= 0) tv = Math.min(tv, 46);
     const prevV = player.v;
@@ -1164,7 +1167,7 @@
     const hi = input.touching;
     ctx.textAlign = 'left'; ctx.font = '700 12px ' + FONT;
     ctx.fillStyle = hi ? '#7dffa0' : 'rgba(214,228,244,.55)';
-    ctx.fillText('按住 = 高速 ' + Math.round(V_MAX * KMH), 12, mid + 5);
+    ctx.fillText('按住 = 油门（最高 ' + Math.round(V_MAX * KMH) + '）', 12, mid + 5);
     if(input.touching){
       const kx = clamp(input.targetX, 16, W - 16);
       ctx.strokeStyle = 'rgba(255,209,102,.55)'; ctx.lineWidth = 2.5;
@@ -1176,7 +1179,7 @@
     }else{
       ctx.fillStyle = 'rgba(232,240,250,.72)'; ctx.font = '700 12px ' + FONT;
       ctx.textAlign = 'right';
-      ctx.fillText('按住 → 高速 · 左右滑动转向 →', W - 12, mid + 5);
+      ctx.fillText('按住 = 油门 · 左右滑动转向 →', W - 12, mid + 5);
       ctx.textAlign = 'left';
     }
   }
@@ -1192,14 +1195,14 @@
     ctx.fillText('火箭车', W / 2, cy - 38);
     ctx.fillStyle = '#2b3a4a'; ctx.font = '700 12px ' + FONT;
     ctx.fillText('底部按住后左右滑动转向（按住不动车不动）', W / 2, cy - 12);
-    ctx.fillText('按住 = 高速 500', W / 2, cy + 6);
+    ctx.fillText('按住 = 油门（松开减速停车）', W / 2, cy + 6);
     // 车型图例（★ 让玩家"看懂再玩"）
     ctx.strokeStyle = 'rgba(242,130,32,.35)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(W / 2 - hw + 16, cy + 18); ctx.lineTo(W / 2 + hw - 16, cy + 18); ctx.stroke();
     ctx.fillStyle = '#5c7186'; ctx.font = '11px ' + FONT;
     ctx.fillText('卡车最慢 · 轿车中速 · 跑车最快会跑掉', W / 2, cy + 36);
     ctx.fillStyle = '#0a8f3c'; ctx.font = '800 11.5px ' + FONT;
-    ctx.fillText('★ 绿星 = 加油 · 红星 = 加油+加速', W / 2, cy + 54);
+    ctx.fillText('绿星 = 加油 · 红星 = 加油+1000km/h', W / 2, cy + 54);
     ctx.fillStyle = '#c05f0d'; ctx.font = '700 11px ' + FONT;
     ctx.fillText('其余全是敌人 · 橙色车亮灯会变道', W / 2, cy + 70);
     ctx.fillStyle = '#5c7186'; ctx.font = '11px ' + FONT;

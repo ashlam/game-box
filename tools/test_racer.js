@@ -3,8 +3,8 @@
  * 火箭车（Road Fighter 触控版）逻辑回归测试
  *
  * 覆盖：
- *   1) 自动前进（不用操作车也在跑）
- *   2) ★ 两档速度：按住油门 → 高速 V_MAX；松开回 V_BASE（且 320×1.25 = 400 km/h）
+ *   1) ★ 静止起步：不踩油门不动，按住油门逐渐加速（按用户要求）
+ *   2) ★ 油门上限 V_MAX（500 km/h）；吃到红星后限时到 1000 km/h
  *   3) 左右转向 + 冲出路面到草地掉速（不掉命）
  *   4) 燃油：随时间消耗；碰到绿色加油车回满
  *   5) 倒计时：归零即结束
@@ -104,7 +104,8 @@ vm.runInContext(script, sandbox, { filename: 'racer-inline.js' });
 const win = sandbox.window;
 const R = () => win.__racer();
 const step = dt => win.__racerStep(dt);
-const reset = seed => win.__racerReset(seed);
+// ★ 现在开局静止（用户要求），测试里默认按住油门 —— 等价于旧版"自动前进"的行为
+const reset = seed => { win.__racerReset(seed); win.__racerInput({ gas: true }); };
 const input = o => win.__racerInput(o);
 const setP = o => win.__racerSetPlayer(o);
 const clearObjs = () => win.__racerClearObjs();
@@ -112,6 +113,7 @@ const noSpawn = v => win.__racerNoSpawn(v);
 function quiet(){ noSpawn(true); clearObjs(); }   // 关掉交通 + 清场（测速/测转向用）
 const putObj = o => win.__racerPutObj(o);
 const DT = 1 / 60;
+const offDetail = {}; let offRoadInfo = null;   // 越界诊断收集（长跑小节用）
 function run(n, dt = DT) { for (let i = 0; i < n; i++) step(dt); }
 
 let pass = 0, fail = 0; const failures = [];
@@ -122,37 +124,50 @@ function ok(cond, name, detail) {
 function section(t) { console.log('\n== ' + t + ' =='); }
 
 /* ================= 1) 自动前进 + 两档速度 ================= */
-section('1) 自动前进 · 两档速度');
+section('1) ★ 静止起步 · 按住油门才逐渐加速（按用户要求）');
 {
-  reset(1);
-  quiet();
+  reset(1); quiet();
+  input({ gas: false });            // 本节专测静止起步：先松开油门
   const a = R();
-  ok(a.state === 'play', '开局即 play（自动前进）');
-  ok(a.V_BASE === 180 && a.V_MAX === 400, '两档速度常数（常规 ' + a.V_BASE + ' / 高速 ' + a.V_MAX + '）');
-  ok(Math.abs(a.V_MAX * a.KMH - 500) < 1e-9, '★ 高速档 = ' + (a.V_MAX * a.KMH) + ' km/h（用户要求提速）');
-  ok(a.V_MAX >= a.V_BASE * 2, '★ 高速档至少是常规档的 2 倍（' + a.V_MAX + ' vs ' + a.V_BASE + '）');
-  ok(a.hp === 3 && a.fuel === 1 && Math.abs(a.timeLeft - a.TIME_START) < 1e-9,
-     '开局：3 条命 · 满油 · 倒计时 ' + a.TIME_START + 's');
+  ok(a.state === 'play', '开局即 play');
+  ok(a.V_BASE === 180 && a.V_MAX === 400, '速度常数（参考巡航 ' + a.V_BASE + ' / 油门上限 ' + a.V_MAX + '）');
+  ok(a.BOOST_MULT === 2.0, '★ 红星加速倍率 ×' + a.BOOST_MULT + ' → 800 逻辑 = ' +
+     Math.round(a.V_MAX * a.BOOST_MULT * a.KMH) + ' km/h');
+  ok(a.player.v === 0, '★ 开局车速为 0（静止起步）');
 
+  // 不踩油门：车原地不动
   const y0 = R().player.y;
-  run(60);
-  const adv = R().player.y - y0;
-  ok(Math.abs(adv - a.V_BASE) < 6, '不操作也自动前进（1 秒跑 ' + adv.toFixed(1) + ' ≈ 常规速度 ' + a.V_BASE + '）');
-
-  // 油门 → 高速
-  input({ gas: true });
   run(90);
-  ok(Math.abs(R().player.v - a.V_MAX) < 0.5, '★ 按住油门 → 升到高速 ' + R().player.v.toFixed(1));
+  ok(Math.abs(R().player.y - y0) < 0.5,
+     '★ 不踩油门 → 车原地不动（1.5 秒位移 ' + (R().player.y - y0).toFixed(2) + '）');
+  ok(R().player.v < 0.5, '不踩油门车速保持 0（不会自动前进）');
+
+  // 踩油门：逐渐加速（不是瞬移）
+  input({ gas: true });
+  run(6);                                        // 0.1 秒
+  const v1 = R().player.v;
+  ok(v1 > 0 && v1 < a.V_MAX * 0.6,
+     '★ 按下油门后开始加速（0.1 秒 ' + v1.toFixed(0) + '，没瞬移到顶）', 'v=' + v1.toFixed(1));
+  run(84);                                       // 累计 1.5 秒
+  ok(Math.abs(R().player.v - a.V_MAX) < 0.5,
+     '★ 按住油门约 1.4 秒加速到上限 ' + Math.round(a.V_MAX * a.KMH) + ' km/h（实测 ' +
+       Math.round(R().player.v * a.KMH) + '）');
   const yG = R().player.y;
   run(60);
-  ok(R().player.y - yG > a.V_BASE * 1.4, '高速下前进明显更快（1 秒 ' + (R().player.y - yG).toFixed(0) + '）');
-  // 松开 → 回常规
+  ok(R().player.y - yG > a.V_MAX * 0.9, '油门到底后快速前进（1 秒 ' + (R().player.y - yG).toFixed(0) + ' 逻辑单位）');
+
+  // 松开：减速到停
   input({ gas: false });
-  run(90);
-  ok(Math.abs(R().player.v - a.V_BASE) < 0.5, '松开油门 → 回到常规速度 ' + R().player.v.toFixed(1));
+  run(20);
+  ok(R().player.v < a.V_MAX * 0.85, '★ 松开油门 → 开始减速（' + R().player.v.toFixed(0) + '）');
+  run(150);
+  ok(R().player.v < 1, '★ 松开油门后减速停车（v=' + R().player.v.toFixed(2) + '）');
+  const yS = R().player.y;
+  run(60);
+  ok(Math.abs(R().player.y - yS) < 0.5, '停下之后不会自己再动（位移 ' + (R().player.y - yS).toFixed(2) + '）');
 }
 
-/* ================= 2) 转向 / 草地 ================= */
+
 section('2) 左右转向 · 冲出路面掉速（不掉命）');
 {
   reset(1);
@@ -264,11 +279,16 @@ section('6) ★ 交通生成公平性（每排必留活路）· 变道车');
     step(DT); ran++;
     const s = R();
     if (![s.player.x, s.player.y, s.player.v].every(Number.isFinite)) nan++;
-    if (s.player.v < -0.01 || s.player.v > s.V_MAX + 0.01) offRoadObj++;
+    // ★ 上界 = 红星加速上限（吃到红星时合法超过 V_MAX）
+    if (s.player.v < -0.01 || s.player.v > s.V_MAX * s.BOOST_MULT + 0.01) offRoadObj++;
     if (s.player.x < s.ROAD_L - 20.5 || s.player.x > s.ROAD_R + 20.5) offRoadObj++;
     for (const o of s.objs) {
       if (!Number.isFinite(o.x) || !Number.isFinite(o.y)) nan++;
-      if (o.x < s.ROAD_L - 1 || o.x > s.ROAD_R + 1) offRoadObj++;
+      if (o.x < s.ROAD_L - 1 || o.x > s.ROAD_R + 1) { offRoadObj++;
+        const kk = o.kind + '@x' + o.x.toFixed(0) + '@lane' + o.lane + '@v' + (o.v||0).toFixed(0);
+        offDetail[kk] = (offDetail[kk] || 0) + 1;
+        offRoadInfo = { ROAD_L: Math.round(s.ROAD_L), ROAD_R: Math.round(s.ROAD_R), W: Math.round(s.W), LANE_W: s.LANE_W.toFixed(1) };
+      }
       if (o.drift > 0) sawDrift = true;
       if (!prevIds.has(o.id)) {                 // 新生成的对象：统计同一排占了几条道
         const sameRow = s.objs.filter(q => Math.abs(q.y - o.y) < 0.5);
@@ -280,7 +300,8 @@ section('6) ★ 交通生成公平性（每排必留活路）· 变道车');
   }
   ok(ran === 3600, '观测跑满 60 秒（' + ran + '/3600 帧）');
   ok(nan === 0, '长跑 60 秒坐标无 NaN');
-  ok(offRoadObj === 0, '车辆横向/速度不越界（越界 ' + offRoadObj + ' 次）');
+  ok(offRoadObj === 0, '车辆横向/速度不越界（速度上界已含红星加速，越界 ' + offRoadObj + ' 次）',
+     JSON.stringify(offDetail) + ' 路面=' + JSON.stringify(offRoadInfo));
   ok(maxPerRow <= R().LANES - 2,
      '★ 同一排最多占 ' + maxPerRow + ' 条道（≤ ' + (R().LANES - 2) + '）→ 4 车道至少留 2 条空，不会并排堵死',
      '最多 ' + maxPerRow);
@@ -357,6 +378,7 @@ section('9) 三种结束原因都能正常收尾');
 
 /* ================= 10) ★ 滑屏触控（底部触控区） ================= */
 section('10) ★ 滑屏触控：底部专用触控区 / 左右滑动带车 / 上半高速');
+input({ gas: false });                      // ★ 本节只测触控：先关掉键盘油门（reset 默认按住）
 {
   const touch = (k, lx, ly, id) => win.__racerTouch(k, lx, ly, id);
   reset(31);
@@ -437,14 +459,16 @@ section('10) ★ 滑屏触控：底部专用触控区 / 左右滑动带车 / 上
     touch('up', s.ROAD_L + 42, yLo, 5);
   }
 
-  // ⑥ 松手：回常规档；车停在原地（★ 不擅自加"自动回正"机制）
+  input({ gas: false });                     // ★ 先关掉键盘油门，专测触控松手
+  // ⑥ 松手：减速停车；车停在原地（★ 不擅自加"自动回正"机制）
   touch('up', s.ROAD_L, yLo, 1);
   ok(R().input.touching === false, '松手 → 退出触控操控');
-  ok(R().input.gasOn === false, '松手 → 回常规档');
+  ok(R().input.gasOn === false, '松手 → 松开油门（不再加速）');
   const xKeep = R().player.x;
   run(120);
   ok(Math.abs(R().player.x - xKeep) < 1, '松手后车停在原横向位置（不自动回正）');
-  ok(Math.abs(R().player.v - R().V_BASE) < 0.5, '松手后速度回常规档');
+  run(150);
+  ok(R().player.v < 1, '★ 松手后减速停车（v=' + R().player.v.toFixed(2) + '）—— 开局静止后不再有"自动巡航"');
 
   // ⑦ 多指：旧代码两指会互相覆盖，这里必须各自有效
   touch('down', s.ROAD_L, yLo, 7);
@@ -637,6 +661,7 @@ section('13) ★ 不穿透机制：跟车 + 硬性钳制');
 
   // 定向场景①：跑车(208) 直冲静止锥桶 → 必须跟停，不穿透
   reset(62); noSpawn(true); clearObjs();
+  input({ gas: false });                      // ★ 定向场景：玩家原地不动，避免对象被回收
   const s1 = R();
   const laneX1 = s1.ROAD_L + s1.LANE_W * 1.5;
   // 玩家挪到别的车道且无敌，避免撞掉锥桶/被回收干扰观测
@@ -656,6 +681,7 @@ section('13) ★ 不穿透机制：跟车 + 硬性钳制');
 
   // 定向场景②：玩家也算前车 —— 后方快车只能跟着，不会穿过玩家
   reset(63); noSpawn(true); clearObjs();
+  input({ gas: false });                      // ★ 定向场景：玩家原地不动，避免对象被回收
   const s2 = R();
   const laneX2 = s2.ROAD_L + s2.LANE_W * 1.5;
   setP({ x: laneX2, v: 120 });                          // 玩家慢速，让后车追上来
@@ -867,7 +893,7 @@ section('17) ★ 红色五角星：加油 + 限时高速（上限 = 原二段 80
 {
   reset(101); quiet();
   const s0 = R();
-  ok(s0.BOOST_MULT === 1.6 && s0.BOOST_TIME === 4.0,
+  ok(s0.BOOST_MULT === 2.0 && s0.BOOST_TIME === 4.0,
      '常数：红星加速倍率 ×' + s0.BOOST_MULT + ' / 持续 ' + s0.BOOST_TIME + ' 秒');
   ok(s0.player.boost === 0, '开局没有加速（boost = 0）');
   ok(s0.BOOST_HOLD === undefined && s0.ZONE_HI === undefined,
