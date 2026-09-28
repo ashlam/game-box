@@ -28,6 +28,8 @@
   .top button{font-size:11.5px;padding:6px 8px;border-radius:9px;border:1px solid var(--line);
                background:var(--card);color:var(--txt);font-family:inherit;line-height:1;white-space:nowrap}
   .top button:active{background:var(--acc);border-color:var(--acc);color:#fff}
+  .top a.tune{color:#9dbdff;font-size:11.5px;padding:6px 8px;border-radius:9px;background:var(--card);
+              border:1px solid var(--line);text-decoration:none;line-height:1;white-space:nowrap}
 
   #stage{width:100%;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;touch-action:none}
   canvas{display:block;border-radius:14px;border:1px solid var(--line);touch-action:none;
@@ -72,6 +74,7 @@
   <h1>火箭车</h1>
   <button id="btnSound">🔊 音效</button>
   <button id="btnDiag" title="复制诊断信息">诊断</button>
+  <a class="tune" href="editor.html" title="调整速度/时间等参数">⚙ 调参</a>
 </div>
 
 <div id="stage"><canvas id="cv"></canvas></div>
@@ -158,17 +161,33 @@
     TOUCH_TOP = TOUCH_BOTTOM - ZONE_H;                      // ★ 整块都是高速操作区
     PY = TOUCH_TOP - CAR_H / 2 - 14;                        // 车始终在触控区上方
   }
-  const V_BASE = 180, V_MAX = 400, KMH = 1.25;   // 油门上限 400×1.25 = 500 km/h
+  const V_BASE = 180, KMH = 1.25;
+  let V_MAX = 400;                               // 油门上限（默认 400×1.25 = 500 km/h，可被调参页覆盖）
   //  ★ V_BASE 现在只作"参考巡航速度"用于脱路/撞车限速，不再用于自动前进（开局静止，按油门才加速）
-  const BOOST_MULT = 2.0;                        // ★ 红色五角星加速上限：400×2.0 = 800 逻辑 = 1000 km/h
-  const BOOST_TIME = 4.0;                        // ★ 吃到红星后的高速持续时间（秒）
+  let BOOST_MULT = 2.0;                          // ★ 红色五角星加速倍率（默认 400×2.0 = 1000 km/h）
+  let BOOST_TIME = 4.0;                          // ★ 吃到红星后的高速持续时间（秒）
   const ACC = 300, DEC = 560;                    // 提速/回落速率（两档手感）
   const STEER = 196;                             // 键盘横向速度
   const FOLLOW = 620;                            // ★ 滑屏跟手的最大横向速度（66 宽车道约 0.11s 到位）
   const FUEL_RATE = 0.0115;                      // 每秒耗油（按速度加权）
   const STAGE_LEN = 3600;                        // 每段距离
-  const TIME_START = 55, TIME_BONUS = 32;        // 初始倒计时 / 过关加时
+  let TIME_START = 55, TIME_BONUS = 32;          // 初始倒计时 / 过关加时
   const HP_START = 3;
+
+  /* ★ 调参覆盖：/racer/editor.html 保存到本机的参数在这里生效（没调过就用上面的默认值） */
+  let cfgActive = false, cfgRaw = null;
+  try{
+    cfgRaw = localStorage.getItem('gracer_cfg');
+    if(cfgRaw){
+      const c = JSON.parse(cfgRaw);
+      if(+c.vMaxKmh > 0) V_MAX = Math.round(+c.vMaxKmh / KMH);
+      if(+c.timeStart > 0) TIME_START = +c.timeStart;
+      if(c.timeBonus !== undefined && c.timeBonus !== '' && +c.timeBonus >= 0) TIME_BONUS = +c.timeBonus;
+      if(+c.boostKmh > 0) BOOST_MULT = (+c.boostKmh) / (V_MAX * KMH);
+      if(+c.boostTime > 0) BOOST_TIME = +c.boostTime;
+      cfgActive = true;
+    }
+  }catch(e){ cfgActive = false; }
 
   /* ---------- 调色板（★ 等照片到了改这里） ---------- */
   const PALETTE = {
@@ -1322,6 +1341,9 @@
         .map(k => { const n = objs.filter(o => !o.dead && o.kind === k).length; return n ? (ENEMY[k] ? ENEMY[k].name : k) + n : null; })
         .filter(Boolean).join(' ') || '—') : '—'),
       '输入=' + JSON.stringify(input) + '  种子=' + fieldSeed,
+      '参数=' + (cfgActive ? '已用本机调参（' + cfgRaw + '）' : '默认值') +
+        '  V_MAX=' + V_MAX + ' BOOST_MULT=' + BOOST_MULT.toFixed(2) + ' BOOST_TIME=' + BOOST_TIME +
+        ' TIME_START=' + TIME_START + '/' + TIME_BONUS,
       '音效=' + (soundOn ? '开' : '关') + ' 引擎=' + (engineOsc ? '响' : '停'),
       'UA=' + navigator.userAgent,
     ].join('\n');
