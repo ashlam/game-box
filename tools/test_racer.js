@@ -368,12 +368,14 @@ section('10) ★ 滑屏触控：底部专用触控区 / 左右滑动带车 / 上
      '车底 ' + carBottom.toFixed(0) + ' vs 触控区顶 ' + s.TOUCH_TOP);
   ok(s.TOUCH_TOP < s.H && s.TOUCH_TOP > s.HUD_H, '触控区落在屏幕内（' + s.TOUCH_TOP + '..' + Math.round(s.H) + '）');
 
-  const mid = s.TOUCH_MID, yHi = mid - 14, yLo = mid + 14;
-  const zoneH = s.TOUCH_BOTTOM - s.TOUCH_TOP, slowH = s.TOUCH_BOTTOM - s.TOUCH_MID, hiH = s.TOUCH_MID - s.TOUCH_TOP;
-  ok(zoneH === s.ZONE_HI + s.ZONE_LO && hiH === s.ZONE_HI && slowH === s.ZONE_LO,
-     '★ 触控区两段高度严格等于设定值（高速 ' + hiH + ' / 常规 ' + slowH + '，总 ' + zoneH + '）',
-     'hi=' + hiH + ' lo=' + slowH + ' zone=' + zoneH);
-  ok(hiH >= 24 && slowH >= 24, '★ 两段都还够手指按（高速 ≥24、常规 ≥24；当前 ' + hiH + '/' + slowH + '）');
+  const mid = (s.TOUCH_TOP + s.TOUCH_BOTTOM) / 2, yHi = mid - 14, yLo = s.TOUCH_BOTTOM - 4;
+  const zoneH = s.TOUCH_BOTTOM - s.TOUCH_TOP;
+  ok(zoneH === s.ZONE_H,
+     '★ 操作区已合并成一个（总高 ' + zoneH + ' = ZONE_H），高低速分界与低速区都已移除',
+     'zone=' + zoneH);
+  ok(zoneH >= 48, '★ 操作区够手指按住（≥48，当前 ' + zoneH + '）');
+  ok(s.TOUCH_MID === undefined && s.ZONE_HI === undefined && s.ZONE_LO === undefined,
+     '★ 旧设定彻底移除：TOUCH_MID / ZONE_HI / ZONE_LO 都不存在了');
   ok(s.TOUCH_BOTTOM <= s.H - s.BOTTOM_BAND + 1,
      '★ 触控区整体在底部橙边之上（下边界 ' + s.TOUCH_BOTTOM + ' ≤ ' + (s.H - s.BOTTOM_BAND) + '）—— 这才是"一条缝"的根因');
   ok(s.TOUCH_TOP > s.PY + s.CAR_H / 2, '触控区仍在玩家车下方');
@@ -390,9 +392,9 @@ section('10) ★ 滑屏触控：底部专用触控区 / 左右滑动带车 / 上
   ok(Math.abs(R().player.v - R().V_MAX) < 0.5, '高速档到位（' + R().player.v.toFixed(0) + ' = 400km/h）');
 
   // ③ 下半 = 常规档
-  ok(touch('move', s.W / 2, yLo, 1).gasOn === false, '★ 手指移到下半 → 回常规档');
+  ok(touch('move', s.W / 2, yLo, 1).gasOn === true, '★ 手指按在操作区最下沿 → 仍然是高速档（已无低速区）');
   run(120);
-  ok(Math.abs(R().player.v - R().V_BASE) < 0.5, '常规档到位（' + R().player.v.toFixed(0) + '）');
+  ok(Math.abs(R().player.v - R().V_MAX) < 0.5, '★ 操作区任意位置都到高速 ' + R().player.v.toFixed(0) + '（已无低速区）');
 
   // ④ ★ 按下不动 → 车不动；只有左右滑动才移动（用户要求，原来是"按哪去哪"）
   {
@@ -413,7 +415,7 @@ section('10) ★ 滑屏触控：底部专用触控区 / 左右滑动带车 / 上
     touch('move', s.W / 2 + 60, yLo + 18, 1);    // 只做竖向移动
     run(45);
     ok(Math.abs(R().player.x - xB) < 0.6, '上下滑动不改变车的横向位置（只切换档位）');
-    ok(R().input.gasOn === false, '手指在下半 → 常规档');
+    ok(R().input.gasOn === true, '手指按在任何位置都是高速档');
     touch('move', s.W / 2 - 90, yLo, 1);         // 再左滑
     run(90);
     ok(R().player.x < xB - 60, '继续左滑 → 车继续左移（' + xB.toFixed(0) + '→' + R().player.x.toFixed(0) + '）');
@@ -480,7 +482,7 @@ section('11) ★ 绘制冒烟：各种状态下 draw() 都不能抛错');
   win.__racerTouch('down', R().W / 2, (R().TOUCH_TOP + R().H) / 2 - 12, 1);
   cases.push(['触控中(高速档)', drawOk()]);
   win.__racerTouch('move', R().W / 2, (R().TOUCH_TOP + R().H) / 2 + 12, 1);
-  cases.push(['触控中(常规档)', drawOk()]);
+  cases.push(['触控中(按住=高速)', drawOk()]);
   win.__racerTouch('up', R().W / 2, R().H - 10, 1);
   setP({ timeLeft: 0.2 });
   run(30);
@@ -717,8 +719,8 @@ section('14) ★ 可辨识性：唯一能被吃的东西必须"视觉上跳出�
       if (o.kind === 'fuel') orders[o.id] = true;
     }
   }
-  ok(pickupKinds.size === 1 && pickupKinds.has('fuel'),
-     '★ 场上只有加油车带"可拾取"标记，其余车辆一律没有（实际：' + [...pickupKinds].join('/') + '）');
+  ok(pickupKinds.size === 2 && pickupKinds.has('fuel') && pickupKinds.has('boost'),
+     '★ 场上只有两种五角星带"可拾取"标记（绿=加油 / 红=加油+加速），敌车一律没有（实际：' + [...pickupKinds].join('/') + '）');
   ok(Object.keys(orders).length > 0, '60 秒内至少出现过一辆加油车（出现更密，实际 ' + Object.keys(orders).length + ' 辆）');
 
   // 定向：强迫开一次加油车，验证吃掉回满油 + 只有它不扣命
@@ -752,7 +754,7 @@ section('15) ★ 排间距：按最高速留足换道时间');
     prevIds = new Set(s.objs.map(o => o.id));
   }
   // ① 排间距：只看**敌车/障碍**的排（加油桶是拾取物，刷在相邻车道不算堵路）
-  const traffic = rows.filter(r => r.kind !== 'fuel');
+  const traffic = rows.filter(r => r.kind !== 'fuel' && r.kind !== 'boost');   // ★ 拾取物（绿/红星）不算敌车排
   const ys = [...new Set(traffic.map(r => Math.round(r.y)))].sort((a, b) => a - b);
   let minGap = Infinity;
   for (let i = 1; i < ys.length; i++) minGap = Math.min(minGap, ys[i] - ys[i - 1]);
@@ -861,54 +863,79 @@ section('16) ★ 车身体积与判定盒：无处可钻');
 }
 
 /* ================= 17) ★ 高速两档增压 ================= */
-section('17) ★ 高速两档：一档顶住 2.5 秒 → 二档 1.6 倍（逐渐加速）');
+section('17) ★ 红色五角星：加油 + 限时高速（上限 = 原二段 800 km/h）');
 {
   reset(101); quiet();
   const s0 = R();
-  ok(s0.BOOST_MULT === 1.6 && s0.BOOST_HOLD === 2.5,
-     '常数：二档倍率 ×' + s0.BOOST_MULT + ' / 保持 ' + s0.BOOST_HOLD + ' 秒');
-  ok(s0.player.boostLv === 1 && s0.player.boostT === 0, '开局是一档、蓄力为 0');
+  ok(s0.BOOST_MULT === 1.6 && s0.BOOST_TIME === 4.0,
+     '常数：红星加速倍率 ×' + s0.BOOST_MULT + ' / 持续 ' + s0.BOOST_TIME + ' 秒');
+  ok(s0.player.boost === 0, '开局没有加速（boost = 0）');
+  ok(s0.BOOST_HOLD === undefined && s0.ZONE_HI === undefined,
+     '★ 旧设定彻底移除：BOOST_HOLD / boostLv / 高低速分区都不存在');
+
+  // 只按住油门（不吃红星）：上限就是常规高速，不会自己变快
   setP({ x: s0.ROAD_L + s0.LANE_W * 1.5, v: s0.V_BASE });
-
   input({ gas: true });
-  run(90);                                       // 1.5 秒（其中约 0.7 秒用来提速到一档上限）
-  ok(R().player.boostLv === 1, '1.5 秒时仍是一档（蓄力还没满）');
+  run(300);                                       // 按住 5 秒
   ok(Math.abs(R().player.v - s0.V_MAX) < 0.5,
-     '一档上限稳定在 ' + Math.round(s0.V_MAX * s0.KMH) + ' km/h');
+     '★ 只按住油门（不吃红星）上限就是 ' + Math.round(s0.V_MAX * s0.KMH) + ' km/h，不会自行升档');
 
-  run(120);                                      // 再 2 秒 → 累计约 3.5 秒，越过 2.5 秒门槛
-  const a = R();
-  ok(a.player.boostLv === 2, '★ 顶住 2.5 秒 → 升二档');
-  ok(a.player.v < s0.V_MAX * s0.BOOST_MULT - 5,
-     '★ 升档后是"逐渐"加速（此刻 ' + Math.round(a.player.v) + '，二档上限 ' + Math.round(s0.V_MAX * s0.BOOST_MULT) + '，未瞬移）',
-     'v=' + a.player.v.toFixed(1));
+  // 吃到红星
+  {
+    const p = R().player;
+    setP({ invuln: 99999, fuel: 0.4 });
+    putObj({ kind: 'boost', lane: 1, x: p.x, y: p.y + 150, v: 0, vWant: 0, pickup: true,
+             w: Math.round(s0.CAR_W * 0.98), h: Math.round(s0.CAR_H * 0.62) });
+    let hitAt = -1;
+    for(let i = 0; i < 150; i++){ run(1); if(R().player.boost > 0){ hitAt = i; break; } }
+    ok(hitAt >= 0, '★ 吃到红色五角星 → 触发限时高速');
+    ok(R().fuel > 0.99, '★ 红星同时把油加满（' + Math.round(R().fuel * 100) + '%）');
+    ok(R().player.boost > 0 && R().player.boost <= s0.BOOST_TIME,
+       '加速计时开始（剩余 ' + R().player.boost.toFixed(1) + 's）');
+  }
 
-  run(180);                                      // 再 3 秒，够升到二档上限
+  // 逐渐升上去（不是瞬移），到顶是 800 km/h
+  run(2);
+  ok(R().player.v < s0.V_MAX * s0.BOOST_MULT - 5,
+     '★ 加速是逐步上去的（此刻 ' + Math.round(R().player.v) + ' < 上限 ' + Math.round(s0.V_MAX * s0.BOOST_MULT) + '）',
+     'v=' + R().player.v.toFixed(1));
+  run(180);
   ok(Math.abs(R().player.v - s0.V_MAX * s0.BOOST_MULT) < 0.5,
-     '★ 二档上限 = 一档 ×1.6 = ' + Math.round(s0.V_MAX * s0.BOOST_MULT * s0.KMH) + ' km/h（实测 ' +
+     '★ 加速上限 = 常规 ×1.6 = ' + Math.round(s0.V_MAX * s0.BOOST_MULT * s0.KMH) + ' km/h（实测 ' +
        Math.round(R().player.v * s0.KMH) + '）');
-  ok(R().player.boostT === s0.BOOST_HOLD, '二档时蓄力条保持满格');
 
-  // 松手 → 回一档
-  input({ gas: false });
-  run(30);
-  ok(R().player.boostLv === 1 && R().player.boostT === 0, '★ 松开油门 → 回一档并清零蓄力（增压要重新蓄）');
-  run(150);
-  ok(Math.abs(R().player.v - s0.V_BASE) < 0.5, '松手后回到常规速度 ' + Math.round(s0.V_BASE * s0.KMH) + ' km/h');
+  // 到期回落
+  run(300);
+  ok(R().player.boost === 0, '★ 加速时间耗尽（' + s0.BOOST_TIME + ' 秒）后结束');
+  ok(Math.abs(R().player.v - s0.V_MAX) < 0.5,
+     '★ 到期自动回落到 ' + Math.round(s0.V_MAX * s0.KMH) + ' km/h');
 
-  // 重新按住 → 必须重新攒
-  input({ gas: true });
-  run(120);                                      // 2 秒 < 2.5 秒
-  ok(R().player.boostLv === 1, '★ 重新按住后要重新蓄（2 秒时仍是一档）');
-  input({ gas: false });
+  // 擦边也算吃到（判定宽 8/10）
+  reset(102); quiet(); setP({ invuln: 99999, x: R().ROAD_L + R().LANE_W * 1.5, fuel: 0.4 });
+  {
+    const s2 = R(), p = s2.player;
+    const off = (Math.round(s2.CAR_W * 0.98) + s2.CAR_W) / 2 + 5;
+    putObj({ kind: 'boost', lane: 1, x: p.x - off, y: p.y + 150, v: 0, vWant: 0, pickup: true,
+             w: Math.round(s2.CAR_W * 0.98), h: Math.round(s2.CAR_H * 0.62) });
+    input({ gas: true });
+    let got = false;
+    for(let i = 0; i < 150; i++){ run(1); if(R().player.boost > 0){ got = true; break; } }
+    ok(got, '★ 擦边碰到红星也算吃到（和绿星同样的宽容判定）');
+  }
 
-  // 新一局重置
-  reset(102);
-  ok(R().player.boostLv === 1 && R().player.boostT === 0, '开新局档位/蓄力重置');
+  // 新局清零
+  reset(103); quiet();
+  ok(R().player.boost === 0, '开新局加速计时清零');
 
-  // 二档时仪表/音高不出错（绘制冒烟已覆盖 draw，这里验证引擎音仍正常）
-  ok(R().engine === true || R().engine === false, '二档逻辑不影响音频状态机');
+  // 红星绘制不抛错（绘制冒烟已覆盖，这里显式画一次含红星的场面）
+  putObj({ kind: 'boost', lane: 1, x: R().ROAD_L + R().LANE_W * 1.5, y: R().player.y + 200,
+           v: 100, vWant: 100, pickup: true,
+           w: Math.round(R().CAR_W * 0.98), h: Math.round(R().CAR_H * 0.62) });
+  let derr = null;
+  try{ win.__racerDraw(); }catch(e){ derr = String(e.message || e); }
+  ok(!derr, '★ 红星在场时绘制不抛错', derr || '');
 }
+
 
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
