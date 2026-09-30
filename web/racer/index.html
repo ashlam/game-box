@@ -1036,15 +1036,58 @@
     }
   }
 
+  /** ★ 满速红光特效参数（纯函数，便于测试）：
+      仅在"红星生效 + 已到并保持满速"（= 可撞飞路障的状态）时点亮 */
+  function speedFx(){
+    const on = smashReady();
+    const pulse = 0.5 + 0.5 * Math.sin(tGlobal * 8.5);
+    return { on: on, pulse: pulse, alpha: on ? 0.45 + 0.35 * pulse : 0 };
+  }
+
   function drawPlayer(){
     if(state === 'over' && reason === '撞毁') return;
     const blink = player.invuln > 0 && (Math.floor(tGlobal * 12) % 2 === 0);
     if(blink) return;                              // 无敌闪烁
     const shakeX = shake > 0 ? (Math.random() - 0.5) * 4 * shake : 0;
+    const cx = player.x + shakeX, cy = PY + CAR_H * 0.08;
+    const fx = speedFx();
     ctx.save();
+    /* ★ 满速红光：车底脉动光晕（同时表示"现在能撞飞路障"） */
+    if(fx.on){
+      const R0 = Math.max(CAR_W, CAR_H) * (1.20 + 0.14 * fx.pulse);
+      const rg = ctx.createRadialGradient(cx, cy, R0 * 0.12, cx, cy, R0);
+      rg.addColorStop(0.00, 'rgba(255,120,90,' + (fx.alpha * 0.62).toFixed(3) + ')');
+      rg.addColorStop(0.45, 'rgba(255,45,32,' + (fx.alpha * 0.34).toFixed(3) + ')');
+      rg.addColorStop(1.00, 'rgba(255,0,0,0)');
+      ctx.fillStyle = rg;
+      ctx.beginPath(); ctx.arc(cx, cy, R0, 0, 7); ctx.fill();
+    }
     ctx.fillStyle = 'rgba(0,0,0,.22)';
     ctx.beginPath(); ctx.ellipse(player.x, PY + 26, CAR_W * 0.5, 6, 0, 0, 7); ctx.fill();
-    drawCarShape(player.x + shakeX, PY, CAR_W, CAR_H, PALETTE.player, PALETTE.playerLite, { toy: true });
+    /* ★ 满速红光：车身红光描边（shadow 会在车轮廓外扩出一圈红光） */
+    if(fx.on){
+      ctx.shadowColor = 'rgba(255,70,50,' + (0.80 + 0.20 * fx.pulse).toFixed(3) + ')';
+      ctx.shadowBlur = 15 + 11 * fx.pulse;
+    }
+    drawCarShape(cx, PY, CAR_W, CAR_H, PALETTE.player, PALETTE.playerLite, { toy: true });
+    ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
+    /* ★ 满速红光：车尾两束跳动火焰 */
+    if(fx.on){
+      for(let s = -1; s <= 1; s += 2){
+        const fx0 = cx + s * CAR_W * 0.26;
+        const len = CAR_H * (0.30 + 0.18 * Math.random() + 0.12 * fx.pulse);
+        const fg = ctx.createLinearGradient(fx0, PY + CAR_H * 0.46, fx0, PY + CAR_H * 0.46 + len);
+        fg.addColorStop(0.00, 'rgba(255,240,190,.92)');
+        fg.addColorStop(0.42, 'rgba(255,130,55,.72)');
+        fg.addColorStop(1.00, 'rgba(255,40,30,0)');
+        ctx.fillStyle = fg;
+        ctx.beginPath();
+        ctx.moveTo(fx0 - CAR_W * 0.17, PY + CAR_H * 0.46);
+        ctx.lineTo(fx0 + CAR_W * 0.17, PY + CAR_H * 0.46);
+        ctx.lineTo(fx0, PY + CAR_H * 0.46 + len);
+        ctx.closePath(); ctx.fill();
+      }
+    }
     ctx.restore();
   }
 
@@ -1476,6 +1519,7 @@
   window.__racerLayout = () => { layout(); return 'ok'; };   // 测试钩子：重排
   window.__racerReset = seed => { engineStop(); reset(seed); };
   window.__racerInput = o => { if('left' in o) input.left = !!o.left; if('right' in o) input.right = !!o.right; if('gas' in o) input.gas = !!o.gas; };
+  window.__racerFx = () => speedFx();
   window.__racerSmash = () => ({ ready: smashReady(), count: smashed, flies: flies.length,
                                  boost: +player.boost.toFixed(2), v: +player.v.toFixed(1),
                                  cap: +boostCap().toFixed(1), need: +(boostCap() * SMASH_TOL).toFixed(1) });

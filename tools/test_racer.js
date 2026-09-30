@@ -1013,6 +1013,28 @@ win.__racerPutRoadblock((st.player || st.p).x, (st.player || st.p).y, 'cone');
   ok(st.hp === hp2 - 1, '★ 满速撞车照旧扣血（hp ' + hp2 + ' → ' + st.hp + '）');
   ok(st.player.v < v2 * 0.6, '★ 满速撞车照旧掉速（' + v2.toFixed(1) + ' → ' + st.player.v.toFixed(1) + '）');
 
+  // ⑥.5 ★ 满速红光特效：只在"红星 + 满速"时点亮
+  setP({ boost: 0, v: cap, invuln: 0 }); run(1);
+  ok(win.__racerFx().on === false && win.__racerFx().alpha === 0, '没红星：不亮红光（alpha=0）');
+  setP({ boost: 5, v: cap * 0.5, invuln: 0 }); run(1);
+  ok(win.__racerFx().on === false, '红星生效但未到满速：不亮红光');
+  setP({ boost: 5, v: cap, invuln: 0 }); run(1);
+  let FX = win.__racerFx();
+  ok(FX.on === true, '★ 红星 + 满速：点亮红光');
+  ok(FX.alpha > 0.1 && FX.alpha < 1, '红光亮度在合理范围（alpha=' + FX.alpha.toFixed(2) + '）');
+  ok(FX.pulse >= 0 && FX.pulse <= 1, '红光会脉动（pulse=' + FX.pulse.toFixed(2) + '）');
+  const n1 = win.__racerFx().alpha;
+  for(let i = 0; i < 12; i++) run(1);
+  ok(win.__racerFx().alpha !== n1, '★ 红光亮度随时间脉动变化（' + n1.toFixed(2) + ' → ' + win.__racerFx().alpha.toFixed(2) + '）');
+  // 绘制冒烟：亮 / 不亮两种状态都不能抛错
+  let drawErr = null;
+  try{ win.__racerDraw(); }catch(e){ drawErr = String(e && e.message || e); }
+  ok(drawErr === null, '★ 亮红光状态下绘制不抛错', drawErr || '');
+  setP({ boost: 0, v: 0, invuln: 0 }); run(1);
+  drawErr = null;
+  try{ win.__racerDraw(); }catch(e){ drawErr = String(e && e.message || e); }
+  ok(drawErr === null, '不亮红光状态下绘制不抛错', drawErr || '');
+
   // ⑦ 没有红星时撞路障 → 照旧扣血（机制没被放宽）
   reset(8); noSpawn(true); clearObjs();
   setP({ boost: 0, v: cap, invuln: 0, hp: 3 }); run(1);
