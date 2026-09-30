@@ -482,6 +482,144 @@ section('10) ★ 关卡集：每一关都可解，最少步数与声明一致');
   ok(store['gklotski_best_intro_1'] === undefined, '不同关卡记录互不干扰');
 }
 
+/* ================= 11) ★ 撤销 / 重置本关 ================= */
+section('11) ★ 撤销 与 重置本关');
+{
+  reset();
+  ok(win.__klotskiHistory() === 0, '开局撤销栈为空');
+  ok(win.__klotskiUndo() === 0, '开局按撤销：无事发生（返回 0）');
+  ok(R().steps === 0, '开局撤销不会把步数弄成负数');
+
+  // 单格移动 → 撤销
+  win.__klotskiDrag(3, 1, 0, 1);              // (3,1) 的卒往下 1 格 → (4,1)（空格）
+  run(20);
+  ok(R().steps === 1 && win.__klotskiHistory() === 1, '走 1 步：步数 1、撤销栈 1');
+  ok(win.__klotskiUndo() === 1, '撤销返回 1（确实撤了一步）');
+  run(20);
+  let s = R();
+  ok(s.steps === 0, '★ 撤销后步数回到 0');
+  ok(s.pieces.some(p => p.type === 'mini' && p.r === 3 && p.c === 1), '★ 棋子回到移动前的位置 (3,1)');
+  ok(win.__klotskiHistory() === 0, '撤销栈清空');
+
+  // 多格滑动 → 撤销要整体退回
+  reset();
+  win.__klotskiDrag(4, 0, 2, 0);            // (4,0) 的卒右滑 2 格 → (4,2)
+  run(20);
+  s = R();
+  const moved = s.pieces.some(p => p.type === 'mini' && p.r === 4 && p.c === 2);
+  ok(moved && s.steps === 1, '★ 一次滑 2 格记 1 步（卒到 (4,2)）');
+  win.__klotskiUndo();
+  run(20);
+  s = R();
+  ok(s.pieces.some(p => p.type === 'mini' && p.r === 4 && p.c === 0), '★ 撤销多格滑动 → 整体退回 (4,0)');
+  ok(s.steps === 0, '步数回到 0');
+
+  // 连续多步撤销
+  reset();
+  win.__klotskiDrag(3, 1, 0, 1); run(20);     // 卒 (3,1)→(4,1)
+  win.__klotskiDrag(3, 2, 0, 1); run(20);     // 卒 (3,2)→(4,2)
+  ok(win.__klotskiHistory() === 2, '连走两步：撤销栈 2');
+  win.__klotskiUndo(); run(20);
+  win.__klotskiUndo(); run(20);
+  s = R();
+  ok(s.steps === 0 && win.__klotskiHistory() === 0, '★ 连按两次撤销 → 完全回到开局盘面');
+  let same = true;
+  CLASSIC.forEach((p, i) => {
+    const g = s.pieces[i];
+    if(g.r !== p.r || g.c !== p.c) same = false;
+  });
+  ok(same, '★ 撤销到底后盘面与初始布局逐块一致');
+
+  // 过关后撤销 → 回到对局
+  reset();
+  win.__klotskiSetPiece('曹操', 3, 1);
+  win.__klotskiCheckWin();
+  ok(R().won === true, '先过关');
+  win.__klotskiUndo();
+  run(20);
+  ok(R().won === false && R().state === 'play', '★ 过关后按撤销 → 回到对局状态（结算面板关闭）');
+
+  // 重置本关按钮
+  reset();
+  win.__klotskiDrag(3, 1, 0, 1); run(20);
+  win.__klotskiDrag(3, 2, 0, 1); run(20);
+  ok(R().steps === 2, '先走 2 步');
+  els.btnReset.onclick();
+  run(20);
+  s = R();
+  ok(s.steps === 0 && win.__klotskiHistory() === 0, '★ 重置本关：步数归零、撤销栈清空');
+  ok(s.pieces.some(p => p.boss && p.r === 0 && p.c === 1), '★ 重置后回到本关初始盘面（曹操在 (0,1)）');
+  ok(s.won === false && s.state === 'play', '重置后可以继续玩');
+
+  // 切关也清空撤销栈
+  win.__klotskiDrag(3, 1, 0, 1); run(20);
+  resetIntro();
+  ok(win.__klotskiHistory() === 0, '★ 切换关卡后撤销栈清空（不会撤到上一关的盘面）');
+  reset();
+}
+
+/* ================= 12) ★ 提示 / 自动演示 ================= */
+section('12) ★ 提示 与 自动演示');
+{
+  // —— 提示：必须合法，且确实走在最优解上 ——
+  reset();                                       // 古典第 1 关（横刀立马）
+  const before = win.__klotskiSolve();
+  ok(before.length === R().levelMin, '★ 游戏内求解器算出的步数 = 本关最少步数（' + before.length + ' 步）');
+  ok(win.__klotskiHint() === true, '提示可用（返回 true）');
+  let s = R();
+  ok(!!s.hint, '提示给出了具体走法（高亮 + 箭头）');
+  const hint = s.hint;
+  const hp = s.pieces.find(p => p.id === hint.id);
+  ok(!!hp, '提示指向盘面上真实存在的车：' + (hp ? hp.name : '?') + ' 向' +
+           (hint.dc > 0 ? '右' : hint.dc < 0 ? '左' : hint.dr > 0 ? '下' : '上') + ' ' + hint.n + ' 格');
+  const n1 = win.__klotskiMove(hint.id, hint.dr, hint.dc, hint.n);
+  run(20);
+  ok(n1 === hint.n, '★ 提示的走法可以走通（走了 ' + n1 + ' 格）');
+  const after = win.__klotskiSolve();
+  ok(after.length === before.length - 1,
+     '★ 走完提示这一步后，剩余最优步数恰好少 1（' + before.length + ' → ' + after.length + '）→ 提示确实走在最优解上',
+     'before=' + before.length + ' after=' + after.length);
+
+  // 提示在过关后不再给
+  win.__klotskiSetPiece('曹操', 3, 1); win.__klotskiCheckWin();
+  ok(win.__klotskiHint() === false, '已过关时提示返回 false（不误报）');
+
+  // —— 自动演示：走完能过关，但不计入玩家记录 ——
+  resetIntro();                                  // 入门第 1 关（最少 2 步）
+  const lvMin = R().levelMin;
+  const pathLen = win.__klotskiSolve().length;
+  ok(pathLen === lvMin, '入门第 1 关求解器给 ' + pathLen + ' 步（= 声明最少 ' + lvMin + ' 步）');
+  ok(win.__klotskiDemo() === true, '启动自动演示返回 true');
+  ok(!!R().demo, '演示状态已建立（共 ' + R().demo.total + ' 步）');
+  // 用可推进模拟时钟驱动演示
+  let guard = 0;
+  while(R().demo && guard++ < 2000) win.__klotskiStep(0.6);
+  run(30);
+  s = R();
+  ok(!s.demo, '★ 演示会自己走完并结束（不需要玩家操作）');
+  ok(s.won === true, '★ 演示走完后盘面确实过关了');
+  ok(s.steps === 0, '★ 演示走的步数不计入玩家步数（steps 仍为 0）');
+  ok(s.best === 0, '★ 演示不会刷新玩家的最少步数记录（best 仍为空）');
+  ok(store['gklotski_cleared_intro_1'] === undefined, '★ 演示不会被记成"已通关"');
+
+  // —— 演示中玩家一动手就停 ——
+  reset();
+  ok(win.__klotskiDemo() === true, '再启动一次演示（古典第 1 关，90 步）');
+  ok(!!R().demo, '演示进行中');
+  win.__klotskiDrag(3, 1, 0, 1);                 // 玩家拖动车辆
+  ok(!R().demo, '★ 玩家一动手，自动演示立即停止');
+  win.__klotskiStopDemo();
+  ok(!R().demo, '手动停止演示也安全（幂等）');
+
+  // 提示会被手动操作清掉
+  reset();
+  win.__klotskiHint();
+  ok(!!R().hint, '提示显示中');
+  win.__klotskiDrag(3, 1, 0, 1);
+  ok(!R().hint, '★ 玩家动手后提示自动消失');
+  reset();
+}
+
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');

@@ -55,6 +55,10 @@
                  background:rgba(255,255,255,.05);color:var(--txt);font-family:inherit;margin-bottom:8px;letter-spacing:3px}
   .panel button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
   .panel button:active{filter:brightness(.94)}
+  .bar{width:100%;display:flex;gap:8px;margin-top:7px;flex:0 0 auto}
+  .bar button{flex:1;font-size:12.5px;padding:12px 2px;border-radius:11px;border:1px solid var(--line);
+              background:var(--card);color:var(--txt);font-family:inherit;letter-spacing:1px}
+  .bar button:active{background:var(--acc);border-color:var(--acc);color:#fff}
   #toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 84px);transform:translate(-50%,-12px);
           background:#20262ff2;border:1px solid var(--line);padding:11px 18px;border-radius:12px;font-size:13.5px;
           opacity:0;transition:.22s;pointer-events:none;z-index:70;max-width:86vw;text-align:center}
@@ -77,6 +81,12 @@
 </div>
 
 <div id="stage"><canvas id="cv"></canvas></div>
+<div class="bar">
+  <button id="btnUndo">↶ 撤销</button>
+  <button id="btnReset">⟲ 重置</button>
+  <button id="btnHint">💡 提示</button>
+  <button id="btnDemo">▶ 演示</button>
+</div>
 <div id="toast"></div>
 <div id="dbg"></div>
 
@@ -120,6 +130,7 @@
   const COLS = 4, ROWS = 5;
   const EXIT_C = 1, EXIT_W = 2;                 // 出口：底部中间两格
   const ANIM_DUR = 0.18, DRAG_MIN = 0.34;       // 滑动动画时长 / 拖拽判定比例
+  const DIRS4 = [[0, -1], [0, 1], [-1, 0], [1, 0]];
   const SNAP = true;                            // 一次拖拽按格数吸附
 
   /* 经典「横刀立马」：曹操(2×2) 关羽(横 2×1) 张飞/赵云/马超/黄忠(竖 1×2) 四卒(1×1) */
@@ -176,6 +187,12 @@
   let anim = null, effects = [], tGlobal = 0, shake = 0, glowT = 0, selected = null;
   let soundOn = true, lastTs = 0, raf = 0, hintOn = true;
   const active = new Map();                     // 触控：id → { x, y, pid, sx, sy }
+  let history = [];                             // ★ 撤销栈：每步记录 { id, r, c }（移动前的位置）
+  let hintMove = null;                          // ★ 提示：{ id, dr, dc, t }
+  let demo = null;                              // ★ 自动演示：{ path, idx, t }
+  let solveCache = { key: '', path: null };
+  let demoMove = false;                         // 演示中的移动：不计步、不入撤销栈、不记记录
+  const DEMO_GAP = 0.55, HINT_HOLD = 3.2;
 
   const KEY_BEST = 'gklotski_best';
   best = parseInt(localStorage.getItem(KEY_BEST) || '0', 10) || 0;
@@ -183,6 +200,7 @@
 
   /* ---------- 初始化 / 重置 ---------- */
   function reset(){
+    history = []; hintMove = null; stopDemo();                             // ★ 重置/切关都要清空撤销栈
     const lv = curLevel();
     best = getNum(bestKey(setId, lvIdx));
     pieces = LAYOUT.map((p, i) => ({ id: nextId++, name: p.name, type: p.type, color: p.color,
@@ -221,11 +239,114 @@
     const max = Math.max(1, want || 1);
     while(n < max && fits(p, p.r + dr, p.c + dc)){ p.r += dr; p.c += dc; n++; }
     if(n === 0){ sndBlocked(); shake = 0.55; return 0; }
-    steps++;
+    if(demoMove){ /* 演示：不计步、不入撤销栈 */ }
+    else{
+      history.push({ id: p.id, r: p.r - dr * n, c: p.c - dc * n });   // ★ 记录移动前的位置
+      if(history.length > 600) history.shift();
+      steps++;
+    }
     anim = { active: true, t: 0, id: p.id, fr: p.r - dr * n, fc: p.c - dc * n };
     sndSlide();
     checkWin();
     return n;
+  }
+  /** ★ 撤销一步：回到该棋子移动前的位置；若已过关则顺便退回对局状态 */
+  function undo(){
+    if(anim && anim.active) finishAnim();
+    if(state === 'won'){ won = false; state = 'play'; glowT = 0; $('over').classList.remove('on'); }
+    if(!history.length){ toast('已经回到最初了'); sndBlocked(); return 0; }
+    const h = history.pop();
+    const p = pieces.find(q => q.id === h.id);
+    if(!p) return 0;
+    const fromR = p.r, fromC = p.c;          // 撤销前的显示位置（动画起点）
+    p.r = h.r; p.c = h.c;
+    p.fr = fromR; p.fc = fromC;
+    anim = { active: true, t: 0, id: p.id, fr: fromR, fc: fromC };
+    if(steps > 0) steps--;
+    selected = p.id;
+    sndUndo();
+    return 1;
+  }
+  /* ---------- 求解器（从当前盘面出发的最优解，提示与演示共用） ---------- */
+  function canonKey(st){
+    return st.map(p => p.w + 'x' + p.h + '@' + p.r + ',' + p.c).sort().join('|');
+  }
+  const stWin = st => { const b = st.find(p => p.boss); return !!b && b.r === WIN_R && b.c === WIN_C; };
+  function stFits(st, me, r, c){
+    if(r < 0 || c < 0 || r + me.h > ROWS || c + me.w > COLS) return false;
+    for(const q of st){
+      if(q === me) continue;
+      if(r < q.r + q.h && q.r < r + me.h && c < q.c + q.w && q.c < c + me.w) return false;
+    }
+    return true;
+  }
+  /** 返回从当前盘面到过关的最优走法序列 [{ id, dr, dc, n }, ...]（同一辆车朝一方向滑动任意格 = 1 步） */
+  function solveFromCurrent(){
+    const key0 = canonKey(pieces);
+    if(solveCache.key === key0 && solveCache.path) return solveCache.path;
+    const start = pieces.map(p => ({ id: p.id, w: p.w, h: p.h, boss: !!p.boss, r: p.r, c: p.c }));
+    const nodes = [{ st: start, parent: -1, mv: null }];
+    const seen = new Set([key0]);
+    let head = 0, hit = -1;
+    while(head < nodes.length && head < 200000){
+      const i = head++;
+      if(stWin(nodes[i].st)){ hit = i; break; }
+      const st = nodes[i].st;
+      for(const me of st){
+        for(const [dr, dc] of DIRS4){
+          let r = me.r, c = me.c, n = 0;
+          while(stFits(st, me, r + dr, c + dc)){
+            r += dr; c += dc; n++;
+            const nst = st.map(q => q === me ? { id:q.id, w:q.w, h:q.h, boss:q.boss, r:r, c:c } : q);
+            const k = canonKey(nst);
+            if(seen.has(k)) continue;
+            seen.add(k);
+            nodes.push({ st: nst, parent: i, mv: { id: me.id, dr: dr, dc: dc, n: n } });
+          }
+        }
+      }
+    }
+    const path = [];
+    if(hit >= 0){ let j = hit; while(nodes[j].parent >= 0){ path.unshift(nodes[j].mv); j = nodes[j].parent; } }
+    solveCache = { key: key0, path: path };
+    return path;
+  }
+  const DIR_CN = (dr, dc) => dc > 0 ? '右' : dc < 0 ? '左' : dr > 0 ? '下' : '上';
+
+  /* ---------- 提示 ---------- */
+  function showHint(){
+    stopDemo();
+    if(state === 'won'){ toast('已经过关啦'); return false; }
+    const path = solveFromCurrent();
+    if(!path.length){ toast('这个局面已经解不出来了，点「重置」重来'); sndBlocked(); return false; }
+    const mv = path[0];
+    hintMove = { id: mv.id, dr: mv.dr, dc: mv.dc, n: mv.n, t: HINT_HOLD };
+    const p = pieces.find(q => q.id === mv.id);
+    toast('提示：把「' + (p ? p.name : '车') + '」向' + DIR_CN(mv.dr, mv.dc) + '挪 ' + mv.n +
+          ' 格（离过关还需 ' + path.length + ' 步）');
+    sndHint();
+    return true;
+  }
+
+  /* ---------- 自动演示 ---------- */
+  function startDemo(){
+    if(demo){ stopDemo(); return false; }
+    if(state === 'won'){ toast('已经过关啦'); return false; }
+    const path = solveFromCurrent();
+    if(!path.length){ toast('这个局面已经解不出来了，点「重置」重来'); sndBlocked(); return false; }
+    hintMove = null;
+    demo = { path: path, idx: 0, t: DEMO_GAP };   // 第一步立刻走
+    $('btnDemo').textContent = '⏹ 停止';
+    $('btnDemo').classList.add('on');
+    toast('自动演示中：共 ' + path.length + ' 步（不计入你的记录）');
+    return true;
+  }
+  function stopDemo(){
+    if(!demo) return false;
+    demo = null;
+    const b = $('btnDemo');
+    if(b){ b.textContent = '▶ 演示'; b.classList.remove('on'); }
+    return true;
   }
   function finishAnim(){
     if(!anim) return;
@@ -238,6 +359,7 @@
       won = true; state = 'won'; glowT = 1; shake = 1;
       sndWin();
       effects.push({ x: BX + BOARD / 2, y: BY + BOARD * 0.45, t: 0, txt:'曹操脱险！' + steps + ' 步', color:'#ffd166' });
+      if(demoMove){ stopDemo(); toast('演示完成：这一关最少 ' + curLevel().min + ' 步，点「重置」可以自己试试'); return; }
       if(!best || steps < best){ best = steps; setNum(bestKey(setId, lvIdx), best); }
       setNum(clearKey(setId, lvIdx), 1);
       showPanel();
@@ -274,6 +396,8 @@
     if(!p) return;
     if(kind === 'down'){
       if(hintOn) hintOn = false;
+      if(demo) stopDemo();                   // 玩家一动手，演示即停
+      hintMove = null;
       audio();
       const hit = pieceAt(p.x, p.y);
       active.set(id, { x: p.x, y: p.y, sx: p.x, sy: p.y, pid: hit ? hit.id : null });
@@ -310,7 +434,8 @@
         if(pc){ tryMove(pc, map[k][0], map[k][1], 1); }
         else toast('先点一下要移动的车，再用方向键');
       }
-      if(k === 'r' || k === 'R') reset();
+      if(k === 'r' || k === 'R'){ audio(); reset(); toast('已重置本关'); }
+      if(k === 'z' || k === 'Z'){ audio(); undo(); }
     });
   }
 
@@ -373,6 +498,8 @@
   function sndSlide(){ noise(0.11, { type:'bandpass', freq: 1200, to: 500, gain: 0.045, q: 0.9 }); tone(220, 0.07, { type:'sine', gain: 0.04 }); }
   function sndPick(){ tone(680, 0.05, { type:'sine', gain: 0.045 }); }
   function sndBlocked(){ tone(120, 0.12, { type:'sine', gain: 0.05, to: 84 }); noise(0.08, { type:'lowpass', freq: 320, gain: 0.025 }); }
+  function sndHint(){ tone(880, 0.09, { type:'triangle', gain: 0.05 }); tone(1180, 0.12, { type:'triangle', gain: 0.045, at: 0.09 }); }
+  function sndUndo(){ noise(0.12, { type:'bandpass', freq: 480, to: 1150, gain: 0.04, q: 0.9 }); tone(300, 0.08, { type:'sine', gain: 0.04, to: 430 }); }
   function sndReset(){ tone(420, 0.09, { type:'sine', gain: 0.05 }); tone(560, 0.09, { type:'sine', gain: 0.045, at: 0.07 }); }
   function sndPanel(){ tone(520, 0.1, { type:'sine', gain: 0.07 }); tone(780, 0.13, { type:'sine', gain: 0.06, at: 0.08 }); }
   function sndWin(){
@@ -540,7 +667,7 @@
     ctx.fillStyle = 'rgba(255,255,255,.06)';
     roundRect(W - 12 - cardW, 8, cardW, 34, 9); ctx.fill();
     ctx.fillStyle = '#8b95a7'; ctx.font = '600 10px ' + FONT; ctx.textAlign = 'center';
-    ctx.fillText('本关最少', W - 12 - cardW / 2, 21);
+    ctx.fillText('你的记录', W - 12 - cardW / 2, 21);
     ctx.fillStyle = '#ffd166'; ctx.font = '800 15px ' + FONT;
     ctx.fillText(best ? String(best) : '—', W - 12 - cardW / 2, 37);
     ctx.textAlign = 'left';
@@ -561,7 +688,7 @@
     ctx.fillStyle = '#c0392b'; ctx.font = '800 12px ' + FONT;
     ctx.fillText('把曹操挪到底部出口', W / 2, cy + 38);
     ctx.fillStyle = '#5b8cff'; ctx.font = '700 11px ' + FONT;
-    ctx.fillText('（入门 8 关 → 古典 4 关，点右上「关卡」选关）', W / 2, cy + 74);
+    ctx.fillText('（走错了点下面「撤销」；「重置本关」重来）', W / 2, cy + 74);
     ctx.fillStyle = '#a39489'; ctx.font = '11px ' + FONT;
     ctx.fillText('（同一辆车滑一次算 1 步）', W / 2, cy + 56);
     ctx.restore();
@@ -591,6 +718,29 @@
       ctx.fillStyle = '#ffd166'; ctx.fillRect(0, 0, W, H);
       ctx.globalAlpha = 1;
     }
+    if(hintMove){
+      const hp = pieces.find(q => q.id === hintMove.id);
+      if(hp){
+        const rc = cellRect(hp.r, hp.c, hp.w, hp.h);
+        const pulse = 0.5 + 0.5 * Math.sin(tGlobal * 6);
+        ctx.save();
+        ctx.strokeStyle = 'rgba(125,255,176,' + (0.5 + 0.45 * pulse) + ')';
+        ctx.lineWidth = 3;
+        roundRect(rc.x - 2.5, rc.y - 2.5, rc.w + 5, rc.h + 5, 11); ctx.stroke();
+        const cx0 = rc.x + rc.w / 2, cy0 = rc.y + rc.h / 2;
+        const len = Math.min(rc.w, rc.h) * 0.40;
+        const ax = cx0 + hintMove.dc * len, ay = cy0 + hintMove.dr * len;
+        ctx.strokeStyle = '#7dffb0'; ctx.lineWidth = 4.5; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(cx0, cy0); ctx.lineTo(ax, ay); ctx.stroke();
+        const ang = Math.atan2(ay - cy0, ax - cx0), hs = Math.max(6, len * 0.42);
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(ax - hs * Math.cos(ang - 0.5), ay - hs * Math.sin(ang - 0.5));
+        ctx.lineTo(ax - hs * Math.cos(ang + 0.5), ay - hs * Math.sin(ang + 0.5));
+        ctx.closePath(); ctx.fillStyle = '#7dffb6'; ctx.fill();
+        ctx.restore();
+      }
+    }
     drawEffects();
     drawHUD();
     if(hintOn && state === 'play' && steps === 0) drawHint();
@@ -599,6 +749,25 @@
   /* ---------- 步进 ---------- */
   function step(dt){
     tGlobal += dt;
+    if(hintMove){
+      hintMove.t -= dt;
+      if(hintMove.t <= 0) hintMove = null;
+    }
+    if(demo){
+      demo.t += dt;
+      while(demo && demo.t >= DEMO_GAP){
+        demo.t -= DEMO_GAP;
+        if(demo.idx >= demo.path.length){ stopDemo(); toast('演示完成'); break; }
+        const mv = demo.path[demo.idx++];
+        const p = pieces.find(q => q.id === mv.id);
+        if(!p){ stopDemo(); break; }
+        demoMove = true;
+        const n = tryMove(p, mv.dr, mv.dc, mv.n);
+        demoMove = false;
+        if(!n){ stopDemo(); break; }
+        if(!demo) break;                       // 已过关（演示结束）
+      }
+    }
     if(anim && anim.active){
       anim.t += dt;
       if(anim.t >= ANIM_DUR) finishAnim();
@@ -656,6 +825,10 @@
 
   /* ---------- 按钮 / 提示 / 诊断 ---------- */
   $('overRetry').onclick = () => { sndClick(); reset(); };
+  $('btnUndo').onclick = () => { audio(); hintMove = null; stopDemo(); undo(); };
+  $('btnHint').onclick = () => { audio(); sndClick(); showHint(); };
+  $('btnDemo').onclick = () => { audio(); sndClick(); if(demo) stopDemo(); else startDemo(); };
+  $('btnReset').onclick = () => { audio(); sndClick(); reset(); toast('已重置本关'); };
   $('overNext').onclick = () => {
     sndClick();
     if(lvIdx + 1 < curSet().levels.length){ lvIdx++; reset(); }
@@ -724,6 +897,7 @@
       '页面总高=' + document.documentElement.scrollHeight + '/' + window.innerHeight,
       '关卡=' + curSet().name + ' 第' + (lvIdx + 1) + '/' + curSet().levels.length + ' 关（本关最少 ' + curLevel().min + ' 步）',
       '状态=' + state + ' 步数=' + steps + ' 本关最少记录=' + best + ' 选中=' + (selected === null ? '—' : (pieces.find(p => p.id === selected) || {}).name),
+      '撤销栈=' + history.length + ' 提示=' + (hintMove ? '显示中' : '无') + ' 演示=' + (demo ? ('进行中 第' + demo.idx + '/' + demo.path.length + '步') : '无'),
       '棋盘:']
       .concat(rows.map(r => '   ' + r))
       .concat([
@@ -774,6 +948,8 @@
     pieces: pieces.map(p => ({ id:p.id, name:p.name, type:p.type, r:p.r, c:p.c, w:p.w, h:p.h, boss:!!p.boss, fr:p.fr, fc:p.fc })),
     board: (() => { const g = []; for(let r = 0; r < ROWS; r++){ const row = []; for(let c = 0; c < COLS; c++){ const p = pieces.find(q => r >= q.r && r < q.r+q.h && c >= q.c && c < q.c+q.w); row.push(p ? (p.boss ? 'B' : (p.name === '卒' ? 's' : 'C')) : '.'); } g.push(row.join('')); } return g; })(),
     selected, hintOn, soundOn, effects: effects.length,
+    hint: hintMove ? { id: hintMove.id, dr: hintMove.dr, dc: hintMove.dc, n: hintMove.n, t: hintMove.t } : null,
+    demo: demo ? { idx: demo.idx, total: demo.path.length } : null,
     setId, lvIdx, setIds: LEVEL_SETS.map(s => s.id), setNames: LEVEL_SETS.map(s => s.name),
     levelMin: curLevel().min, levelName: curLevel().name,
     levelCounts: LEVEL_SETS.map(s => s.levels.length),
@@ -800,6 +976,12 @@
     const p = pieces.find(q => q.name === name); if(!p) return false;
     p.r = r; p.c = c; p.fr = r; p.fc = c; if(anim) anim = null; return true;
   };
+  window.__klotskiHint = () => showHint();
+  window.__klotskiDemo = () => startDemo();
+  window.__klotskiStopDemo = () => stopDemo();
+  window.__klotskiSolve = () => solveFromCurrent().map(m => ({ id:m.id, dr:m.dr, dc:m.dc, n:m.n }));
+  window.__klotskiUndo = () => undo();
+  window.__klotskiHistory = () => history.length;
   window.__klotskiCheckWin = () => { checkWin(); return state; };   // 测试用：摆放后手动触发过关判定
   window.__klotskiSelect = name => { const p = pieces.find(q => q.name === name); selected = p ? p.id : null; return !!p; };
   window.__klotskiDrag = (r, c, dr, dc) => {              // 测试用：把 (r,c) 格上的车往 (dr,dc) 拖
