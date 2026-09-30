@@ -536,6 +536,21 @@
     const b = clamp(Math.round((n & 255) * f), 0, 255);
     return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
   }
+  /** 车名标签的排布（纯函数，便于测试）：
+      · 横向车（关羽 2×1）名字居中 —— 之前写死在 0.88h 贴近下边缘，看着没居中
+      · 大客车避开顶部通风口、竖面包车避开驾驶舱与车顶轨道
+      · 字号按"估算文字宽度"收缩，保证永远不出车身
+      返回 { ly, size, maxW }（ly 是相对车身高度 0~1 的位置） */
+  function labelLayout(type, w, h, name){
+    const short = Math.min(w, h);
+    const ly = type === 'sedan' ? 0.5 : (type === 'bus' ? 0.74 : 0.66);
+    let size = Math.round(short * (type === 'bus' ? 0.30 : 0.32));
+    const maxW = w * 0.86;
+    const est = () => String(name).length * size * 0.62;   // 中文按 0.62em 估宽
+    while(size > 8 && est() > maxW) size -= 1;
+    return { ly: ly, size: size, maxW: maxW };
+  }
+
   /** 画一辆车（俯视）。关键是：车身占大部分、座舱玻璃只占一小段、车轮画在车身外面（不被裁剪） */
   function drawCar(x, y, w, h, color, type, name, boss){
     const rad = Math.min(w, h) * (type === 'mini' ? 0.26 : 0.19);
@@ -607,11 +622,15 @@
     ctx.restore();
     // 车名
     if(type !== 'mini'){
-      const ly = type === 'bus' ? 0.80 : (type === 'van' ? 0.75 : 0.88);
-      ctx.fillStyle = 'rgba(255,255,255,.94)';
-      ctx.font = '800 ' + Math.round(Math.min(w, h) * (type === 'bus' ? 0.30 : 0.32)) + 'px ' + FONT;
+      const L = labelLayout(type, w, h, name);
+      const ly2 = y + h * L.ly;
+      ctx.font = '800 ' + L.size + 'px ' + FONT;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(name, x + w / 2, y + h * ly);
+      ctx.lineWidth = Math.max(2, L.size * 0.17);          // 描边：压在玻璃/条纹上也读得清
+      ctx.strokeStyle = 'rgba(10,14,20,.5)';
+      ctx.strokeText(name, x + w / 2, ly2);
+      ctx.fillStyle = 'rgba(255,255,255,.96)';
+      ctx.fillText(name, x + w / 2, ly2);
       ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
     }
   }
@@ -985,6 +1004,7 @@
     const p = pieces.find(q => q.name === name); if(!p) return false;
     p.r = r; p.c = c; p.fr = r; p.fc = c; if(anim) anim = null; return true;
   };
+  window.__klotskiLabel = (type, w, h, name) => labelLayout(type, w, h, name);
   window.__klotskiHint = () => showHint();
   window.__klotskiDemo = () => startDemo();
   window.__klotskiStopDemo = () => stopDemo();

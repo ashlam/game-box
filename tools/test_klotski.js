@@ -678,6 +678,42 @@ section('13) ★ 回归：演示结束 → 重置 → 再演示');
   reset();
 }
 
+/* ================= 14) 车名标签排布 ================= */
+section('14) 车名标签：居中、不出车身');
+{
+  // 用真实格子尺寸量（横刀立马：CELL 由布局算出）
+  reset();
+  const s0 = R();
+  const cell = s0.CELL;
+  const CASES = [
+    ['bus',   2 * cell, 2 * cell, '曹操', '大客车'],
+    ['sedan', 2 * cell, 1 * cell, '关羽', '横轿车'],
+    ['van',   1 * cell, 2 * cell, '张飞', '竖面包车'],
+    ['van',   1 * cell, 2 * cell, '黄忠', '竖面包车'],
+  ];
+  for(const [type, w, h, name, cn] of CASES){
+    const L = win.__klotskiLabel(type, w, h, name);
+    const estW = String(name).length * L.size * 0.62;
+    ok(L.size >= 9, cn + '「' + name + '」字号够读（' + L.size + 'px）');
+    ok(estW <= L.maxW + 0.5, cn + '「' + name + '」文字宽度不出车身（' + estW.toFixed(1) + ' ≤ ' + L.maxW.toFixed(1) + '）');
+    ok(L.ly >= 0.45 && L.ly <= 0.8, cn + '「' + name + '」标签在车身内（ly=' + L.ly + '）');
+  }
+  // ★ 用户反馈：关羽（横车）名字靠下、没居中
+  const js = win.__klotskiLabel('sedan', 2 * cell, 1 * cell, '关羽');
+  ok(js.ly === 0.5, '★ 横车「关羽」名字垂直居中（ly=0.5，之前是 0.88 贴底）', 'ly=' + js.ly);
+  // 文字上下也不出车身：字号的一半 ≤ 上下余量
+  const halfUp = js.ly * cell, halfDn = (1 - js.ly) * cell;
+  ok(js.size * 0.5 <= halfUp + 0.5 && js.size * 0.5 <= halfDn + 0.5,
+     '★ 关羽名字上下都在车身内（字号 ' + js.size + '，上下余量 ' + halfUp.toFixed(0) + '/' + halfDn.toFixed(0) + '）');
+  // 名字很长时自动缩字号
+  const longName = win.__klotskiLabel('sedan', 2 * cell, 1 * cell, '司马懿');
+  ok(longName.size <= js.size, '名字变长会缩字号（' + js.size + ' → ' + longName.size + '）');
+  ok(String('司马懿').length * longName.size * 0.62 <= longName.maxW + 0.5, '长名字也保证不出车身');
+  // 竖车不该贴在底边
+  const van = win.__klotskiLabel('van', 1 * cell, 2 * cell, '张飞');
+  ok(van.ly <= 0.7, '竖面包车名字不贴底边（ly=' + van.ly + '）');
+}
+
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');
