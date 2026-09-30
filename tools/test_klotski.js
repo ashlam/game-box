@@ -620,6 +620,64 @@ section('12) ★ 提示 与 自动演示');
   reset();
 }
 
+/* ================= 13) ★ 回归：演示/提示 与 重置、重开的交互 ================= */
+section('13) ★ 回归：演示结束 → 重置 → 再演示');
+{
+  resetIntro();                                  // 入门第 1 关（最少 2 步）
+  ok(win.__klotskiDemo() === true, '第 1 次演示能启动');
+  let guard = 0;
+  while(R().demo && guard++ < 2000) win.__klotskiStep(0.6);
+  run(30);
+  ok(R().won === true && !R().demo, '第 1 次演示自动走完并过关');
+
+  els.btnReset.onclick();                        // 点「⟲ 重置」
+  run(20);
+  ok(R().won === false && R().state === 'play' && R().steps === 0, '点重置：回到初始局面');
+
+  // ★ 这就是用户报的 bug：演示完 → 重置 → 再点自动演示没反应
+  ok(win.__klotskiDemo() === true, '★ 回归：重置后**再点演示仍有反应**（能启动）');
+  ok(!!R().demo, '★ 演示状态确实建立了');
+  guard = 0;
+  while(R().demo && guard++ < 2000) win.__klotskiStep(0.6);
+  run(30);
+  ok(R().won === true, '★ 第 2 次演示同样能自动走完并过关');
+  ok(R().steps === 0 && R().best === 0, '★ 第 2 次演示依然不计步、不刷新记录');
+
+  // 同一关反复"演示→重置"3 轮都不能哑火
+  let rounds = 0;
+  for(let k = 0; k < 3; k++){
+    els.btnReset.onclick(); run(10);
+    if(!win.__klotskiDemo()) break;
+    let g2 = 0;
+    while(R().demo && g2++ < 2000) win.__klotskiStep(0.6);
+    run(20);
+    if(R().won) rounds++;
+  }
+  ok(rounds === 3, '★ 连做 3 轮「重置→演示」都正常走完（' + rounds + '/3）');
+
+  // 提示 → 缓存 → 重置 → 提示，也要正常
+  reset();
+  ok(win.__klotskiHint() === true, '先给一次提示（填充求解缓存）');
+  win.__klotskiDrag(3, 1, 0, 1); run(20);        // 动一步（提示消失）
+  els.btnReset.onclick(); run(20);
+  ok(win.__klotskiHint() === true, '★ 重置后再点提示仍有反应');
+  const h2 = R().hint;
+  ok(!!h2, '★ 提示给出了走法');
+  ok(win.__klotskiMove(h2.id, h2.dr, h2.dc, h2.n) === h2.n, '★ 重置后提示给出的走法依然可走通（不会再指向过期的车）');
+
+  // 演示到一半 → 撤销 → 再演示
+  reset();
+  win.__klotskiDemo(); run(60); win.__klotskiStep(0.6);
+  const mid = R();
+  ok(!!mid.demo, '演示进行中');
+  win.__klotskiStopDemo();
+  ok(!R().demo, '中途停止');
+  win.__klotskiUndo(); run(20);
+  ok(win.__klotskiDemo() === true, '★ 停止 + 撤销后还能重新启动演示');
+  win.__klotskiStopDemo();
+  reset();
+}
+
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');
