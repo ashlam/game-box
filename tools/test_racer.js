@@ -964,6 +964,81 @@ section('17) ★ 红色五角星：加油 + 限时高速（上限 = 原二段 80
 }
 
 
+/* ================= 18) ★ 满速撞飞路障 ================= */
+section('18) ★ 满速撞飞路障（吃红星到满速可撞飞路障；撞车照旧）');
+{
+  reset(7); noSpawn(true); clearObjs();
+  const cap = win.__racerSmash().cap;
+
+  // ① 没吃红星 → 不能撞飞
+  ok(win.__racerSmash().ready === false, '没吃红星：不能撞飞');
+
+  // ② 红星生效但速度还在爬升 → 不能撞飞
+  setP({ boost: 5, v: cap * 0.5 }); run(1);
+  let S = win.__racerSmash();
+  ok(S.boost > 0 && S.v < S.need && S.ready === false,
+     '红星生效但速度未到顶（' + S.v + ' < ' + S.need + '）：不能撞飞');
+
+  // ③ 红星 + 达到上限 → 可以撞飞
+  setP({ boost: 5, v: cap }); run(1);
+  S = win.__racerSmash();
+  ok(S.ready === true, '★ 红星 + 达到上限（' + S.v + ' ≥ ' + S.need + '）：可以撞飞');
+
+  // ④ 撞路障（锥桶）：不扣血、不减速、路障消失、有飞出效果
+  let st = R();
+win.__racerPutRoadblock((st.player || st.p).x, (st.player || st.p).y, 'cone');
+  const hp0 = st.hp, v0 = st.player.v, cnt0 = win.__racerSmash().count;
+  const coneId = win.__racerPutRoadblock(st.player.x, st.player.y + 30, 'cone');
+  run(2);
+  S = win.__racerSmash(); st = R();
+  ok(S.count === cnt0 + 1, '★ 路障被撞飞（撞飞计数 +1）');
+  ok(st.hp === hp0, '★ 撞飞路障不扣血（hp 保持 ' + hp0 + '）');
+  ok(Math.abs(st.player.v - v0) < 1, '★ 撞飞路障不减速（速度 ' + v0.toFixed(1) + ' → ' + st.player.v.toFixed(1) + '）');
+  ok((win.__racerObjs().find(o => o.id === coneId) || {}).dead === true, '被撞飞的那一个路障已从路上移除');
+  ok(S.flies >= 1, '生成了"路障被撞飞"的画面效果');
+
+  // ⑤ 油桶同样能撞飞
+  setP({ boost: 5, v: cap, invuln: 0 }); run(1);
+  st = R(); const hp1 = st.hp;
+  win.__racerPutRoadblock(st.player.x, st.player.y + 30, 'barrel');
+  run(2);
+  ok(R().hp === hp1 && win.__racerSmash().count >= 2, '★ 油桶同样能撞飞（同样不扣血）');
+
+  // ⑥ ★ 撞车照旧：满速状态下撞车仍然扣血 + 掉速
+  setP({ boost: 5, v: cap, invuln: 0 }); run(1);
+  st = R(); const hp2 = st.hp, v2 = st.player.v;
+  win.__racerPutRoadblock(st.player.x, st.player.y + 30, 'car');
+  run(3);
+  st = R();
+  ok(st.hp === hp2 - 1, '★ 满速撞车照旧扣血（hp ' + hp2 + ' → ' + st.hp + '）');
+  ok(st.player.v < v2 * 0.6, '★ 满速撞车照旧掉速（' + v2.toFixed(1) + ' → ' + st.player.v.toFixed(1) + '）');
+
+  // ⑦ 没有红星时撞路障 → 照旧扣血（机制没被放宽）
+  reset(8); noSpawn(true); clearObjs();
+  setP({ boost: 0, v: cap, invuln: 0, hp: 3 }); run(1);
+  st = R(); const hp3 = st.hp;
+  win.__racerPutRoadblock(st.player.x, st.player.y + 30, 'cone');
+  run(3);
+  ok(R().hp === hp3 - 1, '★ 没有红星（即使速度高）撞路障照旧扣血（' + hp3 + ' → ' + R().hp + '）');
+
+  // ⑧ 红星在爬升途中撞路障 → 照旧扣血
+  reset(9); noSpawn(true); clearObjs();
+  setP({ boost: 5, v: cap * 0.4, invuln: 0, hp: 3 }); run(1);
+  st = R(); const hp4 = st.hp;
+  win.__racerPutRoadblock(st.player.x, st.player.y + 30, 'cone');
+  run(3);
+  ok(R().hp === hp4 - 1, '★ 红星已生效但还没到满速时撞路障，照旧扣血（' + hp4 + ' → ' + R().hp + '）');
+
+  // ⑨ 撞飞物会自己消失（不留垃圾）
+  setP({ boost: 5, v: cap, invuln: 0 }); run(1);
+  st = R();
+  win.__racerPutRoadblock(st.player.x, st.player.y + 30, 'cone');
+  run(2);
+  ok(win.__racerSmash().flies >= 1, '（刚撞飞时有飞出物）');
+  run(60);
+  ok(win.__racerSmash().flies === 0, '★ 飞出物到期自动回收（不留垃圾）');
+}
+
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');

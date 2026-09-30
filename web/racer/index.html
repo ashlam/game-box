@@ -688,6 +688,17 @@
     }
     refill();
 
+    /* ---- 撞飞的路障：向上弹 + 甩向身后 + 自转 ---- */
+    for(let i = flies.length - 1; i >= 0; i--){
+      const f = flies[i];
+      f.t += dt;
+      if(f.t >= f.life){ flies.splice(i, 1); continue; }
+      f.x += f.vx * dt;
+      f.y += (f.vy + f.back) * dt;
+      f.vy += 900 * dt;
+      f.rot += f.spin * dt;
+    }
+
     /* ---- 碰撞 ---- */
     // ★ 判定盒子 = 画出来的盒子（原来横向 -4 / 纵向 -6 的宽容量，会让"看着撞上了却没撞"）
     const overlap = o => Math.abs(o.x - player.x) < (o.w + CAR_W) / 2 &&
@@ -715,7 +726,11 @@
     if(player.invuln <= 0){
       for(const o of objs){
         if(o.dead || o.kind === 'fuel' || o.kind === 'boost') continue;
-        if(overlap(o)){ crash(o); break; }
+        if(overlap(o)){
+          // ★ 满速吃红星状态：路障直接撞飞（不扣血不减速），撞车仍然照撞
+          if(smashReady() && isRoadblock(o)){ smashObstacle(o); continue; }
+          crash(o); break;
+        }
       }
     }
 
@@ -741,6 +756,9 @@
     }
   }
   let tGlobal = 0;
+  let flies = [];                                // ★ 被撞飞的路障（屏幕空间飞行物）
+  let smashed = 0;                               // ★ 撞飞路障计数
+  const SMASH_TOL = 0.98;                        // ★ 满速判定：达到红星上限的 98% 即算"到达并保持满速"
 
   function crash(o){
     o.dead = true;
@@ -751,6 +769,30 @@
     addBurst(player.x, player.y, 22, '#ffb03a');
     addBurst(o.x, o.y, 14, '#ff6a3a');
     if(hp <= 0){ finish('撞毁'); }
+  }
+  /* ============================================================
+     ★ 满速撞飞路障：吃到红星 + 已到并保持满速（上限 98% 以上）时，
+       锥桶/油桶直接撞飞 —— 不扣血、不减速；撞车照旧扣血减速。
+     ============================================================ */
+  const boostCap = () => V_MAX * BOOST_MULT;
+  const isRoadblock = o => o.kind === 'cone' || o.kind === 'barrel';
+  function smashReady(){ return player.boost > 0 && player.v >= boostCap() * SMASH_TOL; }
+  function smashObstacle(o){
+    o.dead = true;
+    smashed++;
+    sndSmash();
+    addBurst(o.x, o.y, 10, o.kind === 'cone' ? '#ffd166' : '#ffb14d');
+    const side = (o.x < player.x) ? -1 : (o.x > player.x ? 1 : (Math.random() < 0.5 ? -1 : 1));
+    flies.push({ x: o.x, y: toScreenY(o.y), vx: side * (80 + Math.random() * 90),
+                 vy: -140 - Math.random() * 80, back: player.v * 0.55,
+                 rot: 0, spin: side * (9 + Math.random() * 7),
+                 t: 0, life: 0.6, kind: o.kind, size: Math.max(o.w, o.h) * 0.5 });
+    floats.push({ x: o.x, y: PY - 34, t: 0, txt: '撞飞！', color: '#ffe066' });
+  }
+  function sndSmash(){
+    noiseBurst(0.22, { type:'bandpass', freq: 900, to: 260, gain: 0.16, decay: 1.4 });
+    tone(220, 0.14, { type:'square', to: 96, gain: 0.1 });
+    tone(900, 0.1, { type:'triangle', gain: 0.07, at: 0.02 });
   }
   function finish(why){
     state = 'over'; reason = why;
@@ -1020,6 +1062,25 @@
   }
 
   function drawEffects(){
+    // ★ 被撞飞的路障（旋转飞出画面）
+    for(const f of flies){
+      const a = clamp(f.t / f.life, 0, 1);
+      const s = f.size * (1 - a * 0.2);
+      ctx.save();
+      ctx.globalAlpha = clamp(1 - a * a, 0, 1);
+      ctx.translate(f.x, f.y); ctx.rotate(f.rot);
+      if(f.kind === 'cone'){
+        ctx.fillStyle = PALETTE.cone;
+        ctx.beginPath(); ctx.moveTo(0, -s * 1.0); ctx.lineTo(s * 0.5, s * 0.45); ctx.lineTo(-s * 0.5, s * 0.45);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.fillRect(-s * 0.34, -s * 0.06, s * 0.68, s * 0.2);
+      }else{
+        ctx.fillStyle = PALETTE.barrel;
+        roundRect(-s * 0.45, -s * 0.55, s * 0.9, s * 1.1, s * 0.2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.fillRect(-s * 0.45, -s * 0.1, s * 0.9, s * 0.16);
+      }
+      ctx.restore();
+    }
     for(const e of effects){
       const k = e.t / e.life;
       if(e.kind === 'spark'){
@@ -1224,9 +1285,9 @@
     ctx.fillStyle = '#0a8f3c'; ctx.font = '800 11.5px ' + FONT;
     ctx.fillText('绿星 = 加油 · 红星 = 加油+1000km/h', W / 2, cy + 54);
     ctx.fillStyle = '#c05f0d'; ctx.font = '700 11px ' + FONT;
-    ctx.fillText('其余全是敌人 · 橙色车亮灯会变道', W / 2, cy + 70);
+      ctx.fillText('橙色车亮灯会变道 · 撞上就掉命', W / 2, cy + 70);
     ctx.fillStyle = '#5c7186'; ctx.font = '11px ' + FONT;
-    ctx.fillText('其余全是敌人 · 撞上就掉命', W / 2, cy + 86);
+      ctx.fillText('满速吃到红星时，可撞飞路障（不扣血不减速）', W / 2, cy + 86);
     ctx.fillStyle = '#c0392b'; ctx.font = '700 11px ' + FONT;
     ctx.fillText('到终点加时进下一段 · 时间到/撞光三条命结束', W / 2, cy + 104);
     ctx.restore();
@@ -1415,7 +1476,19 @@
   window.__racerLayout = () => { layout(); return 'ok'; };   // 测试钩子：重排
   window.__racerReset = seed => { engineStop(); reset(seed); };
   window.__racerInput = o => { if('left' in o) input.left = !!o.left; if('right' in o) input.right = !!o.right; if('gas' in o) input.gas = !!o.gas; };
-  window.__racerSetPlayer = o => { if('x' in o) player.x = o.x; if('y' in o) player.y = o.y; if('v' in o) player.v = o.v; if('fuel' in o) fuel = o.fuel; if('timeLeft' in o) timeLeft = o.timeLeft; if('hp' in o) hp = o.hp; if('invuln' in o) player.invuln = o.invuln; };
+  window.__racerSmash = () => ({ ready: smashReady(), count: smashed, flies: flies.length,
+                                 boost: +player.boost.toFixed(2), v: +player.v.toFixed(1),
+                                 cap: +boostCap().toFixed(1), need: +(boostCap() * SMASH_TOL).toFixed(1) });
+  window.__racerObjs = () => objs.map(o => ({ id: o.id, kind: o.kind, x: +o.x.toFixed(1), y: +o.y.toFixed(1),
+                                              dead: !!o.dead, w: o.w, h: o.h }));
+  window.__racerPutRoadblock = (x, y, kind) => {
+    const k = kind || 'cone';
+    const o = { id: nextObjId++, kind: k, lane: 0, x: x, y: y, v: 0, vWant: 0,
+                w: k === 'cone' ? 24 : 26, h: k === 'cone' ? 37 : 34 };
+    objs.push(o);
+    return o.id;
+  };
+  window.__racerSetPlayer = o => { if('x' in o) player.x = o.x; if('y' in o) player.y = o.y; if('v' in o) player.v = o.v; if('boost' in o) player.boost = o.boost; if('fuel' in o) fuel = o.fuel; if('timeLeft' in o) timeLeft = o.timeLeft; if('hp' in o) hp = o.hp; if('invuln' in o) player.invuln = o.invuln; };
   window.__racerClearObjs = () => { objs.length = 0; };
   window.__racerNoSpawn = v => { spawnOff = !!v; };   // 测试钩子
   // 测试钩子：按逻辑坐标模拟触点（走真实的 pointer 换算路径）
