@@ -68,7 +68,9 @@ const win = sandbox.window;
 const R = () => win.__klotski();
 const DT = 1 / 60;
 function run(n, dt = DT){ for(let i = 0; i < n; i++) win.__klotskiStep(dt); }
-const reset = () => { win.__klotskiReset(); };
+// ★ 默认关现在是入门第 1 关；原有用例都是按经典局写的 → 助手先切到古典第 1 关（横刀立马）
+const reset = () => { win.__klotskiGoto(1, 0); };
+const resetIntro = () => { win.__klotskiGoto(0, 0); };
 const moveByName = (n, dr, dc, want) => win.__klotskiMoveByName(n, dr, dc, want);
 const drag = (r, c, dr, dc) => win.__klotskiDrag(r, c, dr, dc);
 const allNodes = () => sndNodes + noiseNodes;
@@ -110,7 +112,7 @@ function makeModel(layout){
       }
       return out;
     },
-    win(){ const b = ps.find(p => p.boss); return b.r === 3 && b.c === 1; },
+    win(){ const b = ps.find(p => p.boss); return !!b && b.r === 3 && b.c === 1; },
     restore(snap, pieceIdx, r, c){ snap.forEach((s, i) => { ps[i].r = s.r; ps[i].c = s.c; }); ps[pieceIdx].r = r; ps[pieceIdx].c = c; },
   };
 }
@@ -404,6 +406,80 @@ section('9) 音效与重置');
   els.btnSound.onclick();
   ok(R().soundOn === true, '重新打开音效');
   ok(store['gklotski_sound'] !== undefined, '音效偏好已落盘');
+}
+
+/* ================= 10) ★ 关卡集：每关都可解且步数属实 ================= */
+section('10) ★ 关卡集：每一关都可解，最少步数与声明一致');
+{
+  const sets = win.__klotskiAllLevels();
+  const s0 = R();
+  ok(sets.length === 2, '两套关卡集（' + s0.setNames.join(' / ') + '）');
+  ok(sets[0].length >= 6 && sets[1].length >= 3,
+     '关卡数：' + s0.setNames[0] + ' ' + sets[0].length + ' 关 · ' + s0.setNames[1] + ' ' + sets[1].length + ' 关');
+  const flat = sets.flat();
+  const t0 = Date.now();
+  const mismatched = [], unsolvable = [];
+  function solveModel(start){
+    const seen = new Set([start.key()]);
+    const q = [{ m: start, d: 0 }];
+    while(q.length){
+      const cur = q.shift();
+      if(cur.m.win()) return cur.d;
+      for(const mv of cur.m.moves()){
+        const nxt = cur.m.clone();
+        if(!nxt.ps || !nxt.ps[mv.piece]) continue;
+        const p = nxt.ps[mv.piece]; p.r = mv.r; p.c = mv.c;
+        const k = nxt.key();
+        if(seen.has(k)) continue;
+        seen.add(k);
+        q.push({ m: nxt, d: cur.d + 1 });
+      }
+    }
+    return -1;
+  }
+  for(const lv of flat){
+    let mk = null;
+    try{ mk = win.__klotskiMakeModel(lv.pos); }
+    catch(e){ console.log('    [诊断] __klotskiMakeModel 抛错 (' + lv.name + '): ' + e.message); unsolvable.push(lv.name); continue; }
+    if(!Array.isArray(mk) || mk.length !== 10 || mk.some(p => !p || typeof p.r !== 'number' || typeof p.c !== 'number')){
+      console.log('    [诊断] 关卡 ' + lv.name + ' (' + lv.set + '#' + lv.idx + ') pos=' + JSON.stringify(lv.pos) +
+                  ' → 模型 ' + JSON.stringify(mk));
+      unsolvable.push(lv.name + '(数据坏)'); continue;
+    }
+    let r = -1;
+    try{ r = solveModel(makeModel(mk)); }
+    catch(e){ console.log('    [诊断] 求解抛错 (' + lv.name + '): ' + e.message + ' | ' + e.stack.split('\n')[1]); unsolvable.push(lv.name); continue; }
+    if(r < 0) unsolvable.push(lv.name);
+    else if(r !== lv.min) mismatched.push(lv.name + '(声明 ' + lv.min + ' / 实测 ' + r + ')');
+  }
+  ok(unsolvable.length === 0, '★ 全部 ' + flat.length + ' 关都有解', unsolvable.join(' / '));
+  ok(mismatched.length === 0,
+     '★ 全部 ' + flat.length + ' 关：独立 BFS 复算最少步数 = 关卡声明值（用时 ' + (Date.now() - t0) + 'ms）',
+     mismatched.join(' / '));
+
+  const intro = sets[0].map(l => l.min);
+  const classic = sets[1].map(l => l.min);
+  ok(intro.every((v, i) => i === 0 || v >= intro[i - 1]), '★ 入门难度不倒退：' + intro.join(' → '));
+  ok(intro[0] <= 4, '第 1 关足够简单（最少 ' + intro[0] + ' 步）');
+  ok(Math.max.apply(null, intro) <= 30, '入门最难关 ≤ 30 步（实际 ' + Math.max.apply(null, intro) + '）');
+  ok(classic.indexOf(90) >= 0, '★ 古典关卡集含经典横刀立马（最少 90 步）');
+  ok(classic.every(v => v >= 30), '古典集都是难关（≥30 步：' + classic.join('/') + '）');
+
+  resetIntro();
+  let s = R();
+  ok(s.setId === 0 && s.lvIdx === 0, '切到入门第 1 关');
+  ok(s.levelMin === intro[0], '当前关最少步数跟随关卡（' + s.levelMin + ' 步）');
+  reset();
+  s = R();
+  ok(s.setId === 1 && s.lvIdx === 0, '切回古典第 1 关');
+  const b2 = s.pieces.find(p => p.boss);
+  ok(b2.r === 0 && b2.c === 1, '横刀立马：曹操回到 (0,1)');
+  ok(s.levelMin === 90, '横刀立马声明最少 90 步');
+  win.__klotskiSetPiece('曹操', 3, 1);
+  win.__klotskiCheckWin();
+  ok(store['gklotski_cleared_classic_1'] === '1', '★ 过关记录按 关卡集_关号 分区存档');
+  ok(store['gklotski_best_classic_1'] !== undefined, '本关最少步数单独记录');
+  ok(store['gklotski_best_intro_1'] === undefined, '不同关卡记录互不干扰');
 }
 
 /* ================= 汇总 ================= */

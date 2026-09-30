@@ -25,9 +25,22 @@
   .top button:active{background:var(--acc);border-color:var(--acc);color:#fff}
   #stage{width:100%;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;touch-action:none}
   canvas{display:block;border-radius:16px;border:1px solid var(--line);touch-action:none;box-shadow:0 10px 30px rgba(0,0,0,.45)}
-  #over{position:fixed;inset:0;background:rgba(10,16,24,.76);backdrop-filter:blur(3px);display:none;
+  #over,#lv{position:fixed;inset:0;background:rgba(10,16,24,.76);backdrop-filter:blur(3px);display:none;
          align-items:center;justify-content:center;padding:22px;z-index:9}
-  #over.on{display:flex}
+  #over.on,#lv.on{display:flex}
+  .tabs{display:flex;gap:8px;margin:0 0 12px}
+  .tabs button{flex:1;font-size:13px;padding:10px;border-radius:10px;border:1px solid var(--line);
+               background:rgba(255,255,255,.04);color:var(--dim);font-family:inherit}
+  .tabs button.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+  .tabs button.has{color:#8affb0}
+  .lvgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;max-height:46vh;overflow:auto}
+  .lvgrid button{aspect-ratio:1;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.05);
+                 color:var(--txt);font-family:inherit;font-size:14px;font-weight:700;display:flex;
+                 flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:2px}
+  .lvgrid button small{font-size:9px;color:var(--dim);font-weight:500;line-height:1.15;text-align:center}
+  .lvgrid button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+  .lvgrid button.clear{box-shadow:inset 0 0 0 1.5px rgba(120,255,160,.55)}
+  .lvgrid button.clear small{color:#8affb0}
   .panel{width:100%;max-width:330px;background:var(--card);border:1px solid var(--line);border-radius:18px;
           padding:22px 20px 16px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.55)}
   .panel h2{margin:0 0 10px;font-size:20px;letter-spacing:2px}
@@ -59,6 +72,7 @@
   <a href="/">‹</a>
   <h1>华容道 · 车阵</h1>
   <button id="btnSound">🔊 音效</button>
+  <button id="btnLv">关卡</button>
   <button id="btnDiag" title="复制诊断信息">诊断</button>
 </div>
 
@@ -72,7 +86,15 @@
   <div class="unit">步数</div>
   <p id="overText"></p>
   <div class="rule">玩法：拖动车辆在空位里挪动（也可点一下车再用方向键）<br>目标：把<b>红色大客车「曹操」</b>挪到底部中间的<b>出口</b><br>记录每局最少步数（同一辆车滑动一次算一步）</div>
-  <button class="pri" id="overRetry">再来一局</button>
+  <button class="pri" id="overNext" style="display:none">下一关 →</button>
+  <button class="pri" id="overRetry">重玩本关</button>
+</div></div>
+
+<div id="lv"><div class="panel">
+  <h2>选择关卡</h2>
+  <div class="tabs" id="lvTabs"></div>
+  <div class="lvgrid" id="lvGrid"></div>
+  <button id="lvClose">关闭</button>
 </div></div>
 
 <script>
@@ -115,10 +137,39 @@
   ];
   const WIN_R = 3, WIN_C = 1;                   // 曹操到位：左上角落在 (3,1)
 
+  /* ★ 关卡集（由 tools/gen_klotski_levels.js 生成；每关最少步数都经独立 BFS 复算确认） */
+  const LEVEL_SETS = [
+    { id: 'intro', name: '入门关卡', levels: [
+      { id: 1, name: '第 1 关', min: 2, pos: [3,0,2,2,0,0,0,2,0,1,0,3,3,2,4,3,2,1,2,0] },
+      { id: 2, name: '第 2 关', min: 4, pos: [3,0,3,2,0,0,0,2,0,1,0,3,4,2,4,3,2,1,2,0] },
+      { id: 3, name: '第 3 关', min: 6, pos: [3,0,3,2,0,0,1,2,0,1,1,3,4,2,4,3,2,1,2,0] },
+      { id: 4, name: '第 4 关', min: 9, pos: [2,0,3,2,0,0,0,2,0,1,0,3,4,1,4,2,2,3,2,2] },
+      { id: 5, name: '第 5 关', min: 12, pos: [2,0,4,2,0,0,0,2,0,1,1,3,4,0,4,1,3,3,2,2] },
+      { id: 6, name: '第 6 关', min: 15, pos: [2,0,4,2,0,0,1,3,0,1,2,2,4,0,4,1,0,2,0,3] },
+      { id: 7, name: '第 7 关', min: 16, pos: [2,0,4,2,0,1,0,3,0,2,2,3,4,0,4,1,3,2,2,2] },
+      { id: 8, name: '第 8 关', min: 26, pos: [1,2,3,2,2,0,2,1,0,0,0,1,4,0,4,1,0,2,0,3] },
+    ] },
+    { id: 'classic', name: '古典关卡集', levels: [
+      { id: 1, name: '横刀立马', min: 90, pos: [0,1,2,1,0,0,0,3,2,0,2,3,3,1,3,2,4,0,4,3] },
+      { id: 2, name: '古典难关 2', min: 40, pos: [0,2,2,2,3,1,3,2,1,0,1,1,3,3,4,3,0,0,0,1] },
+      { id: 3, name: '古典难关 3', min: 55, pos: [0,0,4,1,2,1,3,3,2,0,2,2,2,3,1,2,0,3,0,2] },
+      { id: 4, name: '古典难关 4', min: 70, pos: [0,0,4,2,3,1,2,2,2,0,0,3,2,3,1,2,3,3,2,1] },
+    ] },
+  ];
+
   /* ---------- 坐标系（固定逻辑高，宽度随屏反推） ---------- */
   const HFIX = 560;
   let W = 342, H = HFIX, S = 1, dprNow = 1;
   let HUD_H = 46, BOARD = 300, BX = 21, BY = 70, CELL = 60, PADB = 12;
+
+  /* ---------- 关卡状态 ---------- */
+  let setId = 0, lvIdx = 0;
+  const curSet = () => LEVEL_SETS[setId];
+  const curLevel = () => curSet().levels[lvIdx];
+  const bestKey = (s, i) => 'gklotski_best_' + LEVEL_SETS[s].id + '_' + LEVEL_SETS[s].levels[i].id;
+  const clearKey = (s, i) => 'gklotski_cleared_' + LEVEL_SETS[s].id + '_' + LEVEL_SETS[s].levels[i].id;
+  const getNum = k => { const v = parseInt(localStorage.getItem(k) || '0', 10) || 0; return v; };
+  function setNum(k, v){ try{ localStorage.setItem(k, String(v)); }catch(e){} }
 
   /* ---------- 状态 ---------- */
   let pieces = [], nextId = 1, steps = 0, best = 0, state = 'play', won = false;
@@ -132,9 +183,12 @@
 
   /* ---------- 初始化 / 重置 ---------- */
   function reset(){
-    pieces = LAYOUT.map(p => ({ id: nextId++, name: p.name, type: p.type, color: p.color,
-                                r: p.r, c: p.c, w: p.w, h: p.h, boss: !!p.boss,
-                                fr: p.r, fc: p.c }));
+    const lv = curLevel();
+    best = getNum(bestKey(setId, lvIdx));
+    pieces = LAYOUT.map((p, i) => ({ id: nextId++, name: p.name, type: p.type, color: p.color,
+                                     r: lv.pos[i * 2], c: lv.pos[i * 2 + 1],
+                                     w: p.w, h: p.h, boss: !!p.boss,
+                                     fr: lv.pos[i * 2], fc: lv.pos[i * 2 + 1] }));
     steps = 0; state = 'play'; won = false; anim = null; effects = [];
     shake = 0; glowT = 0; selected = null; hintOn = true; active.clear();
     $('over').classList.remove('on');
@@ -184,15 +238,21 @@
       won = true; state = 'won'; glowT = 1; shake = 1;
       sndWin();
       effects.push({ x: BX + BOARD / 2, y: BY + BOARD * 0.45, t: 0, txt:'曹操脱险！' + steps + ' 步', color:'#ffd166' });
-      if(!best || steps < best){ best = steps; try{ localStorage.setItem(KEY_BEST, String(best)); }catch(e){} }
+      if(!best || steps < best){ best = steps; setNum(bestKey(setId, lvIdx), best); }
+      setNum(clearKey(setId, lvIdx), 1);
       showPanel();
     }
   }
   function showPanel(){
     $('overSteps').textContent = steps + ' 步';
     const rec = (best === steps) && steps > 0;
-    $('overText').textContent = rec ? '新纪录！最少 ' + best + ' 步' : '本局 ' + steps + ' 步 · 最少 ' + (best || '—') + ' 步';
+    const lv = curLevel();
+    $('overTitle').textContent = '过关！' + curSet().name + ' · ' + lv.name;
+    $('overText').textContent = (rec ? '新纪录！' : '本局 ' + steps + ' 步 · ') +
+      '本关最少 ' + lv.min + ' 步' + (rec ? '' : '，你的记录 ' + best + ' 步');
     $('overText').className = rec ? 'rec' : '';
+    const hasNext = lvIdx + 1 < curSet().levels.length;
+    $('overNext').style.display = hasNext ? '' : 'none';
     $('over').classList.add('on');
     sndPanel();
   }
@@ -473,11 +533,14 @@
     ctx.fillText(String(steps), 12, 28);
     ctx.fillStyle = '#8b95a7'; ctx.font = '600 10px ' + FONT;
     ctx.fillText('步数', 12, 42);
+    ctx.fillStyle = '#cfe0ff'; ctx.font = '700 11px ' + FONT;
+    const lv = curLevel();
+    ctx.fillText(curSet().name + ' · ' + lv.name + '（最少 ' + lv.min + ' 步）', 52, 28);
     const cardW = Math.min(92, W * 0.28);
     ctx.fillStyle = 'rgba(255,255,255,.06)';
     roundRect(W - 12 - cardW, 8, cardW, 34, 9); ctx.fill();
     ctx.fillStyle = '#8b95a7'; ctx.font = '600 10px ' + FONT; ctx.textAlign = 'center';
-    ctx.fillText('最少步数', W - 12 - cardW / 2, 21);
+    ctx.fillText('本关最少', W - 12 - cardW / 2, 21);
     ctx.fillStyle = '#ffd166'; ctx.font = '800 15px ' + FONT;
     ctx.fillText(best ? String(best) : '—', W - 12 - cardW / 2, 37);
     ctx.textAlign = 'left';
@@ -488,7 +551,7 @@
     ctx.save();
     ctx.fillStyle = 'rgba(250,248,239,.97)';
     ctx.strokeStyle = '#bbada0'; ctx.lineWidth = 2.5;
-    roundRect(W / 2 - hw, cy - 54, hw * 2, 122, 14); ctx.fill(); ctx.stroke();
+    roundRect(W / 2 - hw, cy - 54, hw * 2, 138, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = '#8f7a66'; ctx.font = '800 20px ' + FONT;
     ctx.fillText('华容道 · 车阵', W / 2, cy - 26);
@@ -497,6 +560,8 @@
     ctx.fillText('点一下车 + 方向键也行', W / 2, cy + 16);
     ctx.fillStyle = '#c0392b'; ctx.font = '800 12px ' + FONT;
     ctx.fillText('把曹操挪到底部出口', W / 2, cy + 38);
+    ctx.fillStyle = '#5b8cff'; ctx.font = '700 11px ' + FONT;
+    ctx.fillText('（入门 8 关 → 古典 4 关，点右上「关卡」选关）', W / 2, cy + 74);
     ctx.fillStyle = '#a39489'; ctx.font = '11px ' + FONT;
     ctx.fillText('（同一辆车滑一次算 1 步）', W / 2, cy + 56);
     ctx.restore();
@@ -591,6 +656,33 @@
 
   /* ---------- 按钮 / 提示 / 诊断 ---------- */
   $('overRetry').onclick = () => { sndClick(); reset(); };
+  $('overNext').onclick = () => {
+    sndClick();
+    if(lvIdx + 1 < curSet().levels.length){ lvIdx++; reset(); }
+  };
+  function renderLv(){
+    const tabs = $('lvTabs'); tabs.innerHTML = '';
+    LEVEL_SETS.forEach((s, i) => {
+      const b = document.createElement('button');
+      const done = s.levels.every((_, j) => getNum(clearKey(i, j)));
+      b.textContent = s.name + (done ? ' ✓' : '');
+      b.className = (i === setId ? 'on ' : '') + (done ? 'has' : '');
+      b.onclick = () => { setId = i; lvIdx = 0; renderLv(); };
+      tabs.appendChild(b);
+    });
+    const g = $('lvGrid'); g.innerHTML = '';
+    curSet().levels.forEach((l, j) => {
+      const b = document.createElement('button');
+      const bt = getNum(bestKey(setId, j));
+      b.innerHTML = '<span>' + (j + 1) + '</span><small>最少' + l.min + '步' +
+                    (bt ? '·你' + bt + '步' : '') + '</small>';
+      b.className = (j === lvIdx ? 'on ' : '') + (getNum(clearKey(setId, j)) ? 'clear' : '');
+      b.onclick = () => { lvIdx = j; $('lv').classList.remove('on'); sndClick(); reset(); };
+      g.appendChild(b);
+    });
+  }
+  $('btnLv').onclick = e => { e.stopPropagation(); sndClick(); renderLv(); $('lv').classList.add('on'); };
+  $('lvClose').onclick = () => { $('lv').classList.remove('on'); };
   $('btnSound').onclick = () => {
     soundOn = !soundOn;
     try{ localStorage.setItem('gklotski_sound', soundOn ? '1' : '0'); }catch(e){}
@@ -630,7 +722,8 @@
       '逻辑=' + W.toFixed(0) + '×' + Math.round(H) + ' scale=' + S.toFixed(3) + ' 固定高=' + HFIX,
       '棋盘 ' + COLS + '×' + ROWS + ' 单元=' + CELL + ' 左上=(' + BX + ',' + BY + ')  出口=第' + (EXIT_C + 1) + '~' + (EXIT_C + EXIT_W) + '列',
       '页面总高=' + document.documentElement.scrollHeight + '/' + window.innerHeight,
-      '状态=' + state + ' 步数=' + steps + ' 最少=' + best + ' 选中=' + (selected === null ? '—' : (pieces.find(p => p.id === selected) || {}).name),
+      '关卡=' + curSet().name + ' 第' + (lvIdx + 1) + '/' + curSet().levels.length + ' 关（本关最少 ' + curLevel().min + ' 步）',
+      '状态=' + state + ' 步数=' + steps + ' 本关最少记录=' + best + ' 选中=' + (selected === null ? '—' : (pieces.find(p => p.id === selected) || {}).name),
       '棋盘:']
       .concat(rows.map(r => '   ' + r))
       .concat([
@@ -681,6 +774,10 @@
     pieces: pieces.map(p => ({ id:p.id, name:p.name, type:p.type, r:p.r, c:p.c, w:p.w, h:p.h, boss:!!p.boss, fr:p.fr, fc:p.fc })),
     board: (() => { const g = []; for(let r = 0; r < ROWS; r++){ const row = []; for(let c = 0; c < COLS; c++){ const p = pieces.find(q => r >= q.r && r < q.r+q.h && c >= q.c && c < q.c+q.w); row.push(p ? (p.boss ? 'B' : (p.name === '卒' ? 's' : 'C')) : '.'); } g.push(row.join('')); } return g; })(),
     selected, hintOn, soundOn, effects: effects.length,
+    setId, lvIdx, setIds: LEVEL_SETS.map(s => s.id), setNames: LEVEL_SETS.map(s => s.name),
+    levelMin: curLevel().min, levelName: curLevel().name,
+    levelCounts: LEVEL_SETS.map(s => s.levels.length),
+    levelMins: LEVEL_SETS.map(s => s.levels.map(l => l.min)),
   });
   window.__klotskiReset = () => { reset(); return true; };
   window.__klotskiMove = (pid, dr, dc, want) => {
@@ -695,6 +792,10 @@
   window.__klotskiDraw = () => { draw(); return 'ok'; };
   window.__klotskiLayout = () => { layout(); return 'ok'; };
   window.__klotskiFits = (name, r, c) => { const p = pieces.find(q => q.name === name); return p ? fits(p, r, c) : false; };
+  window.__klotskiGoto = (s, i) => { setId = s; lvIdx = i; reset(); return true; };
+  window.__klotskiAllLevels = () => LEVEL_SETS.map((s, si) => s.levels.map((l, li) => ({
+    set: s.id, setIdx: si, idx: li, name: l.name, min: l.min, pos: l.pos.slice() })));
+  window.__klotskiMakeModel = pos => LAYOUT.map((p, i) => ({ name: p.name, r: pos[i * 2], c: pos[i * 2 + 1], w: p.w, h: p.h, boss: !!p.boss }));
   window.__klotskiSetPiece = (name, r, c) => {           // 测试用：直接摆放（不做合法性检查）
     const p = pieces.find(q => q.name === name); if(!p) return false;
     p.r = r; p.c = c; p.fr = r; p.fc = c; if(anim) anim = null; return true;
