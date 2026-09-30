@@ -179,6 +179,24 @@
   const curLevel = () => curSet().levels[lvIdx];
   const bestKey = (s, i) => 'gklotski_best_' + LEVEL_SETS[s].id + '_' + LEVEL_SETS[s].levels[i].id;
   const clearKey = (s, i) => 'gklotski_cleared_' + LEVEL_SETS[s].id + '_' + LEVEL_SETS[s].levels[i].id;
+  /* ★ 记住"上次玩的是哪一关"（只记关卡，不记盘面进度 —— 进去仍是该关的初始状态） */
+  const KEY_LAST = 'gklotski_last';
+  function saveLast(){
+    try{ localStorage.setItem(KEY_LAST, JSON.stringify({ setId: setId, lvIdx: lvIdx })); }catch(e){}
+  }
+  function resumeLevel(){
+    try{
+      const raw = localStorage.getItem(KEY_LAST);
+      if(!raw) return false;
+      const o = JSON.parse(raw);
+      const si = parseInt(o && o.setId, 10), li = parseInt(o && o.lvIdx, 10);
+      if(!(si >= 0 && si < LEVEL_SETS.length)) return false;
+      if(!(li >= 0 && li < LEVEL_SETS[si].levels.length)) return false;
+      setId = si; lvIdx = li;
+      return true;
+    }catch(e){ return false; }                 // 存档损坏 → 安全回退到第 1 关
+  }
+
   const getNum = k => { const v = parseInt(localStorage.getItem(k) || '0', 10) || 0; return v; };
   function setNum(k, v){ try{ localStorage.setItem(k, String(v)); }catch(e){} }
 
@@ -201,6 +219,7 @@
   /* ---------- 初始化 / 重置 ---------- */
   function reset(){
     history = []; hintMove = null; stopDemo();
+    saveLast();                                // ★ 每次开局/切关都记住当前关卡
     solveCache = { key: '', path: null };      // ★ 盘面重建（棋子 id 会变）→ 求解缓存必须作废                             // ★ 重置/切关都要清空撤销栈
     const lv = curLevel();
     best = getNum(bestKey(setId, lvIdx));
@@ -962,6 +981,7 @@
   /* ---------- 启动 ---------- */
   bindInput();
   layout();
+  resumeLevel();                               // ★ 上次玩到哪一关，就从那一关的初始状态开始
   reset();
   setSoundLabel();
   window.addEventListener('resize', layout);
@@ -996,6 +1016,8 @@
   window.__klotskiDraw = () => { draw(); return 'ok'; };
   window.__klotskiLayout = () => { layout(); return 'ok'; };
   window.__klotskiFits = (name, r, c) => { const p = pieces.find(q => q.name === name); return p ? fits(p, r, c) : false; };
+  window.__klotskiLoadSaved = () => resumeLevel();
+  window.__klotskiSaved = () => { try{ return localStorage.getItem(KEY_LAST); }catch(e){ return null; } };
   window.__klotskiGoto = (s, i) => { setId = s; lvIdx = i; reset(); return true; };
   window.__klotskiAllLevels = () => LEVEL_SETS.map((s, si) => s.levels.map((l, li) => ({
     set: s.id, setIdx: si, idx: li, name: l.name, min: l.min, pos: l.pos.slice() })));

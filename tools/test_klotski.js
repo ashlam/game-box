@@ -714,6 +714,57 @@ section('14) 车名标签：居中、不出车身');
   ok(van.ly <= 0.7, '竖面包车名字不贴底边（ly=' + van.ly + '）');
 }
 
+/* ================= 15) ★ 记住上次玩的关卡 ================= */
+section('15) ★ 记住上次玩的关卡（进去是该关初始状态）');
+{
+  reset();                                        // 古典第 1 关
+  ok(!!store['gklotski_last'], '开局会把当前关卡写入存档');
+  ok(JSON.parse(store['gklotski_last']).setId === 1, '存档记录的是当前关卡集');
+  win.__klotskiGoto(0, 3);                        // 入门第 4 关
+  const saved = JSON.parse(store['gklotski_last']);
+  ok(saved.setId === 0 && saved.lvIdx === 3, '★ 切关后存档跟着更新（setId=' + saved.setId + ', lvIdx=' + saved.lvIdx + '）');
+
+  // 模拟"重新进入游戏"：启动流程 = resumeLevel() → reset()
+  // （注意：goto/切关本身也会写存档，所以这里直接注入"上次的存档"）
+  win.__klotskiGoto(1, 0);
+  store['gklotski_last'] = JSON.stringify({ setId: 0, lvIdx: 3 });
+  ok(win.__klotskiLoadSaved() === true, '★ 重新进入时读得出上次关卡（返回 true）');
+  win.__klotskiReset();                        // 启动流程里紧随其后就是 reset()
+  let s = R();
+  ok(s.setId === 0 && s.lvIdx === 3, '★ 恢复到上次玩的关卡：入门第 4 关');
+  ok(s.steps === 0 && s.won === false, '★ 恢复的是该关的**初始状态**（步数 0、未过关）');
+  const wantPos = win.__klotskiAllLevels()[0][3].pos;
+  const gotPos = [];
+  for(const p of s.pieces){ gotPos.push(p.r, p.c); }
+  ok(JSON.stringify(gotPos) === JSON.stringify(wantPos),
+     '★ 恢复后盘面逐块等于该关初始布局（不是上次玩到一半的盘面）');
+
+  // 关卡内走过几步后再"重进"，仍是初始盘面
+  win.__klotskiHint();                          // 用提示给的第一步（保证在该关合法）
+  const h0 = R().hint;
+  ok(!!h0, '（该关能得到合法首步）');
+  win.__klotskiMove(h0.id, h0.dr, h0.dc, h0.n); run(20);
+  ok(R().steps === 1, '（先走一步）');
+  win.__klotskiLoadSaved(); win.__klotskiReset();     // 模拟重新进入
+  ok(R().steps === 0, '★ 只是"记住关卡"，不记盘面进度 —— 重进仍是初始盘面');
+
+  // 坏存档安全回退
+  win.__klotskiGoto(1, 0);
+  store['gklotski_last'] = '{oops';               // 注入后再注入坏值（goto 会写存档，所以顺序很重要）
+  ok(win.__klotskiLoadSaved() === false, '★ 存档损坏 → 安全回退（返回 false，不崩）');
+  ok(R().setId === 1 && R().lvIdx === 0, '  坏存档不影响当前局面');
+  store['gklotski_last'] = JSON.stringify({ setId: 9, lvIdx: 99 });
+  ok(win.__klotskiLoadSaved() === false, '★ 关卡集越界 → 安全回退');
+  store['gklotski_last'] = JSON.stringify({ setId: 0, lvIdx: 99 });
+  ok(win.__klotskiLoadSaved() === false, '★ 关卡号超出该集范围 → 安全回退');
+  store['gklotski_last'] = JSON.stringify({ setId: 'abc', lvIdx: null });
+  ok(win.__klotskiLoadSaved() === false, '★ 类型不对 → 安全回退');
+  store['gklotski_last'] = '';
+  ok(win.__klotskiLoadSaved() === false, '★ 空存档 → 安全回退到第 1 关');
+  delete store['gklotski_last'];
+  reset();
+}
+
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');

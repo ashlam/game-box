@@ -59,6 +59,19 @@
 
   /* ?debug=1 时显示的一行诊断，用来在真机上直接读渲染参数 */
   /* 诊断条：做成「点一下即复制」的小卡片（用户不必念数字，粘贴即可） */
+  .top button{font-size:12px;padding:6px 9px;border-radius:9px;border:1px solid var(--line,#2b3242);
+              background:var(--card,#191d26);color:var(--txt,#e8ecf3);font-family:inherit;line-height:1}
+  #menu{position:fixed;inset:0;background:rgba(10,16,24,.74);backdrop-filter:blur(3px);display:none;
+        align-items:center;justify-content:center;padding:22px;z-index:65}
+  #menu.on{display:flex}
+  #menu .mpanel{width:100%;max-width:300px;background:var(--card,#191d26);border:1px solid var(--line,#2b3242);
+                border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:9px;
+                box-shadow:0 20px 50px rgba(0,0,0,.55)}
+  #menu h2{margin:0 0 6px;font-size:15px;text-align:center;color:var(--dim,#8b95a7);letter-spacing:2px}
+  #menu button{font-size:14.5px;padding:13px;border-radius:11px;border:1px solid var(--line,#2b3242);
+               background:rgba(255,255,255,.05);color:var(--txt,#e8ecf3);font-family:inherit}
+  #menu button.pri{background:var(--acc,#5b8cff);border-color:var(--acc,#5b8cff);color:#fff;font-weight:700}
+  #menu button:active{filter:brightness(.94)}
   #dbg{position:fixed;left:6px;right:6px;bottom:6px;z-index:60;display:none;font-size:10px;line-height:1.45;
     font-family:ui-monospace,Menlo,Consolas,monospace;color:#a8b8cf;background:rgba(8,10,14,.88);
     border:1px solid rgba(120,150,200,.24);border-radius:8px;padding:7px 9px;
@@ -115,6 +128,7 @@
 <div class="top">
   <a href="/">‹</a>
   <h1>打砖块</h1>
+  <button id="btnMenu">☰ 菜单</button>
 </div>
 
 <div class="hud">
@@ -125,12 +139,14 @@
 
 <div id="stage"><canvas id="cv" tabindex="0"></canvas></div>
 
-<div class="bar">
+<div id="menu"><div class="mpanel">
+  <h2>菜单</h2>
   <button id="btnPause">暂停</button>
   <button id="btnSound">音效：开</button>
-  <button id="btnRetry">重开</button>
-  <button id="btnDiag" title="复制诊断信息">诊断</button>
-</div>
+  <button id="btnRetry">重开本关</button>
+  <button id="btnDiag" title="复制诊断信息">复制诊断信息</button>
+  <button class="pri" id="menuClose">关闭</button>
+</div></div>
 
 <div id="toast"></div>
 <div id="dbg"></div>
@@ -884,6 +900,13 @@
   }
 
   $('overRetry').onclick = () => { $('over').classList.remove('on'); startLevel(1, false); };
+  $('btnMenu').onclick = () => { $('menu').classList.add('on'); };
+  $('menuClose').onclick = () => { $('menu').classList.remove('on'); };
+  // 菜单里点任何一项（音效除外，方便连点看开关）就自动收起
+  $('menu').addEventListener('click', e => {
+    const t = e.target && e.target.closest ? e.target.closest('button') : null;
+    if(t && t.id !== 'btnSound' && t.id !== 'menuClose') $('menu').classList.remove('on');
+  });
   $('btnRetry').onclick = () => { $('over').classList.remove('on'); startLevel(1, false); };
   $('btnPause').onclick = () => { if(state === 'play') pause(); else resume(); };
   $('btnSound').onclick = () => {
