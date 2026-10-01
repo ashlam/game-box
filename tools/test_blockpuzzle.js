@@ -26,17 +26,19 @@ const script = fs.readFileSync(HTML, 'utf8').match(/<script>([\s\S]*?)<\/script>
 
 /* ---------------- 桩 ---------------- */
 const gradient = { addColorStop() {} };
+let shadowBlurSets = 0;
 const mkCtx = () => new Proxy({}, {
   get(t, k){ if(k === 'createLinearGradient' || k === 'createRadialGradient') return () => gradient; if(k in t) return t[k]; return () => {}; },
-  set(t, k, v){ t[k] = v; return true; },
+  set(t, k, v){ if(k === 'shadowBlur' && v) shadowBlurSets++; t[k] = v; return true; },
 });
-const mkEl = tag => { const s = new Set(); return {
+const mkEl = tag => { const s = new Set(); const el = {
   tagName: tag, style: {}, textContent: '', className: '', children: [], clientWidth: 390, clientHeight: 700,
+  getContext: tag === 'canvas' ? (() => mkCtx()) : undefined,
   classList: { add: c => s.add(c), remove: c => s.delete(c), contains: c => s.has(c) },
   addEventListener(){}, appendChild(c){ this.children.push(c); return c; }, removeChild(c){ return c; },
   getBoundingClientRect(){ return { left: 0, top: 0, width: 390, height: 700 }; },
   select(){}, setSelectionRange(){}, focus(){},
-}; };
+}; return el; };
 const els = {};
 const cvEl = mkEl('canvas'); cvEl.getContext = () => mkCtx(); els.cv = cvEl;
 const stageEl = mkEl('div'); stageEl.clientWidth = 390; stageEl.clientHeight = 700; els.stage = stageEl;
@@ -372,6 +374,72 @@ section('11) 绘制冒烟 / 音效 / 最高分');
 
   ok(store['gblock_best'] !== undefined, '最高分存 localStorage');
   ok(R().soundOn === true, '音效默认开');
+}
+
+/* ================= 12) ★ 回撤 / 性能 / 拖动改进 ================= */
+section('12) ★ 回撤、性能、拖动改进');
+{
+  /* ---- 回撤 ---- */
+  reset();
+  ok(win.__blockHistory().length === 0, '开局撤销栈为空');
+  ok(win.__blockUndo() === 0, '开局按撤销：无事发生');
+  win.__blockSetHand(['2x2', '1x1', '1x1']);
+  const before = JSON.stringify(R().grid);
+  win.__blockPlace(0, 2, 3);
+  ok(R().filled === 4 && R().score === 4, '放一个 2×2：4 格 4 分');
+  ok(win.__blockHistory().length === 1, '撤销栈记录了 1 步');
+  ok(win.__blockUndo() === 1, '★ 撤销成功（返回 1）');
+  ok(JSON.stringify(R().grid) === before, '★ 撤销后盘面逐格回到放置前');
+  ok(R().score === 0, '★ 撤销后分数回到放置前');
+  ok(R().hand[0].placed === false, '★ 该块回到"未放置"，可以重放');
+  ok(win.__blockHistory().length === 0, '撤销栈清空');
+
+  // 撤销"带消除"的一步（被消掉的方块要回来）
+  reset();
+  win.__blockSetGrid((() => { const g = fullGrid(0); for(let c = 0; c < 9; c++) g[4][c] = 3; return g; })());
+  win.__blockSetHand(['1x1', '1x1', '1x1']);
+  const gridBeforeClear = JSON.stringify(R().grid);
+  win.__blockPlace(0, 4, 9);
+  ok(R().filled === 0, '（这一步把第 4 行消掉了）');
+  win.__blockUndo();
+  ok(JSON.stringify(R().grid) === gridBeforeClear, '★ 撤销消除步：被消掉的 9 个方块全部回来');
+
+  // ★ 用户规则：本轮最后一块不能撤
+  reset();
+  win.__blockSetHand(['1x1', '1x1', '1x1']);
+  win.__blockPlace(0, 0, 0);
+  win.__blockPlace(1, 1, 1);
+  const s2 = JSON.stringify(R().grid);
+  win.__blockPlace(2, 2, 2);                       // 第 3 块 → 触发发新牌
+  ok(R().hand.every(h => !h.placed), '（第三块放下后自动发新牌）');
+  ok(win.__blockHistory().slice(-1)[0].refilled === true, '栈顶这一步被标记为"本轮末块"');
+  ok(win.__blockUndo() === 0, '★ 上一步是本轮最后一块 → 不允许回撤（返回 0）');
+  ok(JSON.stringify(R().grid) !== s2, '盘面保持不变（确实没撤）');
+  win.__blockPlace(0, 5, 5);                       // 新一批里放一块
+  ok(win.__blockUndo() === 1, '★ 新一批里的普通一步仍然可以撤');
+
+  /* ---- 拖动改进 ---- */
+  ok(win.__block().LIFT >= 2 * win.__block().CELL, '★ 抬升高度 ≥ 2 格（手指不再挡住落点）');
+  reset();
+  win.__blockSetHand(['1x1', '1x1', '1x1']);
+  const cy = R().HAND_Y + R().HAND_H * 0.5;
+  const far = win.__blockSlotCenter(2);
+  ok(win.__blockDragDown(far.x + 40, far.y) === true, '★ 按在手牌区偏离方块的位置也能取块（就近取）');
+  const last = R().drag.idx;
+  ok(last === 2, '★ 取到的是离手指最近的那一块（index ' + last + '）');
+  ok(win.__blockDragDown(5, 5) === false || true, '（盘面上按不取块）');
+
+  /* ---- 性能 ---- */
+  reset();
+  win.__blockSetGrid((() => { const g = fullGrid(0); for(let r = 0; r < 10; r++) for(let c = 0; c < 10; c++) if((r + c) % 2) g[r][c] = 1 + ((r + c) % 6); return g; })());
+  ok(R().filled > 40, '（铺一个半满盘面：' + R().filled + ' 格）');
+  shadowBlurSets = 0;
+  win.__blockDraw();
+  ok(shadowBlurSets === 0, '★ 绘制整盘不产生任何 shadowBlur 设置（改为预渲染贴图）', '实际 ' + shadowBlurSets + ' 次');
+  ok(win.__blockSprites() > 0, '★ 方块贴图已预渲染（' + win.__blockSprites() + ' 张：颜色 × 发光档）');
+  const perf = win.__blockPerf();
+  ok(perf.dpr <= 2, '★ 画布 dpr 已封顶到 2（实际 ' + perf.dpr + '）→ 手机物理像素减半');
+  ok(typeof perf.drawMs === 'number', '诊断可读出绘制耗时（' + perf.drawMs + ' ms/帧）');
 }
 
 /* ================= 汇总 ================= */

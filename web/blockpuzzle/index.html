@@ -58,6 +58,7 @@
 <div class="top">
   <a href="/">‹</a>
   <h1>方块消除</h1>
+  <button id="btnUndo">↶ 撤销</button>
   <button id="btnSound">🔊 音效</button>
   <button id="btnDiag" title="复制诊断信息">诊断</button>
 </div>
@@ -164,6 +165,8 @@
   let pops = [];                            // 消除动画块
   let effects = [], floats = [];            // 粒子 / 浮字
   let tGlobal = 0, shake = 0, glowT = 0, soundOn = true, hintOn = true, lastTs = 0, raf = 0;
+  let history = [];                          // ★ 撤销栈：每步存"放置前的盘面/分数/手牌状态"
+  let fps = 0, drawMs = 0, frameN = 0, frameT = 0, lastFrameTs = 0;
   const KEY_BEST = 'gblock_best';
 
   best = parseInt(localStorage.getItem(KEY_BEST) || '0', 10) || 0;
@@ -226,6 +229,9 @@
     if(!h || h.placed) return false;
     if(state !== 'play') return false;
     if(!canPlace(h.shape, r, c)){ sndBlocked(); shake = 0.5; return false; }
+    // ★ 放置前拍快照（撤销用）；refilled = 这一步是不是"本轮最后一块"（是则不可撤销）
+    const snap = { grid: grid.map(row => row.slice()), score: score,
+                   hand: hand.map(x => x.placed), refilled: false };
     for(const [dr, dc] of h.shape.c) grid[r + dr][c + dc] = h.color;
     h.placed = true;
     const f = fullLines(grid);
@@ -248,10 +254,30 @@
     }else{
       sndPlace();
     }
-    if(hand.every(x => x.placed)) newHand();
+    if(hand.every(x => x.placed)){ snap.refilled = true; newHand(); }
+    history.push(snap);
+    if(history.length > 300) history.shift();
     if(!anyFits()) finish();
     return true;
   }
+  /** ★ 回撤上一步：恢复盘面 / 分数 / 手牌使用状态
+      特例（用户规则）：如果上一步是"本轮最后一块"（已发新牌）→ 不允许回撤 */
+  function undo(){
+    if(animGuard()) return 0;
+    const h = history[history.length - 1];
+    if(!h){ toast('没有可回撤的步骤'); sndBlocked(); return 0; }
+    if(h.refilled){ toast('上一步是本轮最后一块（已经发新牌了），不能回撤'); sndBlocked(); return 0; }
+    history.pop();
+    grid = h.grid.map(row => row.slice());
+    score = h.score;
+    hand.forEach((x, i) => { if(i < h.hand.length) x.placed = h.hand[i]; });
+    state = 'play';
+    $('over').classList.remove('on');
+    pops = []; floats = []; ghost = null; drag = null;
+    sndUndo();
+    return 1;
+  }
+  const animGuard = () => false;
   function finish(){
     state = 'over';
     if(score > best){ best = score; try{ localStorage.setItem(KEY_BEST, String(best)); }catch(e){} }
@@ -265,6 +291,7 @@
   function reset(){
     grid = emptyGrid();
     score = 0; state = 'play'; drag = null; ghost = null; pops = []; effects = []; floats = [];
+    history = [];
     shake = 0; glowT = 0; hintOn = true;
     $('over').classList.remove('on');
     newHand();
@@ -277,18 +304,20 @@
     if(!r.width || !r.height) return null;
     return { x: (cx - r.left) / (r.width / W), y: (cy - r.top) / (r.height / H) };
   }
+  /** ★ 按在手牌区任意位置都能取块：取离手指最近的那一块（不必精确按在方块上） */
   function slotAt(x, y){
-    if(y < HAND_Y - 6 || y > HAND_Y + HAND_H) return -1;
+    if(y < HAND_Y - 12 || y > HAND_Y + HAND_H + 12) return -1;
+    let best = -1, bd = 1e9;
     for(let i = 0; i < hand.length; i++){
       if(hand[i].placed) continue;
-      const sx = slotX(i);
-      if(x >= sx - SLOT_W / 2 && x <= sx + SLOT_W / 2) return i;
+      const d = Math.abs(x - slotX(i));
+      if(d < bd){ bd = d; best = i; }
     }
-    return -1;
+    return best;
   }
   function slotX(i){ return BX + (i + 0.5) * (COLS * CELL / HAND_MAX); }
   /** 拖动中的方块画在哪（手指上方抬起一截，避免被手指挡住） */
-  const LIFT = () => CELL * 1.35;
+  const LIFT = () => CELL * 2.4;   // ★ 抬得更高，手指不会挡住要看的落点
   function dragAnchor(i){
     const h = hand[i];
     const sx = slotX(i), sy = HAND_Y + HAND_H * 0.52;
@@ -402,6 +431,7 @@
     for(let i = 0; i < Math.min(4, n + 1); i++) tone(560 + i * 150, 0.16, { type:'triangle', gain: 0.09, at: i * 0.07 });
     noise(0.3, { type:'highpass', freq: 1000, gain: 0.05 });
   }
+  function sndUndo(){ tone(420, 0.09, { type:'triangle', gain: 0.06, to: 300 }); noise(0.1, { type:'bandpass', freq: 600, to: 1200, gain: 0.03 }); }
   function sndOver(){ [330, 262, 196, 147].forEach((f, i) => tone(f, 0.3, { type:'triangle', gain: 0.1, at: i * 0.14 })); }
 
   /* ---------- 绘制 ---------- */
@@ -422,8 +452,65 @@
     const b = clamp(Math.round((n & 255) * f), 0, 255);
     return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
   }
-  /** 画一个方块（暗色扁平 + 霓虹：平填充、顶部一条亮边、外发光） */
-  function drawBlock(x, y, s, color, opt){
+  /** 在任意 2D 上下文里画一个方块（暗色扁平 + 霓虹：平填充、顶部亮边、可选外发光） */
+  function paintBlock(c, x, y, s, color, glow){
+    const pad = Math.max(1, s * 0.055);
+    const r = s * 0.20;
+    c.save();
+    if(glow){
+      c.shadowColor = color; c.shadowBlur = s * 0.55 * (glow === true ? 1 : glow);
+    }
+    c.fillStyle = color;
+    roundRectOn(c, x + pad, y + pad, s - pad * 2, s - pad * 2, r); c.fill();
+    c.shadowBlur = 0; c.shadowColor = 'transparent';
+    c.fillStyle = 'rgba(255,255,255,.30)';
+    roundRectOn(c, x + pad + (s - pad * 2) * 0.16, y + pad + (s - pad * 2) * 0.13,
+                (s - pad * 2) * 0.68, (s - pad * 2) * 0.16, r * 0.6); c.fill();
+    c.restore();
+  }
+  /** roundRect 的指定上下文版本 */
+  function roundRectOn(c, x, y, w, h, r){
+    r = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
+  /* ★ 性能：方块（含发光）预渲染成贴图，之后每帧只 drawImage
+     —— 原来每个方块每帧一次 shadowBlur，手机上（GPU 弱 + dpr 2.6）会明显掉帧 */
+  let sprites = {};
+  const GLOWS = [0, 0.35, 0.55, 0.9, 1];
+  function buildSprites(){
+    sprites = {};
+    const px = Math.max(8, Math.round(CELL * S * dprNow));
+    for(let i = 1; i <= PALETTE.length; i++){
+      for(const g of GLOWS){
+        let c = null;
+        try{ c = document.createElement('canvas'); }catch(e){ c = null; }
+        if(!c || !c.getContext) continue;
+        c.width = px; c.height = px;
+        const cc = c.getContext('2d');
+        if(!cc) continue;
+        paintBlock(cc, 0, 0, px, PALETTE[i - 1], g);
+        sprites[i + '|' + g] = c;
+      }
+    }
+  }
+  /** 画一个方块（走贴图；贴图不可用时回退到直接绘制） */
+  function drawBlock(x, y, s, colorIdx, opt){
+    const o = opt || {};
+    const glow = o.glow === true ? 1 : (o.glow || 0);
+    let best = glow;
+    for(const g of GLOWS){ if(Math.abs(g - glow) < Math.abs(best - glow)) best = g; }
+    const key = colorIdx + '|' + best;
+    const sp = sprites[key];
+    if(sp){ ctx.drawImage(sp, x, y, s, s); return; }
+    paintBlock(ctx, x, y, s, PALETTE[(colorIdx - 1) % PALETTE.length], glow);
+  }
+  function drawBlockLegacy(x, y, s, color, opt){
     const o = opt || {};
     const pad = Math.max(1, s * 0.055);
     const r = s * 0.20;
@@ -454,7 +541,7 @@
     for(let r = 0; r < ROWS; r++) for(let c = 0; c < COLS; c++){
       const v = grid[r][c];
       if(!v) continue;
-      drawBlock(BX + c * CELL, BY + r * CELL, CELL, PALETTE[(v - 1) % PALETTE.length], { glow: 0.55 });
+      drawBlock(BX + c * CELL, BY + r * CELL, CELL, v, { glow: 0.55 });
     }
   }
   function drawGhost(){
@@ -497,7 +584,7 @@
       ctx.save();
       ctx.globalAlpha = 1 - k;
       const cx = BX + p.c * CELL + CELL / 2, cy = BY + p.r * CELL + CELL / 2;
-      drawBlock(cx - s / 2, cy - s / 2, s, PALETTE[(p.color - 1) % PALETTE.length], { glow: 1 });
+      drawBlock(cx - s / 2, cy - s / 2, s, p.color, { glow: 1 });
       ctx.restore();
     }
   }
@@ -513,7 +600,7 @@
       const sx = slotX(i), sy = HAND_Y + HAND_H * 0.52;
       const ox = sx - h.shape.w * cs / 2, oy = sy - h.shape.h * cs / 2;
       for(const [dr, dc] of h.shape.c){
-        drawBlock(ox + dc * cs, oy + dr * cs, cs, PALETTE[(h.color - 1) % PALETTE.length], { glow: 0.35 });
+        drawBlock(ox + dc * cs, oy + dr * cs, cs, h.color, { glow: 0.35 });
       }
     }
   }
@@ -522,8 +609,16 @@
     const h = hand[drag.idx];
     const x = drag.x, y = drag.y - LIFT();
     const ox = x - h.shape.w * CELL / 2, oy = y - h.shape.h * CELL / 2;
+    // ★ 手指 → 方块中心的虚线连接，明确"方块在手指上方"
+    ctx.save();
+    ctx.strokeStyle = 'rgba(200,220,255,.38)'; ctx.lineWidth = 1.6; ctx.setLineDash([5, 5]);
+    ctx.beginPath(); ctx.moveTo(drag.x, drag.y); ctx.lineTo(drag.x, drag.y - LIFT()); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(200,220,255,.5)';
+    ctx.beginPath(); ctx.arc(drag.x, drag.y, 3.2, 0, 7); ctx.fill();
+    ctx.restore();
     for(const [dr, dc] of h.shape.c){
-      drawBlock(ox + dc * CELL, oy + dr * CELL, CELL, PALETTE[(h.color - 1) % PALETTE.length], { glow: 0.9 });
+      drawBlock(ox + dc * CELL, oy + dr * CELL, CELL, h.color, { glow: 0.9 });
     }
   }
   function drawHUD(){
@@ -624,7 +719,18 @@
     if(!(dt > 0)) dt = 1 / 60;
     dt = Math.min(dt, 1 / 20);
     step(dt);
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
     draw();
+    if(now){
+      frameT += (performance.now() - now);
+      frameN++;
+      if(frameN >= 30){ drawMs = frameT / frameN; frameN = 0; frameT = 0; }
+    }
+    if(lastFrameTs){
+      const f = 1 / Math.max(0.001, (ts - lastFrameTs) / 1000);
+      fps = fps ? fps * 0.85 + f * 0.15 : f;
+    }
+    lastFrameTs = ts;
   }
 
   /* ---------- 布局 ---------- */
@@ -649,7 +755,8 @@
     if(!availW || !availH) return;
     S = availH / HFIX; H = HFIX; W = availW / S;
     refit();
-    const dpr = window.devicePixelRatio || 1;
+    // ★ 性能：dpr 上限压到 2（手机上 dpr 常 2.6+，物理像素翻倍但肉眼几乎无差别）
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     dprNow = dpr;
     cv.style.width = availW + 'px'; cv.style.height = availH + 'px';
     cv.width = Math.round(availW * dpr); cv.height = Math.round(availH * dpr);
@@ -664,11 +771,13 @@
       if(nh >= prevH) break;
       prevH = nh;
     }
+    buildSprites();                            // ★ 尺寸/dpr 变了就重建方块贴图
     if(/[?&]debug/.test(location.search)) showDbg();
   }
 
   /* ---------- 按钮 / 提示 / 诊断 ---------- */
   $('overRetry').onclick = () => { sndPick(); reset(); };
+  $('btnUndo').onclick = () => { audio(); undo(); };
   $('btnSound').onclick = () => {
     soundOn = !soundOn;
     try{ localStorage.setItem('gblock_sound', soundOn ? '1' : '0'); }catch(e){}
@@ -691,7 +800,9 @@
       '逻辑=' + W.toFixed(0) + '×' + Math.round(H) + ' scale=' + S.toFixed(3) + ' 固定高=' + HFIX,
       '棋盘 ' + COLS + '×' + ROWS + ' 单元=' + CELL + ' 左上=(' + BX + ',' + BY + ') 手牌区 y=' + HAND_Y,
       '页面总高=' + document.documentElement.scrollHeight + '/' + window.innerHeight,
-      '状态=' + state + ' 分数=' + score + ' 最高=' + best,
+      '性能: 约 ' + fps.toFixed(0) + ' fps · 绘制 ' + drawMs.toFixed(2) + ' ms/帧（手机上 >8ms 会明显掉帧）· dpr ' + dprNow,
+      '状态=' + state + ' 分数=' + score + ' 最高=' + best + ' 可回撤步数=' + history.length +
+        (history.length ? ('（最后一步' + (history[history.length-1].refilled ? '是本轮末块，不可撤' : '可撤') + '）') : ''),
       '手牌=' + hand.map(h => h.shape.n + (h.placed ? '(已放)' : '') + '#' + h.color).join(' '),
       '盘面:',
     ].concat(rows.map(r => '   ' + r)).concat([
@@ -732,6 +843,7 @@
   /* ---------- 测试钩子 ---------- */
   window.__block = () => ({
     state, score, best, COLS, ROWS, CELL, BOARD, BX, BY, HAND_Y, HAND_H, SLOT_W, HFIX, W, H, PADB,
+    LIFT: LIFT(), dpr: dprNow, historyLen: history.length, sprites: Object.keys(sprites).length,
     handCount: hand.length,
     hand: hand.map(h => ({ n: h.shape.n, w: h.shape.w, h: h.shape.h, c: h.shape.c.map(x => x.slice()), color: h.color, placed: h.placed })),
     grid: grid.map(r => r.slice()),
@@ -742,6 +854,10 @@
     pops: pops.length, soundOn: soundOn, hintOn: hintOn,
     SHAPES: SHAPES.map(s => ({ n: s.n, w: s.w, h: s.h, cells: s.c.length, wt: s.wt, pos: s.c.map(x => x.slice()) })),
   });
+  window.__blockUndo = () => undo();
+  window.__blockHistory = () => history.map(h => ({ score: h.score, refilled: h.refilled, hand: h.hand.slice() }));
+  window.__blockPerf = () => ({ fps: +fps.toFixed(1), drawMs: +drawMs.toFixed(3), dpr: dprNow, sprites: Object.keys(sprites).length });
+  window.__blockSprites = () => Object.keys(sprites).length;
   window.__blockReset = () => { reset(); return true; };
   window.__blockSeed = s => { rng = typeof s === 'function' ? s : Math.random; };
   window.__blockSetGrid = (rows) => { grid = rows.map(r => r.slice()); return true; };
