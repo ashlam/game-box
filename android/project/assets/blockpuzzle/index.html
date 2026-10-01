@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>方块消除 · 小游戏盒子</title>
+<style>
+  :root{ --bg:#0f1115; --card:#191d26; --line:#2b3242; --txt:#e8ecf3; --dim:#8b95a7; --acc:#5b8cff; }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+  html{height:100%}
+  html,body{margin:0}
+  body{
+    background:radial-gradient(1200px 600px at 50% -10%,#1b2233 0%,var(--bg) 60%);
+    color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    height:100%;display:flex;flex-direction:column;align-items:center;
+    padding:calc(env(safe-area-inset-top) + 6px) 4px calc(env(safe-area-inset-bottom) + 14px);overflow:hidden;
+  }
+  .top{width:100%;display:flex;align-items:center;gap:7px;margin-bottom:5px;flex:0 0 auto}
+  .top a{color:var(--dim);text-decoration:none;font-size:18px;padding:5px 9px;border-radius:9px;
+         background:var(--card);border:1px solid var(--line);line-height:1}
+  .top h1{font-size:15px;margin:0;color:var(--dim);font-weight:600;white-space:nowrap;flex:1}
+  .top button{font-size:11.5px;padding:6px 8px;border-radius:9px;border:1px solid var(--line);
+              background:var(--card);color:var(--txt);font-family:inherit;line-height:1;white-space:nowrap}
+  .top button:active{background:var(--acc);border-color:var(--acc);color:#fff}
+  #stage{width:100%;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;touch-action:none}
+  canvas{display:block;border-radius:16px;border:1px solid var(--line);touch-action:none;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+  #over{position:fixed;inset:0;background:rgba(10,16,24,.78);backdrop-filter:blur(3px);display:none;
+        align-items:center;justify-content:center;padding:22px;z-index:9}
+  #over.on{display:flex}
+  .panel{width:100%;max-width:330px;background:var(--card);border:1px solid var(--line);border-radius:18px;
+         padding:22px 20px 16px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.55)}
+  .panel h2{margin:0 0 8px;font-size:20px;letter-spacing:2px}
+  .panel .big{font-size:44px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.1}
+  .panel .unit{font-size:13px;color:var(--dim);letter-spacing:3px}
+  .panel p{color:var(--dim);font-size:12.5px;margin:10px 0 14px;line-height:1.7}
+  .panel p.rec{color:#ffd166;font-weight:700}
+  .panel .rule{background:rgba(255,255,255,.04);border:1px dashed var(--line);border-radius:10px;padding:9px 11px;
+               font-size:11.5px;color:var(--dim);line-height:1.75;margin:0 0 14px;text-align:left}
+  .panel .rule b{color:#ffd166}
+  .panel button{width:100%;font-size:15px;padding:13px;border-radius:12px;border:1px solid var(--line);
+                background:rgba(255,255,255,.05);color:var(--txt);font-family:inherit;margin-bottom:8px;letter-spacing:3px}
+  .panel button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+  .panel button:active{filter:brightness(.94)}
+  #toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 84px);transform:translate(-50%,-12px);
+         background:#20262ff2;border:1px solid var(--line);padding:11px 18px;border-radius:12px;font-size:13.5px;
+         opacity:0;transition:.22s;pointer-events:none;z-index:70;max-width:86vw;text-align:center}
+  #toast.on{opacity:1;transform:translate(-50%,0)}
+  #dbg{position:fixed;left:6px;right:6px;bottom:calc(env(safe-area-inset-bottom) + 8px);z-index:60;display:none;
+       font-size:10px;line-height:1.45;font-family:ui-monospace,Menlo,Consolas,monospace;color:#a8b8cf;
+       background:rgba(8,10,14,.88);border:1px solid rgba(120,150,200,.24);border-radius:8px;padding:7px 9px;
+       white-space:pre-wrap;word-break:break-all;cursor:pointer;-webkit-user-select:text;user-select:text}
+  #dbg.on{display:block}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="../index.html">‹</a>
+  <h1>方块消除</h1>
+  <button id="btnSound">🔊 音效</button>
+  <button id="btnDiag" title="复制诊断信息">诊断</button>
+</div>
+
+<div id="stage"><canvas id="cv"></canvas></div>
+<div id="toast"></div>
+<div id="dbg"></div>
+
+<div id="over"><div class="panel">
+  <h2 id="overTitle">游戏结束</h2>
+  <div class="big" id="overScore">0</div>
+  <div class="unit">分</div>
+  <p id="overText"></p>
+  <div class="rule">
+    玩法：把下方的方块<b>拖到棋盘</b>上摆放<br>
+    某一行或某一列被<b>填满 → 立刻消掉</b>并得分<br>
+    手上 3 块必须用完才会来新的一批；<b>怎么都放不下</b>就结束
+  </div>
+  <button class="pri" id="overRetry">再来一局</button>
+</div></div>
+
+<script>
+(function(){
+  'use strict';
+  /* ============================================================
+     方块消除（1010! / Block Blast 类玩法）—— 纯玩法版：无道具、无金币、无广告
+
+     规则：
+       · 10×10 棋盘
+       · 一次给 3 个随机拼块，拖到棋盘上摆放（不重叠、不出界）
+       · 摆下后，任何被填满的整行/整列立刻消除并得分
+       · 手上 3 块全部用完 → 发新的一批
+       · 三个块都无处可放 → 游戏结束
+       · 计分：每块按占格数得分；每消一行/列 +10；一次消 n 行/列，额外 +5n(n-1)
+     ============================================================ */
+
+  const $ = id => document.getElementById(id);
+  const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const cv = $('cv'), ctx = cv.getContext('2d');
+  const FONT = '-apple-system,"PingFang SC","Noto Sans CJK SC",sans-serif';
+
+  /* ---------- 棋盘 ---------- */
+  const COLS = 10, ROWS = 10;
+  const HAND_MAX = 3;                       // 手牌数量（用完才发新的一批）
+
+  /* ---------- 颜色（暗色扁平 + 霓虹）---------- */
+  const PALETTE = ['#ff4d6d', '#ffb020', '#22d3ee', '#34d399', '#a78bfa', '#5b8cff'];
+
+  /* ---------- 拼块池（形状 + 权重）---------- */
+  const RAW_SHAPES = [
+    { n:'1x1', c:[[0,0]],                                          wt: 3 },
+    { n:'1x2', c:[[0,0],[0,1]],                                    wt: 5 },
+    { n:'1x3', c:[[0,0],[0,1],[0,2]],                              wt: 5 },
+    { n:'1x4', c:[[0,0],[0,1],[0,2],[0,3]],                        wt: 4 },
+    { n:'1x5', c:[[0,0],[0,1],[0,2],[0,3],[0,4]],                  wt: 2 },
+    { n:'2x2', c:[[0,0],[0,1],[1,0],[1,1]],                        wt: 4 },
+    { n:'3x3', c:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]], wt: 1 },
+    { n:'r2x3', c:[[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]],           wt: 2 },
+    { n:'L3',  c:[[0,0],[1,0],[1,1]],                              wt: 5 },
+    { n:'L5',  c:[[0,0],[0,1],[0,2],[1,0],[2,0]],                  wt: 2 },
+  ];
+  /** 把一组格子做标准化（贴到左上角），并返回 {c,w,h} */
+  function normCells(cells){
+    const minR = Math.min.apply(null, cells.map(c => c[0])), minC = Math.min.apply(null, cells.map(c => c[1]));
+    const c = cells.map(x => [x[0] - minR, x[1] - minC]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    return { c: c, w: Math.max.apply(null, c.map(x => x[1])) + 1, h: Math.max.apply(null, c.map(x => x[0])) + 1 };
+  }
+  /** 顺时针旋转 90° */
+  function rot90(cells){
+    const cs = cells.map(x => [x[1], -x[0]]);
+    return normCells(cs).c;
+  }
+  /** 展开形状池：每个形状补齐全部旋转（0/90/180/270），并按标准化结果去重 */
+  const SHAPES = (() => {
+    const out = [], seen = new Set();
+    for(const s of RAW_SHAPES){
+      let cur = normCells(s.c).c;
+      for(let k = 0; k < 4; k++){
+        const nx = normCells(cur);
+        const key = nx.c.map(x => x.join(',')).join(';') + '|' + nx.w + 'x' + nx.h;
+        if(!seen.has(key)){
+          seen.add(key);
+          out.push({ n: s.n + (k ? '·r' + k : ''), c: nx.c, w: nx.w, h: nx.h, wt: s.wt });
+        }
+        cur = rot90(cur);
+      }
+    }
+    return out;
+  })();
+
+  /* ---------- 布局（固定逻辑高，宽度随屏反推）---------- */
+  const HFIX = 560;
+  let W = 342, H = HFIX, S = 1, dprNow = 1;
+  let HUD_H = 52, BOARD = 300, CELL = 30, BX = 21, BY = 62;
+  let HAND_Y = 400, HAND_H = 96, SLOT_W = 100, PADB = 4;
+
+  /* ---------- 状态 ---------- */
+  let grid = [];                            // ROWS × COLS：0 = 空，否则 1..PALETTE.length
+  let hand = [];                            // [{shape, color, used}] 长度 <= 3
+  let score = 0, best = 0, state = 'play';   // play | over | pause
+  let drag = null;                          // {idx, x, y, dx, dy} 手指拖动中
+  let ghost = null;                         // {r, c, ok, rows:[], cols:[]} 落点预览
+  let pops = [];                            // 消除动画块
+  let effects = [], floats = [];            // 粒子 / 浮字
+  let tGlobal = 0, shake = 0, glowT = 0, soundOn = true, hintOn = true, lastTs = 0, raf = 0;
+  const KEY_BEST = 'gblock_best';
+
+  best = parseInt(localStorage.getItem(KEY_BEST) || '0', 10) || 0;
+  soundOn = localStorage.getItem('gblock_sound') !== '0';
+
+  /* ---------- 棋盘工具 ---------- */
+  function emptyGrid(){ const g = []; for(let r = 0; r < ROWS; r++){ g.push(new Array(COLS).fill(0)); } return g; }
+  /** 这块能否放在 (r,c) */
+  function canPlace(shape, r, c){
+    if(r < 0 || c < 0 || r + shape.h > ROWS || c + shape.w > COLS) return false;
+    for(const [dr, dc] of shape.c){ if(grid[r + dr][c + dc]) return false; }
+    return true;
+  }
+  /** 当前盘面里能被填满的行列（不改变盘面） */
+  function fullLines(g0){
+    const rows = [], cols = [];
+    for(let r = 0; r < ROWS; r++){ let f = true; for(let c = 0; c < COLS; c++) if(!g0[r][c]){ f = false; break; } if(f) rows.push(r); }
+    for(let c = 0; c < COLS; c++){ let f = true; for(let r = 0; r < ROWS; r++) if(!g0[r][c]){ f = false; break; } if(f) cols.push(c); }
+    return { rows: rows, cols: cols };
+  }
+  /** 预览：放下去会不会消、消哪几行哪几列 */
+  function previewAt(shape, r, c){
+    if(!canPlace(shape, r, c)) return { ok: false, rows: [], cols: [] };
+    const g0 = grid.map(row => row.slice());
+    for(const [dr, dc] of shape.c) g0[r + dr][c + dc] = 1;
+    const f = fullLines(g0);
+    return { ok: true, rows: f.rows, cols: f.cols };
+  }
+
+  /* ---------- 发牌 / 放置 / 消除 ---------- */
+  let rng = Math.random;
+  function pickShape(){
+    let total = 0;
+    for(const s of SHAPES) total += s.wt;
+    let x = rng() * total;
+    for(const s of SHAPES){ x -= s.wt; if(x <= 0) return s; }
+    return SHAPES[0];
+  }
+  function newHand(){
+    hand = [];
+    for(let i = 0; i < HAND_MAX; i++){
+      const s = pickShape();
+      hand.push({ shape: s, color: 1 + Math.floor(rng() * PALETTE.length), cell:[], placed:false });
+    }
+  }
+  function anyFits(){
+    for(const h of hand){
+      if(h.placed) continue;
+      for(let r = 0; r <= ROWS - h.shape.h; r++)
+        for(let c = 0; c <= COLS - h.shape.w; c++)
+          if(canPlace(h.shape, r, c)) return true;
+    }
+    return false;
+  }
+  /** 得分公式（固定、可测）：放下的格数 + 每消一线 10 分 + 一次多消额外 5n(n-1) */
+  function scoreFor(cells, nLines){ return cells + 10 * nLines + 5 * nLines * (nLines - 1); }
+
+  function place(idx, r, c){
+    const h = hand[idx];
+    if(!h || h.placed) return false;
+    if(state !== 'play') return false;
+    if(!canPlace(h.shape, r, c)){ sndBlocked(); shake = 0.5; return false; }
+    for(const [dr, dc] of h.shape.c) grid[r + dr][c + dc] = h.color;
+    h.placed = true;
+    const f = fullLines(grid);
+    const nLines = f.rows.length + f.cols.length;
+    const gain = scoreFor(h.shape.c.length, nLines);
+    score += gain;
+    if(nLines > 0){
+      // 记录消除动画用的块
+      for(const rr of f.rows) for(let cc = 0; cc < COLS; cc++) pops.push({ r: rr, c: cc, color: grid[rr][cc], t: 0 });
+      for(const cc of f.cols) for(let rr = 0; rr < ROWS; rr++){
+        if(f.rows.indexOf(rr) >= 0) continue;
+        pops.push({ r: rr, c: cc, color: grid[rr][cc], t: 0 });
+      }
+      for(const rr of f.rows) for(let cc = 0; cc < COLS; cc++) grid[rr][cc] = 0;
+      for(const cc of f.cols) for(let rr = 0; rr < ROWS; rr++) grid[rr][cc] = 0;
+      sndClear(nLines); glowT = Math.min(1, 0.45 + 0.2 * nLines);
+      addBurst(BX + COLS * CELL / 2, BY + ROWS * CELL / 2, 12 + nLines * 6, '#ffd166');
+      floats.push({ x: BX + COLS * CELL / 2, y: BY + ROWS * CELL * 0.45, t: 0,
+                    txt: (nLines >= 2 ? nLines + ' 连消！' : '消！') + ' +' + gain, color: '#ffd166' });
+    }else{
+      sndPlace();
+    }
+    if(hand.every(x => x.placed)) newHand();
+    if(!anyFits()) finish();
+    return true;
+  }
+  function finish(){
+    state = 'over';
+    if(score > best){ best = score; try{ localStorage.setItem(KEY_BEST, String(best)); }catch(e){} }
+    $('overTitle').textContent = '放不下了';
+    $('overScore').textContent = score;
+    const isNew = score >= best && score > 0;
+    $('overText').textContent = (isNew ? '新纪录！' : '最高分 ' + best) + ' · 点击下面重开';
+    $('overText').className = isNew ? 'rec' : '';
+    setTimeout(() => { $('over').classList.add('on'); sndOver(); }, 480);
+  }
+  function reset(){
+    grid = emptyGrid();
+    score = 0; state = 'play'; drag = null; ghost = null; pops = []; effects = []; floats = [];
+    shake = 0; glowT = 0; hintOn = true;
+    $('over').classList.remove('on');
+    newHand();
+    sndReset();
+  }
+
+  /* ---------- 输入：从手牌拖到棋盘（相对滑动，手指不遮块）---------- */
+  function screenToLogical(cx, cy){
+    const r = cv.getBoundingClientRect();
+    if(!r.width || !r.height) return null;
+    return { x: (cx - r.left) / (r.width / W), y: (cy - r.top) / (r.height / H) };
+  }
+  function slotAt(x, y){
+    if(y < HAND_Y - 6 || y > HAND_Y + HAND_H) return -1;
+    for(let i = 0; i < hand.length; i++){
+      if(hand[i].placed) continue;
+      const sx = slotX(i);
+      if(x >= sx - SLOT_W / 2 && x <= sx + SLOT_W / 2) return i;
+    }
+    return -1;
+  }
+  function slotX(i){ return BX + (i + 0.5) * (COLS * CELL / HAND_MAX); }
+  /** 拖动中的方块画在哪（手指上方抬起一截，避免被手指挡住） */
+  const LIFT = () => CELL * 1.35;
+  function dragAnchor(i){
+    const h = hand[i];
+    const sx = slotX(i), sy = HAND_Y + HAND_H * 0.52;
+    return { x: sx - h.shape.w * CELL * 0.5, y: sy - h.shape.h * CELL * 0.5 };
+  }
+  function updateGhost(){
+    ghost = null;
+    if(!drag) return;
+    const h = hand[drag.idx];
+    const cx = drag.x, cy = drag.y - LIFT();                    // ★ 方块中心（只向上抬，避免手指遮挡）
+    // ★ 由"方块中心"换算到"左上角格子"：要先减去半块尺寸，否则 1×1 会偏 1 格、大块会偏半格
+    const r = Math.round((cy - BY) / CELL - h.shape.h / 2);
+    const c = Math.round((cx - BX) / CELL - h.shape.w / 2);
+    if(r < -1 || c < -1 || r > ROWS || c > COLS) return;
+    const p = previewAt(h.shape, r, c);
+    ghost = { r: r, c: c, ok: p.ok, rows: p.rows, cols: p.cols };
+  }
+  function onDown(id, cx, cy){
+    audio();
+    const p = screenToLogical(cx, cy);
+    if(!p || state !== 'play') return;
+    if(hintOn) hintOn = false;
+    const i = slotAt(p.x, p.y);
+    if(i < 0) return;
+    drag = { idx: i, x: p.x, y: p.y, id: id };
+    sndPick();
+    updateGhost();
+  }
+  function onMove(id, cx, cy){
+    if(!drag || drag.id !== id) return;
+    const p = screenToLogical(cx, cy);
+    if(!p) return;
+    drag.x = p.x; drag.y = p.y;
+    updateGhost();
+  }
+  function onUp(id, cx, cy){
+    if(!drag || drag.id !== id) return;
+    const d = drag; drag = null;
+    const g = ghost; ghost = null;
+    if(!g || !g.ok){ if(g) { sndBlocked(); shake = 0.4; } return; }
+    place(d.idx, g.r, g.c);
+  }
+  function bindInput(){
+    cv.addEventListener('pointerdown', e => { e.preventDefault(); onDown(e.pointerId, e.clientX, e.clientY); }, { passive:false });
+    window.addEventListener('pointermove', e => onMove(e.pointerId, e.clientX, e.clientY));
+    window.addEventListener('pointerup', e => onUp(e.pointerId, e.clientX, e.clientY));
+    window.addEventListener('pointercancel', e => onUp(e.pointerId, e.clientX, e.clientY));
+    cv.addEventListener('touchstart', e => { e.preventDefault(); for(let i = 0; i < e.changedTouches.length; i++){ const q = e.changedTouches[i]; onDown(q.identifier, q.clientX, q.clientY); } }, { passive:false });
+    window.addEventListener('touchmove', e => { for(let i = 0; i < e.changedTouches.length; i++){ const q = e.changedTouches[i]; onMove(q.identifier, q.clientX, q.clientY); } }, { passive:true });
+    window.addEventListener('touchend', e => { for(let i = 0; i < e.changedTouches.length; i++){ const q = e.changedTouches[i]; onUp(q.identifier, q.clientX, q.clientY); } }, { passive:true });
+    document.addEventListener('keydown', e => { if(e.key === 'r' || e.key === 'R'){ audio(); reset(); } });
+  }
+
+  /* ---------- 音效 ---------- */
+  let ac = null;
+  function audio(){
+    if(ac === null){ const C = window.AudioContext || window.webkitAudioContext; try{ ac = C ? new C() : false; }catch(e){ ac = false; } }
+    if(ac && ac.state === 'suspended'){ try{ ac.resume(); }catch(e){} }
+    return ac || null;
+  }
+  function tone(freq, dur, opt){
+    const o = opt || {};
+    if(!soundOn) return;
+    try{
+      const c = audio(); if(!c) return;
+      const t0 = c.currentTime + (o.at || 0);
+      const osc = c.createOscillator(), g = c.createGain();
+      osc.type = o.type || 'sine';
+      osc.frequency.setValueAtTime(freq, t0);
+      if(o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, o.to), t0 + dur);
+      const vol = (o.gain === undefined ? 0.1 : o.gain);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(g); g.connect(c.destination);
+      osc.start(t0); osc.stop(t0 + dur + 0.03);
+    }catch(e){}
+  }
+  let noiseBuf = null;
+  function noise(dur, opt){
+    const o = opt || {};
+    if(!soundOn) return;
+    try{
+      const c = audio(); if(!c) return;
+      const t0 = c.currentTime + (o.at || 0);
+      if(!noiseBuf || noiseBuf.__sr !== c.sampleRate){
+        noiseBuf = c.createBuffer(1, Math.max(1, Math.floor(c.sampleRate * 0.4)), c.sampleRate);
+        noiseBuf.__sr = c.sampleRate;
+        const d = noiseBuf.getChannelData(0);
+        let s = 987654321;
+        for(let i = 0; i < d.length; i++){ s = (s * 1103515245 + 12345) & 0x7fffffff; d[i] = (s / 0x3fffffff) - 1; }
+      }
+      const src = c.createBufferSource(); src.buffer = noiseBuf;
+      const f = c.createBiquadFilter(); f.type = o.type || 'bandpass';
+      f.frequency.setValueAtTime(o.freq || 900, t0);
+      if(o.to) f.frequency.exponentialRampToValueAtTime(Math.max(1, o.to), t0 + dur);
+      if(f.Q) f.Q.setValueAtTime(o.q === undefined ? 1.1 : o.q, t0);
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(o.gain === undefined ? 0.05 : o.gain, t0 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      src.connect(f); f.connect(g); g.connect(c.destination);
+      src.start(t0); src.stop(t0 + dur + 0.02);
+    }catch(e){}
+  }
+  function sndPick(){ tone(680, 0.05, { type:'sine', gain: 0.045 }); }
+  function sndPlace(){ tone(300, 0.08, { type:'triangle', gain: 0.07 }); noise(0.07, { type:'lowpass', freq: 700, gain: 0.02 }); }
+  function sndBlocked(){ tone(120, 0.12, { type:'sine', gain: 0.05, to: 84 }); }
+  function sndReset(){ tone(420, 0.09, { type:'sine', gain: 0.05 }); tone(560, 0.09, { type:'sine', gain: 0.045, at: 0.07 }); }
+  function sndClear(n){
+    for(let i = 0; i < Math.min(4, n + 1); i++) tone(560 + i * 150, 0.16, { type:'triangle', gain: 0.09, at: i * 0.07 });
+    noise(0.3, { type:'highpass', freq: 1000, gain: 0.05 });
+  }
+  function sndOver(){ [330, 262, 196, 147].forEach((f, i) => tone(f, 0.3, { type:'triangle', gain: 0.1, at: i * 0.14 })); }
+
+  /* ---------- 绘制 ---------- */
+  function roundRect(x, y, w, h, r){
+    r = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function shade(hex, f){
+    const n = parseInt(hex.slice(1), 16);
+    const r = clamp(Math.round(((n >> 16) & 255) * f), 0, 255);
+    const g = clamp(Math.round(((n >> 8) & 255) * f), 0, 255);
+    const b = clamp(Math.round((n & 255) * f), 0, 255);
+    return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+  }
+  /** 画一个方块（暗色扁平 + 霓虹：平填充、顶部一条亮边、外发光） */
+  function drawBlock(x, y, s, color, opt){
+    const o = opt || {};
+    const pad = Math.max(1, s * 0.055);
+    const r = s * 0.20;
+    ctx.save();
+    if(o.glow){
+      ctx.shadowColor = color; ctx.shadowBlur = s * 0.55 * (o.glow === true ? 1 : o.glow);
+    }
+    ctx.fillStyle = color;
+    roundRect(x + pad, y + pad, s - pad * 2, s - pad * 2, r); ctx.fill();
+    ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
+    // 顶部亮边（扁平风格的一点立体感）
+    ctx.fillStyle = 'rgba(255,255,255,.30)';
+    roundRect(x + pad + (s - pad * 2) * 0.16, y + pad + (s - pad * 2) * 0.13,
+              (s - pad * 2) * 0.68, (s - pad * 2) * 0.16, r * 0.6); ctx.fill();
+    ctx.restore();
+  }
+  function drawBoardBase(){
+    ctx.fillStyle = '#151a23';
+    roundRect(BX - 5, BY - 5, COLS * CELL + 10, ROWS * CELL + 10, 12); ctx.fill();
+    ctx.strokeStyle = 'rgba(120,150,200,.22)'; ctx.lineWidth = 1.4;
+    roundRect(BX - 5, BY - 5, COLS * CELL + 10, ROWS * CELL + 10, 12); ctx.stroke();
+    for(let r = 0; r < ROWS; r++) for(let c = 0; c < COLS; c++){
+      ctx.fillStyle = 'rgba(255,255,255,.035)';
+      roundRect(BX + c * CELL + PADB, BY + r * CELL + PADB, CELL - PADB * 2, CELL - PADB * 2, CELL * 0.16); ctx.fill();
+    }
+  }
+  function drawGrid(){
+    for(let r = 0; r < ROWS; r++) for(let c = 0; c < COLS; c++){
+      const v = grid[r][c];
+      if(!v) continue;
+      drawBlock(BX + c * CELL, BY + r * CELL, CELL, PALETTE[(v - 1) % PALETTE.length], { glow: 0.55 });
+    }
+  }
+  function drawGhost(){
+    if(!ghost) return;
+    const h = hand[drag.idx];
+    const pulse = 0.5 + 0.5 * Math.sin(tGlobal * 7);
+    // 会消掉的行列高亮
+    if(ghost.ok && (ghost.rows.length || ghost.cols.length)){
+      ctx.save();
+      ctx.globalAlpha = 0.20 + 0.16 * pulse;
+      ctx.fillStyle = '#ffd166';
+      for(const r of ghost.rows) ctx.fillRect(BX, BY + r * CELL, COLS * CELL, CELL);
+      for(const c of ghost.cols) ctx.fillRect(BX + c * CELL, BY, CELL, ROWS * CELL);
+      ctx.restore();
+    }
+    // 形状虚影
+    ctx.save();
+    ctx.globalAlpha = ghost.ok ? 0.55 : 0.28;
+    for(const [dr, dc] of h.shape.c){
+      const x = BX + (ghost.c + dc) * CELL, y = BY + (ghost.r + dr) * CELL;
+      if(x < BX - 1 || y < BY - 1 || x + CELL > BX + COLS * CELL + 1 || y + CELL > BY + ROWS * CELL + 1) continue;
+      roundRect(x + PADB, y + PADB, CELL - PADB * 2, CELL - PADB * 2, CELL * 0.16);
+      ctx.fillStyle = ghost.ok ? PALETTE[(h.color - 1) % PALETTE.length] : '#6b7686';
+      ctx.fill();
+    }
+    ctx.restore();
+    // 描边提示落点
+    ctx.save();
+    ctx.globalAlpha = ghost.ok ? 0.9 : 0.5;
+    ctx.strokeStyle = ghost.ok ? '#7dffb6' : '#ff6b6b';
+    ctx.lineWidth = 2;
+    roundRect(BX + ghost.c * CELL + 1.5, BY + ghost.r * CELL + 1.5, h.shape.w * CELL - 3, h.shape.h * CELL - 3, CELL * 0.2);
+    ctx.stroke();
+    ctx.restore();
+  }
+  function drawPops(){
+    for(const p of pops){
+      const k = clamp(p.t / 0.26, 0, 1);
+      const s = CELL * (1 - k * 0.55);
+      ctx.save();
+      ctx.globalAlpha = 1 - k;
+      const cx = BX + p.c * CELL + CELL / 2, cy = BY + p.r * CELL + CELL / 2;
+      drawBlock(cx - s / 2, cy - s / 2, s, PALETTE[(p.color - 1) % PALETTE.length], { glow: 1 });
+      ctx.restore();
+    }
+  }
+  function drawHand(){
+    // 手牌底槽
+    ctx.fillStyle = 'rgba(255,255,255,.035)';
+    roundRect(BX, HAND_Y, COLS * CELL, HAND_H, 12); ctx.fill();
+    const cs = CELL * 0.66;                      // 手牌里的方块尺寸
+    for(let i = 0; i < hand.length; i++){
+      const h = hand[i];
+      if(h.placed) continue;
+      if(drag && drag.idx === i) continue;        // 正在拖的那块不在这里画
+      const sx = slotX(i), sy = HAND_Y + HAND_H * 0.52;
+      const ox = sx - h.shape.w * cs / 2, oy = sy - h.shape.h * cs / 2;
+      for(const [dr, dc] of h.shape.c){
+        drawBlock(ox + dc * cs, oy + dr * cs, cs, PALETTE[(h.color - 1) % PALETTE.length], { glow: 0.35 });
+      }
+    }
+  }
+  function drawDrag(){
+    if(!drag) return;
+    const h = hand[drag.idx];
+    const x = drag.x, y = drag.y - LIFT();
+    const ox = x - h.shape.w * CELL / 2, oy = y - h.shape.h * CELL / 2;
+    for(const [dr, dc] of h.shape.c){
+      drawBlock(ox + dc * CELL, oy + dr * CELL, CELL, PALETTE[(h.color - 1) % PALETTE.length], { glow: 0.9 });
+    }
+  }
+  function drawHUD(){
+    ctx.fillStyle = '#e8ecf3'; ctx.font = '800 23px ' + FONT;
+    ctx.fillText(String(score), 12, 30);
+    ctx.fillStyle = '#8b95a7'; ctx.font = '600 10px ' + FONT;
+    ctx.fillText('分数', 12, 45);
+    const cardW = Math.min(96, W * 0.3);
+    ctx.fillStyle = 'rgba(255,255,255,.06)';
+    roundRect(W - 12 - cardW, 9, cardW, 36, 9); ctx.fill();
+    ctx.fillStyle = '#8b95a7'; ctx.font = '600 10px ' + FONT; ctx.textAlign = 'center';
+    ctx.fillText('最高分', W - 12 - cardW / 2, 23);
+    ctx.fillStyle = '#ffd166'; ctx.font = '800 15px ' + FONT;
+    ctx.fillText(String(best), W - 12 - cardW / 2, 40);
+    ctx.textAlign = 'left';
+  }
+  function drawHint(){
+    const cy = BY + BOARD * 0.34;
+    const hw = Math.min(134, (W - 16) / 2);
+    ctx.save();
+    ctx.fillStyle = 'rgba(250,248,239,.97)';
+    ctx.strokeStyle = '#bbada0'; ctx.lineWidth = 2.5;
+    roundRect(W / 2 - hw, cy - 62, hw * 2, 150, 14); ctx.fill(); ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#8f7a66'; ctx.font = '800 19px ' + FONT;
+    ctx.fillText('方块消除', W / 2, cy - 34);
+    ctx.fillStyle = '#776e65'; ctx.font = '700 12px ' + FONT;
+    ctx.fillText('把下面的方块拖到棋盘上', W / 2, cy - 8);
+    ctx.fillText('摆满一行或一列就会消掉', W / 2, cy + 10);
+    ctx.fillStyle = '#0a8f3c'; ctx.font = '700 11px ' + FONT;
+    ctx.fillText('拖动时松手前会显示落点预览', W / 2, cy + 32);
+    ctx.fillStyle = '#c0392b'; ctx.font = '700 11px ' + FONT;
+    ctx.fillText('会消掉的行／列会亮起来', W / 2, cy + 50);
+    ctx.fillStyle = '#a39489'; ctx.font = '11px ' + FONT;
+    ctx.fillText('三块用完才发新的 · 放不下就结束', W / 2, cy + 72);
+    ctx.restore();
+    ctx.textAlign = 'left';
+  }
+  function drawEffects(){
+    for(const e of effects){
+      const k = clamp(e.t / e.life, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = clamp(1 - k, 0, 1);
+      ctx.fillStyle = e.color;
+      const x = e.x + e.vx * e.t, y = e.y + e.vy * e.t + 160 * e.t * e.t;
+      ctx.beginPath(); ctx.arc(x, y, e.r * (1 - k * 0.6), 0, 7); ctx.fill();
+      ctx.restore();
+    }
+    for(const f of floats){
+      const k = clamp(f.t / 1.15, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = clamp(1.2 - k * 1.2, 0, 1);
+      ctx.font = '800 18px ' + FONT; ctx.textAlign = 'center';
+      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(15,17,21,.75)';
+      ctx.strokeText(f.txt, f.x, f.y - k * 24);
+      ctx.fillStyle = f.color; ctx.fillText(f.txt, f.x, f.y - k * 24);
+      ctx.restore();
+    }
+  }
+  function addBurst(x, y, n, color){
+    for(let i = 0; i < n; i++){
+      const a = Math.random() * Math.PI * 2, sp = 60 + Math.random() * 200;
+      effects.push({ x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40,
+                     t: 0, life: 0.5 + Math.random() * 0.5, color: color, r: 1.8 + Math.random() * 2.6 });
+    }
+  }
+  function draw(){
+    ctx.setTransform(S * dprNow, 0, 0, S * dprNow, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    if(shake > 0) ctx.translate((Math.random() - 0.5) * 5 * shake, (Math.random() - 0.5) * 5 * shake);
+    drawBoardBase();
+    drawGrid();
+    drawGhost();
+    drawPops();
+    ctx.restore();
+    if(glowT > 0){ ctx.globalAlpha = glowT * 0.20; ctx.fillStyle = '#ffd166'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+    drawHand();
+    drawDrag();
+    drawEffects();
+    drawHUD();
+    if(hintOn && state === 'play') drawHint();
+  }
+
+  /* ---------- 步进 ---------- */
+  function step(dt){
+    tGlobal += dt;
+    if(shake > 0) shake = Math.max(0, shake - dt * 2.6);
+    if(glowT > 0) glowT = Math.max(0, glowT - dt * 1.6);
+    for(let i = pops.length - 1; i >= 0; i--){ pops[i].t += dt; if(pops[i].t > 0.26) pops.splice(i, 1); }
+    for(let i = effects.length - 1; i >= 0; i--){ effects[i].t += dt; if(effects[i].t > effects[i].life) effects.splice(i, 1); }
+    for(let i = floats.length - 1; i >= 0; i--){ floats[i].t += dt; if(floats[i].t > 1.15) floats.splice(i, 1); }
+  }
+  function frame(ts){
+    raf = requestAnimationFrame(frame);
+    if(!lastTs) lastTs = ts;
+    let dt = (ts - lastTs) / 1000; lastTs = ts;
+    if(!(dt > 0)) dt = 1 / 60;
+    dt = Math.min(dt, 1 / 20);
+    step(dt);
+    draw();
+  }
+
+  /* ---------- 布局 ---------- */
+  function refit(){
+    H = HFIX;
+    HUD_H = Math.max(48, Math.round(H * 0.093));
+    const pad = Math.max(8, Math.round(W * 0.035));
+    HAND_H = Math.round(H * 0.168);
+    const availH = H - HUD_H - HAND_H - 26;
+    const bw = Math.min((W - pad * 2 - 10) / COLS, availH / ROWS);
+    CELL = Math.floor(bw);
+    BOARD = CELL * ROWS;
+    BX = Math.round((W - CELL * COLS) / 2);
+    BY = Math.round(HUD_H + Math.max(4, (availH - BOARD) / 2));
+    HAND_Y = Math.round(BY + BOARD + 16);
+    SLOT_W = (CELL * COLS) / HAND_MAX;
+    PADB = Math.max(1, Math.round(CELL * 0.055));
+  }
+  function layout(){
+    const stage = $('stage');
+    const availW = stage.clientWidth, availH = stage.clientHeight;
+    if(!availW || !availH) return;
+    S = availH / HFIX; H = HFIX; W = availW / S;
+    refit();
+    const dpr = window.devicePixelRatio || 1;
+    dprNow = dpr;
+    cv.style.width = availW + 'px'; cv.style.height = availH + 'px';
+    cv.width = Math.round(availW * dpr); cv.height = Math.round(availH * dpr);
+    ctx.setTransform(S * dpr, 0, 0, S * dpr, 0, 0);
+    let guard = 0, prevH = document.documentElement.scrollHeight;
+    while(prevH > window.innerHeight + 1 && guard++ < 10){
+      S *= 0.985; H = HFIX; W = availW / S; refit();
+      cv.style.width = availW + 'px'; cv.style.height = availH + 'px';
+      cv.width = Math.round(availW * dpr); cv.height = Math.round(availH * dpr);
+      ctx.setTransform(S * dpr, 0, 0, S * dpr, 0, 0);
+      const nh = document.documentElement.scrollHeight;
+      if(nh >= prevH) break;
+      prevH = nh;
+    }
+    if(/[?&]debug/.test(location.search)) showDbg();
+  }
+
+  /* ---------- 按钮 / 提示 / 诊断 ---------- */
+  $('overRetry').onclick = () => { sndPick(); reset(); };
+  $('btnSound').onclick = () => {
+    soundOn = !soundOn;
+    try{ localStorage.setItem('gblock_sound', soundOn ? '1' : '0'); }catch(e){}
+    setSoundLabel();
+    if(soundOn) sndPick();
+    toast(soundOn ? '音效已开' : '音效已关');
+  };
+  function setSoundLabel(){ $('btnSound').textContent = soundOn ? '🔊 音效' : '🔇 音效'; }
+  function toast(msg){
+    const t = $('toast'); t.textContent = msg; t.classList.add('on');
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 1700);
+  }
+  function dbgText(){
+    const dpr = window.devicePixelRatio || 1;
+    const rows = grid.map(r => r.map(v => v ? String(v) : '·').join(''));
+    return [
+      '【方块消除·诊断】' + new Date().toLocaleString('zh-CN'),
+      '视口=' + window.innerWidth + '×' + window.innerHeight + '  朝向=' + (window.innerWidth >= window.innerHeight ? '横屏' : '竖屏') + '  dpr=' + dpr,
+      '画布css=' + cv.style.width + '×' + cv.style.height + '  物理=' + cv.width + '×' + cv.height,
+      '逻辑=' + W.toFixed(0) + '×' + Math.round(H) + ' scale=' + S.toFixed(3) + ' 固定高=' + HFIX,
+      '棋盘 ' + COLS + '×' + ROWS + ' 单元=' + CELL + ' 左上=(' + BX + ',' + BY + ') 手牌区 y=' + HAND_Y,
+      '页面总高=' + document.documentElement.scrollHeight + '/' + window.innerHeight,
+      '状态=' + state + ' 分数=' + score + ' 最高=' + best,
+      '手牌=' + hand.map(h => h.shape.n + (h.placed ? '(已放)' : '') + '#' + h.color).join(' '),
+      '盘面:',
+    ].concat(rows.map(r => '   ' + r)).concat([
+      '拖动=' + (drag ? ('进行中 idx=' + drag.idx) : '无') + ' 预览=' + (ghost ? (ghost.ok ? 'ok@' + ghost.r + ',' + ghost.c + ' 消行' + ghost.rows.length + '/列' + ghost.cols.length : '非法') : '无'),
+      '音效=' + (soundOn ? '开' : '关'),
+      'UA=' + navigator.userAgent,
+    ]).join('\n');
+  }
+  function copyText(txt){
+    let done = false;
+    try{ if(navigator.clipboard && window.isSecureContext && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt); done = true; } }catch(e){ done = false; }
+    if(!done){
+      try{
+        const ta = document.createElement('textarea');
+        ta.value = txt; ta.setAttribute('readonly',''); ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+        document.body.appendChild(ta); ta.select();
+        if(ta.setSelectionRange) ta.setSelectionRange(0, txt.length);
+        done = document.execCommand('copy'); document.body.removeChild(ta);
+      }catch(e){ done = false; }
+    }
+    if(!done){ try{ const rg = document.createRange(); rg.selectNodeContents($('dbg')); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg); }catch(e){} }
+    toast(done ? '诊断信息已复制 ✓ 直接粘给开发者' : '已选中，长按选择「复制」');
+    return done;
+  }
+  function showDbg(){ const el = $('dbg'); el.classList.add('on'); el.textContent = dbgText(); return el.textContent; }
+  $('btnDiag').addEventListener('click', e => { e.stopPropagation(); copyText(showDbg()); });
+  $('dbg').addEventListener('click', e => { e.stopPropagation(); copyText(showDbg()); });
+
+  /* ---------- 启动 ---------- */
+  bindInput();
+  layout();
+  reset();
+  setSoundLabel();
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', () => setTimeout(layout, 250));
+  if(!raf) raf = requestAnimationFrame(frame);
+
+  /* ---------- 测试钩子 ---------- */
+  window.__block = () => ({
+    state, score, best, COLS, ROWS, CELL, BOARD, BX, BY, HAND_Y, HAND_H, SLOT_W, HFIX, W, H, PADB,
+    handCount: hand.length,
+    hand: hand.map(h => ({ n: h.shape.n, w: h.shape.w, h: h.shape.h, c: h.shape.c.map(x => x.slice()), color: h.color, placed: h.placed })),
+    grid: grid.map(r => r.slice()),
+    filled: grid.reduce((a, r) => a + r.filter(v => v).length, 0),
+    anyFits: anyFits(),
+    drag: drag ? { idx: drag.idx, x: drag.x, y: drag.y } : null,
+    ghost: ghost ? { r: ghost.r, c: ghost.c, ok: ghost.ok, rows: ghost.rows.slice(), cols: ghost.cols.slice() } : null,
+    pops: pops.length, soundOn: soundOn, hintOn: hintOn,
+    SHAPES: SHAPES.map(s => ({ n: s.n, w: s.w, h: s.h, cells: s.c.length, wt: s.wt, pos: s.c.map(x => x.slice()) })),
+  });
+  window.__blockReset = () => { reset(); return true; };
+  window.__blockSeed = s => { rng = typeof s === 'function' ? s : Math.random; };
+  window.__blockSetGrid = (rows) => { grid = rows.map(r => r.slice()); return true; };
+  window.__blockSetHand = (names) => {
+    // 测试用：把当前手牌换成指定形状名（取第一个匹配的旋转）
+    hand = names.map(n => {
+      const s = SHAPES.filter(x => x.n.split('·')[0] === n)[0];
+      return s ? { shape: s, color: 1, placed: false } : null;
+    }).filter(Boolean);
+    return hand.length;
+  };
+  window.__blockPlace = (idx, r, c) => place(idx, r, c);
+  window.__blockCanPlace = (idx, r, c) => { const h = hand[idx]; return h ? canPlace(h.shape, r, c) : false; };
+  window.__blockPreview = (idx, r, c) => { const h = hand[idx]; return h ? previewAt(h.shape, r, c) : null; };
+  window.__blockFullLines = () => { const f = fullLines(grid); return { rows: f.rows.slice(), cols: f.cols.slice() }; };
+  window.__blockScoreFor = (cells, n) => scoreFor(cells, n);
+  window.__blockNewHand = () => { newHand(); return hand.length; };
+  window.__blockStep = dt => step(dt);
+  window.__blockDraw = () => { draw(); return 'ok'; };
+  window.__blockLayout = () => { layout(); return 'ok'; };
+  window.__blockDragDown = (x, y) => { onDown(1, x, y); return !!drag; };
+  window.__blockDragMove = (x, y) => { onMove(1, x, y); return ghost; };
+  window.__blockDragUp = (x, y) => { onUp(1, x, y); return true; };
+  window.__blockSlotCenter = i => {
+    const s = screenToLogical(0, 0), r = cv.getBoundingClientRect();
+    const sx = slotX(i), sy = HAND_Y + HAND_H * 0.52;
+    return { x: r.left + sx * (r.width / W), y: r.top + sy * (r.height / H) };
+  };
+  window.__blockCellCenter = (r, c) => {
+    const rc = cv.getBoundingClientRect();
+    const x = BX + (c + 0.5) * CELL, y = BY + (r + 0.5) * CELL + LIFT();
+    return { x: rc.left + x * (rc.width / W), y: rc.top + y * (rc.height / H) };
+  };
+  window.__blockClearEffects = () => { effects = []; floats = []; pops = []; };
+})();
+</script>
+</body>
+</html>
