@@ -69,7 +69,7 @@ const R = () => win.__klotski();
 const DT = 1 / 60;
 function run(n, dt = DT){ for(let i = 0; i < n; i++) win.__klotskiStep(dt); }
 // ★ 默认关现在是入门第 1 关；原有用例都是按经典局写的 → 助手先切到古典第 1 关（横刀立马）
-const reset = () => { win.__klotskiGoto(1, 0); };
+const reset = () => { win.__klotskiGoto(2, 0); };   // 古典关卡集现在是第 3 套（索引 2）
 const resetIntro = () => { win.__klotskiGoto(0, 0); };
 const moveByName = (n, dr, dc, want) => win.__klotskiMoveByName(n, dr, dc, want);
 const drag = (r, c, dr, dc) => win.__klotskiDrag(r, c, dr, dc);
@@ -413,9 +413,9 @@ section('10) ★ 关卡集：每一关都可解，最少步数与声明一致');
 {
   const sets = win.__klotskiAllLevels();
   const s0 = R();
-  ok(sets.length === 2, '两套关卡集（' + s0.setNames.join(' / ') + '）');
-  ok(sets[0].length >= 6 && sets[1].length >= 3,
-     '关卡数：' + s0.setNames[0] + ' ' + sets[0].length + ' 关 · ' + s0.setNames[1] + ' ' + sets[1].length + ' 关');
+  ok(sets.length === 3, '三套关卡集（' + s0.setNames.join(' / ') + '）');
+  ok(sets[0].length >= 6 && sets[1].length >= 3 && sets[2].length >= 3,
+     '关卡数：' + sets.map((s, i) => s0.setNames[i] + ' ' + s.length + ' 关').join(' · '));
   const flat = sets.flat();
   const t0 = Date.now();
   const mismatched = [], unsolvable = [];
@@ -458,10 +458,18 @@ section('10) ★ 关卡集：每一关都可解，最少步数与声明一致');
      mismatched.join(' / '));
 
   const intro = sets[0].map(l => l.min);
-  const classic = sets[1].map(l => l.min);
+  const mid = sets[1].map(l => l.min);
+  const classic = sets[2].map(l => l.min);
   ok(intro.every((v, i) => i === 0 || v >= intro[i - 1]), '★ 入门难度不倒退：' + intro.join(' → '));
   ok(intro[0] <= 4, '第 1 关足够简单（最少 ' + intro[0] + ' 步）');
   ok(Math.max.apply(null, intro) <= 30, '入门最难关 ≤ 30 步（实际 ' + Math.max.apply(null, intro) + '）');
+  ok(mid.length >= 4, '中级关卡至少 4 关（实际 ' + mid.length + ' 关）');
+  ok(mid.every(v => v > Math.max.apply(null, intro) && v < Math.min.apply(null, classic)),
+     '★ 中级每关都比"入门最难的 ' + Math.max.apply(null, intro) + ' 步"难、比"古典最易的 ' +
+     Math.min.apply(null, classic) + ' 步"易：' + mid.join('/'));
+  ok(mid.every((v, i) => i === 0 || v >= mid[i - 1]), '中级难度不倒退：' + mid.join(' → '));
+  ok(Math.max.apply(null, intro) < Math.min.apply(null, mid), '★ 入门最难题  <  中级最易题（阶梯无缝）');
+  ok(Math.max.apply(null, mid) < Math.min.apply(null, classic), '★ 中级最难题  <  古典最易题（阶梯无缝）');
   ok(classic.indexOf(90) >= 0, '★ 古典关卡集含经典横刀立马（最少 90 步）');
   ok(classic.every(v => v >= 30), '古典集都是难关（≥30 步：' + classic.join('/') + '）');
 
@@ -471,7 +479,7 @@ section('10) ★ 关卡集：每一关都可解，最少步数与声明一致');
   ok(s.levelMin === intro[0], '当前关最少步数跟随关卡（' + s.levelMin + ' 步）');
   reset();
   s = R();
-  ok(s.setId === 1 && s.lvIdx === 0, '切回古典第 1 关');
+  ok(s.setId === 2 && s.lvIdx === 0, '切回古典第 1 关（第 3 套 · 索引 2）');
   const b2 = s.pieces.find(p => p.boss);
   ok(b2.r === 0 && b2.c === 1, '横刀立马：曹操回到 (0,1)');
   ok(s.levelMin === 90, '横刀立马声明最少 90 步');
@@ -719,7 +727,7 @@ section('15) ★ 记住上次玩的关卡（进去是该关初始状态）');
 {
   reset();                                        // 古典第 1 关
   ok(!!store['gklotski_last'], '开局会把当前关卡写入存档');
-  ok(JSON.parse(store['gklotski_last']).setId === 1, '存档记录的是当前关卡集');
+  ok(JSON.parse(store['gklotski_last']).setId === 2, '存档记录的是当前关卡集（古典 = 第 3 套）');
   win.__klotskiGoto(0, 3);                        // 入门第 4 关
   const saved = JSON.parse(store['gklotski_last']);
   ok(saved.setId === 0 && saved.lvIdx === 3, '★ 切关后存档跟着更新（setId=' + saved.setId + ', lvIdx=' + saved.lvIdx + '）');

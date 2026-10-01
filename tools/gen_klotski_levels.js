@@ -162,9 +162,12 @@ function pickAt(depth){
 const PLAN = {
   intro:   [2, 4, 6, 9, 12, 16, 20, 26],          // 入门：精确最少步数依次递增
   classic: [40, 55, 70],                          // 古典：难关（外加经典横刀立马 90）
+  mid:     [28, 30, 32, 34, 36, 38],              // 中级：比入门(≤26)难、比古典(≥40)易
 };
 
-const out = { sets: [ { id:'intro', name:'入门关卡', levels:[] }, { id:'classic', name:'古典关卡集', levels:[] } ] };
+const out = { sets: [ { id:'intro', name:'入门关卡', levels:[] },
+                      { id:'classic', name:'古典关卡集', levels:[] },
+                      { id:'mid', name:'中级关卡', levels:[] } ] };   // 中级先放末尾，最后再排到中间
 const seenKeys = new Set();
 function addTo(setId, name, layout, min, note){
   const key = layout.slice().map(p => p.r + ',' + p.c).sort().join('|');
@@ -223,8 +226,26 @@ out.sets[1].levels.sort((a, b) => (a.name === '横刀立马' ? -1 : b.name === '
 out.sets[1].levels.forEach((l, i) => { l.id = i + 1; l.name = l.name === '横刀立马' ? l.name : '古典难关 ' + (i + 1); });
 out.sets[0].levels.forEach((l, i) => { l.id = i + 1; });
 
+/* ---- 中级关卡（比入门难、比古典易）---- */
+console.log('\n生成中级关卡：');
+for(const d of PLAN.mid){
+  const snap = pickAt(d);
+  if(!snap){ console.log('  深度 ' + d + ' 无盘面，跳过'); continue; }
+  const layout = LAYOUT.map((p, i) => Object.assign({}, p, { r:snap[i].r, c:snap[i].c }));
+  const check = bfs(layout);                       // 独立复算
+  const name = '第 ' + (out.sets[2].levels.length + 1) + ' 关';
+  if(addLevel('mid', name, snap, check.steps, '最少 ' + d + ' 步'))
+    console.log('  ' + name + '  目标深度 ' + String(d).padStart(2) + ' → 独立复算最少 ' +
+                String(check.steps).padStart(2) + ' 步' + (check.steps === d ? ' ✓一致' : ' ✗不一致！'));
+}
+out.sets[2].levels.sort((a, b) => a.min - b.min);
+out.sets[2].levels.forEach((l, i) => { l.name = '第 ' + (i + 1) + ' 关'; l.note = '最少 ' + l.min + ' 步'; });
+out.sets[2].levels.forEach((l, i) => { l.id = i + 1; });
+
+/* ---- 集顺序：入门 → 中级 → 古典 ---- */
+out.sets = [out.sets[0], out.sets[2], out.sets[1]];
+
 const file = path.join(__dirname, 'klotski_levels.json');
 fs.writeFileSync(file, JSON.stringify(out, null, 1), 'utf8');
 console.log('\n已写入 ' + file);
-console.log('入门 ' + out.sets[0].levels.length + ' 关（最少步数 ' + out.sets[0].levels.map(l => l.min).join('/') + '）');
-console.log('古典 ' + out.sets[1].levels.length + ' 关（最少步数 ' + out.sets[1].levels.map(l => l.min).join('/') + '）');
+for(const s of out.sets) console.log(s.name + ' ' + s.levels.length + ' 关（最少步数 ' + s.levels.map(l => l.min).join('/') + '）');
