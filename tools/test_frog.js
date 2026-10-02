@@ -439,6 +439,31 @@ section('9) 长跑健壮性（各种蓄力都有 · 状态合法 · 无 NaN）')
   ok(overCnt >= 0, '随机蓄力的行为都走通了（落水 ' + overCnt + '/10 局，符合预期）');
 }
 
+/* ================= ★ 转屏：地图必须不变 ================= */
+section('★ 转屏（竖屏↔横屏）地图不变');
+{
+  const portrait = win.__frogSetStage(768, 1024);
+  win.__frogReset(20261001);
+  const f1 = win.__frog();
+  const plat = JSON.stringify(f1.platforms);
+  const geo = [f1.W, f1.H, f1.waterY, f1.surfY];
+  const landscape = win.__frogSetStage(1024, 768);
+  const f2 = win.__frog();
+  ok(portrait.W === landscape.W && portrait.H === landscape.H,
+     '★ 逻辑尺寸固定：竖屏/横屏都是 ' + portrait.W + '×' + portrait.H);
+  ok(JSON.stringify(f2.platforms) === plat, '★ 转屏后石台逐个完全一致（' + f1.platforms.length + ' 块）');
+  ok(JSON.stringify([f2.W, f2.H, f2.waterY, f2.surfY]) === JSON.stringify(geo),
+     '★ 水面/可站立面高度一致（waterY=' + f2.waterY + '）');
+  ok(f2.waterY > 0 && f2.waterY < f2.H, '★ 水面仍在逻辑画面内（不会跑到屏幕外）');
+  for(const [w, h] of [[1600, 600], [600, 1600], [900, 900]]){
+    const st = win.__frogSetStage(w, h);
+    const s = win.__frog();
+    ok(s.W === f1.W && s.H === f1.H && JSON.stringify(s.platforms) === plat,
+       '★ ' + w + '×' + h + ' 比例下地图仍不变（scale ' + st.S.toFixed(2) + '）');
+  }
+  win.__frogSetStage(768, 1024);
+}
+
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');

@@ -129,8 +129,9 @@
    *     生成区间 y0=126 > y1=95 → 一颗钉都放不下（浏览器里实测 钉 0 颗，已复现）。
    *   固定高之后：H 恒为 560 → 场地恒为 100..498，任何屏幕宽高比都能放下 10 行钉。 */
   const HFIX = 560;            // 逻辑高固定
-  let W = 342;                 // 逻辑宽由布局反推（首次 layout 前的初值）
-  let H = HFIX, S = 1;
+  const WFIX = 360;            // ★ 逻辑宽也固定（竖屏比例）——转屏/换设备都不再改变关卡布局
+  let W = WFIX;                // 逻辑宽 = 固定值（不再随屏幕比例变化）
+  let H = HFIX, S = 1, OFFX = 0, OFFY = 0;   // OFFX/OFFY = 横屏时的留边偏移
   let dprNow = 1;              // 缓存 devicePixelRatio（draw 里要用）
 
   /* 场地几何（W/H 变化时由 refit() 重算） */
@@ -906,7 +907,7 @@
 
   function draw(){
     // ★ 必须 S*dpr：变换作用在物理像素上，漏乘 dpr 画面只占 1/dpr（上一个游戏踩过）
-    ctx.setTransform(S * dprNow, 0, 0, S * dprNow, 0, 0);
+    ctx.setTransform(S * dprNow, 0, 0, S * dprNow, OFFX * dprNow, OFFY * dprNow);
     ctx.clearRect(0, 0, W, H);
     drawField();
     drawPegs();
@@ -936,21 +937,25 @@
     const availW = stage.clientWidth, availH = stage.clientHeight;
     if(!availW || !availH) return;
     // ★ 固定逻辑高：缩放由高度决定，逻辑宽随屏宽反推（见坐标系注释）
-    S = availH / HFIX; H = HFIX; W = availW / S;
+    // ★ 固定逻辑尺寸 + 居中留边：竖屏比例恒定，横屏时左右加黑边（关卡数据因此永远有效）
+    S = Math.min(availH / HFIX, availW / WFIX);
+    H = HFIX; W = WFIX;
+    OFFX = (availW - W * S) / 2; OFFY = (availH - H * S) / 2;
     refit();
     const dpr = window.devicePixelRatio || 1;
     dprNow = dpr;
     cv.style.width = availW + 'px'; cv.style.height = availH + 'px';
     cv.width = Math.round(availW * dpr); cv.height = Math.round(availH * dpr);
-    ctx.setTransform(S * dpr, 0, 0, S * dpr, 0, 0);
+    ctx.setTransform(S * dpr, 0, 0, S * dpr, OFFX * dpr, OFFY * dpr);
     // 溢出兜底：本模型下画布 css 恒等于 stage 尺寸、body 是 height:100%+overflow:hidden，
     // 理论上不可能溢出；万一 WebView 抽风，这里仍会走一次并因「改不动」立即退出（无死循环）。
     let guard = 0, prevH = document.documentElement.scrollHeight;
     while(prevH > window.innerHeight + 1 && guard++ < 10){
-      S *= 0.985; H = HFIX; W = availW / S; refit();
+      S *= 0.985; H = HFIX; W = WFIX;
+      OFFX = (availW - W * S) / 2; OFFY = (availH - H * S) / 2; refit();
       cv.style.width = availW + 'px'; cv.style.height = availH + 'px';
       cv.width = Math.round(availW * dpr); cv.height = Math.round(availH * dpr);
-      ctx.setTransform(S * dpr, 0, 0, S * dpr, 0, 0);
+      ctx.setTransform(S * dpr, 0, 0, S * dpr, OFFX * dpr, OFFY * dpr);
       const nh = document.documentElement.scrollHeight;
       if(nh >= prevH) break;
       prevH = nh;
@@ -1054,6 +1059,7 @@
     ball: ball ? { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, flightT: ball.flightT } : null,
     bgm: !!bgmTimer,
   });
+  window.__marbleSetStage = (w, h) => { const st = document.getElementById('stage'); st.clientWidth = w; st.clientHeight = h; layout(); return { W: W, H: H, S: S }; };
   window.__marbleStep = dt => step(dt);
   window.__marbleReset = seed => { chargeOff(); reset(seed); };
   window.__marblePress = () => pressStart();

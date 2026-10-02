@@ -398,6 +398,31 @@ section('8) 首屏提示与重开');
   ok(M().hintOn === true && M().balls === 5 && M().state === 'ready', '重开：提示回来、5 颗、ready');
 }
 
+/* ================= ★ 转屏：关卡布局必须不变 ================= */
+section('★ 转屏（竖屏↔横屏）关卡布局不变');
+{
+  const portrait = win.__marbleSetStage(768, 1024);
+  win.__marbleReset(20261001);
+  const p1 = win.__marble();
+  const pegsPortrait = JSON.stringify(p1.pegs);
+  const geo = [p1.W, p1.H, p1.fieldL, p1.fieldR, p1.mouthY, p1.floorY, p1.cannonX, p1.slotW];
+  const landscape = win.__marbleSetStage(1024, 768);
+  const p2 = win.__marble();
+  ok(portrait.W === landscape.W && portrait.H === landscape.H,
+     '★ 逻辑尺寸固定：竖屏/横屏都是 ' + portrait.W + '×' + portrait.H);
+  ok(JSON.stringify(p2.pegs) === pegsPortrait, '★ 转屏后钉阵逐颗完全一致（' + p1.pegs.length + ' 颗）');
+  ok(JSON.stringify([p2.W, p2.H, p2.fieldL, p2.fieldR, p2.mouthY, p2.floorY, p2.cannonX, p2.slotW]) === JSON.stringify(geo),
+     '★ 转屏后场地几何完全一致（fieldR=' + p2.fieldR + ' mouthY=' + p2.mouthY + '）');
+  ok(p2.fieldL >= 0 && p2.fieldR <= p2.W, '★ 场地在逻辑宽内（' + p2.fieldL + '~' + p2.fieldR + ' ≤ ' + p2.W + '）');
+  for(const [w, h] of [[1600, 600], [600, 1600], [900, 900]]){
+    const st = win.__marbleSetStage(w, h);
+    const s = win.__marble();
+    ok(s.W === portrait.W && s.H === portrait.H && JSON.stringify(s.pegs) === pegsPortrait,
+       '★ ' + w + '×' + h + ' 比例下逻辑尺寸与钉阵仍不变（scale ' + st.S.toFixed(2) + '）');
+  }
+  win.__marbleSetStage(768, 1024);
+}
+
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');

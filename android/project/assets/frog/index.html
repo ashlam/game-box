@@ -112,7 +112,8 @@
 
   /* ---------- 坐标系 ---------- */
   const W = 360;                 // 逻辑宽固定
-  let H = 640, S = 1;            // H 由画布比例反推
+  const HFIX = 640;              // ★ 逻辑高也固定（竖屏比例）——转屏/换设备都不再改变地图
+  let H = HFIX, S = 1, OFFX = 0, OFFY = 0;   // OFFX/OFFY = 横屏时的留边偏移
   let dprNow = 1;                // 缓存 devicePixelRatio（draw 里也要用）
   let waterY = 280, surfY = 266; // 水面线 / 可站立面（石头顶统一高度）
   function refit(){
@@ -1088,7 +1089,7 @@
   function draw(){
     // ★ 必须 S*dpr：canvas 变换作用在 backing store（物理像素）上，
     //   只用 S 的话在 dpr=2.6 的手机上画面只占画布 1/2.6（已复现，和用户截图一致）
-    ctx.setTransform(S * dprNow, 0, 0, S * dprNow, 0, 0);
+    ctx.setTransform(S * dprNow, 0, 0, S * dprNow, OFFX * dprNow, OFFY * dprNow);
     ctx.clearRect(0, 0, W, H);
     ctx.save();
     if(shakeT > 0){
@@ -1128,7 +1129,10 @@
     const stage = $('stage');
     const availW = stage.clientWidth, availH = stage.clientHeight;
     if(!availW || !availH) return;
-    S = availW / W; H = availH / S;
+    // ★ 固定逻辑尺寸 + 居中留边（同弹珠）：竖屏比例恒定，横屏时左右加黑边
+    S = Math.min(availW / W, availH / HFIX);
+    H = HFIX;
+    OFFX = (availW - W * S) / 2; OFFY = (availH - H * S) / 2;
     refit();
     const dpr = window.devicePixelRatio || 1;
     dprNow = dpr;
@@ -1137,7 +1141,8 @@
     ctx.setTransform(S * dpr, 0, 0, S * dpr, 0, 0);
     let guard = 0, prevH = document.documentElement.scrollHeight;
     while(prevH > window.innerHeight + 1 && guard++ < 10){
-      S *= 0.985; H = availH / S; refit();
+      S *= 0.985; H = HFIX;
+      OFFX = (availW - W * S) / 2; OFFY = (availH - H * S) / 2; refit();
       cv.style.width = Math.round(W * S) + 'px'; cv.style.height = availH + 'px';
       cv.width = Math.round(W * S * dpr); cv.height = Math.round(availH * dpr);
       ctx.setTransform(S * dpr, 0, 0, S * dpr, 0, 0);
@@ -1246,6 +1251,7 @@
     next: (() => { const p = platforms.find(q => q.x > frog.x + 10); return p ? { x:p.x, w:p.w, type:p.type } : null; })(),
     bgm: !!bgmTimer,
   });
+  window.__frogSetStage = (w, h) => { const st = document.getElementById('stage'); st.clientWidth = w; st.clientHeight = h; layout(); return { W: W, H: H, S: S }; };
   window.__frogStep = dt => step(dt);
   window.__frogReset = seed => { chargeOff(); reset(seed); };
   window.__frogPress = () => pressStart();

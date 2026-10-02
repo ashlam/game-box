@@ -1061,6 +1061,26 @@ win.__racerPutRoadblock((st.player || st.p).x, (st.player || st.p).y, 'cone');
   ok(win.__racerSmash().flies === 0, '★ 飞出物到期自动回收（不留垃圾）');
 }
 
+/* ================= 19) ★ 脱路代价 ================= */
+section('19) ★ 脱路代价：贴着草地慢跑不再安全可行');
+{
+  reset(11); noSpawn(true); clearObjs();
+  const s0 = R();
+  win.__racerInput({ gas: true });
+  run(90);
+  ok(R().player.v > s0.V_BASE * 1.5, '（先在路上跑起来：' + (R().player.v * s0.KMH).toFixed(0) + ' km/h）');
+  setP({ x: s0.ROAD_L - 20 });
+  run(240);
+  const v = R().player.v;
+  ok(v <= s0.V_BASE * 0.22 + 1, '★ 草地上按住油门也被压在 V_BASE×0.22（' + (v * s0.KMH).toFixed(0) + ' km/h）');
+  ok(v * s0.KMH < 60, '★ 脱路极速 < 60 km/h（时间奖励补不回来，脱路不再是有效打法）');
+  setP({ x: (s0.ROAD_L + s0.ROAD_R) / 2 });
+  run(120);
+  ok(R().player.v > s0.V_BASE * 1.5, '★ 回到路面速度立刻恢复（' + (R().player.v * s0.KMH).toFixed(0) + ' km/h）');
+  win.__racerInput({ gas: false });
+  reset(12);
+}
+
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');

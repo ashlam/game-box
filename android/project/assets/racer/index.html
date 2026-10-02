@@ -583,7 +583,10 @@
     if(player.boost > 0) player.boost = Math.max(0, player.boost - dt);
     const vCap = player.boost > 0 ? V_MAX * BOOST_MULT : V_MAX;
     let tv = gasOn ? vCap : 0;              // ★ 不踩油门 → 减速停下（开局静止、按住才逐渐加速）
-    if(offRoad) tv = Math.min(tv, V_BASE * 0.6);
+    // ★ 脱路代价加强：原来只压到 0.6×V_BASE（≈108 km/h），配合每段 +32 秒时间奖励，
+    //   贴着草地龟速跑反而成了「极慢但极安全」的稳定打法 → 现压到 0.22×V_BASE（≈40 km/h），
+    //   时间奖励根本补不回来，脱路不再是可行策略
+    if(offRoad) tv = Math.min(tv, V_BASE * 0.22);
     if(fuel <= 0) tv = Math.min(tv, 46);
     const prevV = player.v;
     player.v += clamp(tv - player.v, -DEC * dt, ACC * dt);
