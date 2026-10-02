@@ -141,17 +141,19 @@
   // ★ 两段高度直接给常数（按用户要求调整：高速 76→38 减半；常规 92→31 减三分之二）
   //   想再调手感改这两个数即可
   const ZONE_H = 69;                   // ★ 操作区只有一个（用户要求合并高低速区，去掉低速区）
-  const LANES = 4;
+  const LANES = 5;                              // ★ 用户要求：4 车道 → 5 车道
+  //  车道变窄 → LANE_W 变小 → CAR_W/CAR_H/锥桶/油桶/星星 全部按比例缩小（约 0.8×）
+  //  相邻缝 = LANE_W − CAR_W 同步缩小，仍远小于车宽 → 依旧钻不过去（公平性不变）
   const laneX = i => ROAD_L + LANE_W * (i + 0.5);
   function refit(){
     H = HFIX;
     // ★ 赛道变窄（用户要求：还原小车身比例，靠"窄赛道"而不是"大车身"来堵住钻缝）
-    //   路宽取屏宽 62% 且不超过 212 逻辑单位 → 手机竖屏车道约 53（原来 66）
+    //   路宽取屏宽 62% 且不超过 212 逻辑单位 → 5 车道时手机竖屏车道约 41（4 车道时约 51）
     const roadWant = Math.min(W * 0.62, 212);
     LANE_W = roadWant / LANES;
     ROAD_L = (W - roadWant) / 2; ROAD_R = ROAD_L + roadWant;
     // 车身回到小比例（占道 56%，绝对尺寸和放大前基本一致），
-    // 但车道窄了 → 相邻车道缝 = 53−30 = 23 < 车宽 30 → 依旧钻不过去
+    // 但车道窄了 → 相邻车道缝 ≈ 41−23 = 18 < 车宽 23 → 依旧钻不过去
     CAR_W = Math.round(LANE_W * 0.56); CAR_H = Math.round(CAR_W * 1.72);
     HUD_H = Math.max(54, Math.round(H * 0.115));
     BOTTOM_BAND = Math.max(40, Math.round(H * 0.082));
@@ -506,7 +508,7 @@
     if(!first){ input.touching = false; input.targetX = null; return; }
     input.touching = true;
     const delta = (first.x - first.startX) * TOUCH_GAIN;   // 只取横向滑动量
-    input.targetX = clamp(first.anchorCarX + delta, ROAD_L - 20, ROAD_R + 20);
+    input.targetX = clamp(first.anchorCarX + delta, ROAD_L + CAR_W / 2 + 1.5, ROAD_R - CAR_W / 2 - 1.5);   // ★ 目标点同样不越界
     // ★ 操作区已合并：只要按住就是高速（不再有上下半区分）
   }
   function onPoint(kind, id, cx, cy){
@@ -574,7 +576,7 @@
     }
 
     /* ---- 速度（两档 + 脱路 + 油尽） ---- */
-    const offRoad = player.x < ROAD_L || player.x > ROAD_R;
+    const offRoad = player.x < ROAD_L || player.x > ROAD_R;   // ★ 已被路肩硬挡，正常不可达，保留兜底
     const gasOn = input.gas || input.touching;      // ★ 操作区合并：按住就是高速（键盘同理）
 
     /* ★ 限时加速来自「红色五角星」（原来的"高速顶 2.5 秒自动升二档"已按用户要求去掉）：
@@ -609,7 +611,11 @@
       const steer = (input.right ? 1 : 0) - (input.left ? 1 : 0);   // 键盘
       if(steer) player.x += steer * STEER * dt;
     }
-    player.x = clamp(player.x, ROAD_L - 20, ROAD_R + 20);
+    // ★ 路肩硬挡（用户要求：改成开不出路边）—— 车身整体不得越出路面
+    const halfW = CAR_W / 2 + 1.5;
+    const px0 = player.x;
+    player.x = clamp(player.x, ROAD_L + halfW, ROAD_R - halfW);
+    if(player.x !== px0 && player.v > 60 && rng() < dt * 8){ sndSkid(); skid = 0.2; }   // 蹭到路肩的反馈
 
     /* ---- 燃油 / 倒计时 ---- */
     fuel = Math.max(0, fuel - dt * FUEL_RATE * (0.7 + 0.9 * ratio));
@@ -898,7 +904,7 @@
     ctx.fillStyle = PALETTE.roadDark;
     const off = (player.y) % 90;
     for(let y = -90 + off; y < H + 90; y += 90) ctx.fillRect(ROAD_L, y, ROAD_R - ROAD_L, 2);
-    // 白色车道虚线（4 车道 → 3 条）
+    // 白色车道虚线（N 车道 → N−1 条，随 LANES 自动适配）
     ctx.strokeStyle = PALETTE.roadMark; ctx.lineWidth = 3;
     ctx.setLineDash([26, 26]);
     ctx.lineDashOffset = -(player.y % 52);

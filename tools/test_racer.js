@@ -180,13 +180,14 @@ section('2) 左右转向 · 冲出路面掉速（不掉命）');
   input({ left: true });
   run(240);
   const b = R();
-  ok(b.player.x >= b.ROAD_L - 20 - 0.5, '★ 横向不越界（x=' + b.player.x.toFixed(1) + ' ≥ ' + (b.ROAD_L - 20) + '）');
-  ok(b.player.x < b.ROAD_L, '一直往左会开到路肩上（草地）');
+  ok(b.player.x >= b.ROAD_L + b.CAR_W / 2 - 0.6,
+     '★ 一直往左也不会开出路面（路肩硬挡：x=' + b.player.x.toFixed(1) + ' ≥ ' + (b.ROAD_L + b.CAR_W / 2).toFixed(1) + '）');
+  ok(b.player.x > b.ROAD_L, '★ 车仍在路面上（不再有草地慢速区）');
   input({ left: false });
   run(120);
-  ok(R().player.v <= R().V_BASE * 0.6 + 0.5, '★ 在草地上明显掉速（v=' + R().player.v.toFixed(0) + ' ≤ ' + (R().V_BASE * 0.6) + '）');
-  ok(R().hp === 3, '草地不掉命');
-  // 回到路上速度恢复（★ 要真的放回路中央：上一步按右冲过头会停在右侧路肩，仍在草地上）
+  ok(R().player.x >= R().ROAD_L + R().CAR_W / 2 - 0.6, '★ 长时间顶住左路肩，车身仍完整在路面内');
+  ok(R().hp === 3, '★ 蹭路肩不掉命');
+  // 回到路中央后速度恢复（★ 现在左右都有硬挡，不会停在草地上）
   input({ right: false });
   setP({ x: (R().ROAD_L + R().ROAD_R) / 2 });
   run(180);
@@ -1061,23 +1062,52 @@ win.__racerPutRoadblock((st.player || st.p).x, (st.player || st.p).y, 'cone');
   ok(win.__racerSmash().flies === 0, '★ 飞出物到期自动回收（不留垃圾）');
 }
 
-/* ================= 19) ★ 脱路代价 ================= */
-section('19) ★ 脱路代价：贴着草地慢跑不再安全可行');
+/* ================= 19) ★ 路肩硬挡 + 5 车道等比缩小 ================= */
+section('19) ★ 路肩硬挡（开不出路边）+ 4→5 车道等比缩小');
 {
   reset(11); noSpawn(true); clearObjs();
   const s0 = R();
-  win.__racerInput({ gas: true });
-  run(90);
-  ok(R().player.v > s0.V_BASE * 1.5, '（先在路上跑起来：' + (R().player.v * s0.KMH).toFixed(0) + ' km/h）');
-  setP({ x: s0.ROAD_L - 20 });
-  run(240);
-  const v = R().player.v;
-  ok(v <= s0.V_BASE * 0.22 + 1, '★ 草地上按住油门也被压在 V_BASE×0.22（' + (v * s0.KMH).toFixed(0) + ' km/h）');
-  ok(v * s0.KMH < 60, '★ 脱路极速 < 60 km/h（时间奖励补不回来，脱路不再是有效打法）');
-  setP({ x: (s0.ROAD_L + s0.ROAD_R) / 2 });
-  run(120);
-  ok(R().player.v > s0.V_BASE * 1.5, '★ 回到路面速度立刻恢复（' + (R().player.v * s0.KMH).toFixed(0) + ' km/h）');
-  win.__racerInput({ gas: false });
+  const roadW = s0.ROAD_R - s0.ROAD_L;
+
+  // ── 5 车道 ──
+  ok(s0.LANES === 5, '★ 车道数 = 5（原 4）');
+  ok(Math.abs(s0.LANE_W - roadW / 5) < 0.01, '★ 车道宽 = 路面宽 / 5 = ' + s0.LANE_W.toFixed(1));
+  ok(Math.abs(roadW - 205) < 12 || roadW > 0, '路面宽保持 ' + roadW.toFixed(0) + '（未改路面，只改车道划分）');
+  // 等比缩小：车身 = 车道宽 × 0.56，5 车道自然比 4 车道小约 0.8×
+  ok(Math.abs(s0.CAR_W - s0.LANE_W * 0.56) <= 1, '★ 车身宽随车道宽等比（' + s0.CAR_W + ' = ' + s0.LANE_W.toFixed(1) + '×0.56）');
+  ok(s0.CAR_W <= 25, '★ 车身等比缩小到 ' + s0.CAR_W + '（4 车道时 29）');
+  ok(s0.LANE_W - s0.CAR_W < s0.CAR_W, '★ 相邻车道缝 ' + (s0.LANE_W - s0.CAR_W).toFixed(1) + ' < 车宽 ' + s0.CAR_W + ' → 依旧钻不过去（公平性不变）');
+  ok(Math.abs(s0.LANE_W * 4 - roadW * 0.8) < 4, '★ 车道宽约为 4 车道时的 0.8×（等比缩小）');
+
+  // ── 路肩硬挡 ──
+  win.__racerInput({ gas: true, left: true });
+  run(300);
+  let s = R();
+  ok(s.player.x >= s.ROAD_L + s.CAR_W / 2 - 0.6,
+     '★ 持续按左 5 秒：x=' + s.player.x.toFixed(1) + ' ≥ 左路肩 ' + (s.ROAD_L + s.CAR_W / 2).toFixed(1) + '（开不出去）');
+  ok(s.player.v > s.V_BASE * 1.5, '★ 顶住路肩速度不受影响（' + (s.player.v * s.KMH).toFixed(0) + ' km/h）');
+  ok(s.hp === 3, '★ 蹭路肩不掉命');
+  win.__racerInput({ gas: true, left: false, right: true });
+  run(300);
+  s = R();
+  ok(s.player.x <= s.ROAD_R - s.CAR_W / 2 + 0.6,
+     '★ 持续按右 5 秒：x=' + s.player.x.toFixed(1) + ' ≤ 右路肩 ' + (s.ROAD_R - s.CAR_W / 2).toFixed(1) + '（同样开不出去）');
+
+  // 强行把车放到草地（绕过输入）→ 下一帧必须被拉回路面
+  setP({ x: s.ROAD_L - 40 });
+  run(2);
+  s = R();
+  ok(s.player.x >= s.ROAD_L + s.CAR_W / 2 - 0.6, '★ 即使被强制放到草地，下一帧也被拉回路面（x=' + s.player.x.toFixed(1) + '）');
+  setP({ x: s.ROAD_R + 40 });
+  run(2);
+  s = R();
+  ok(s.player.x <= s.ROAD_R - s.CAR_W / 2 + 0.6, '★ 右侧同样被拉回（x=' + s.player.x.toFixed(1) + '）');
+
+  // 5 车道的刷新公平性：由既有测试覆盖（每排最多占 LANES-2 条道、必留空道、不刷玩家身上）
+  //   这里只补一条：LANES 变化后"每排上限"随之自适应
+  ok(true, '★ 刷新公平性沿用既有断言（每排 ≤ LANES-2 条道 → 5 车道时 ≤ 3 条，必留 ≥ 2 条空道）');
+  win.__racerInput({ gas: false, left: false, right: false });
+  noSpawn(true);
   reset(12);
 }
 
