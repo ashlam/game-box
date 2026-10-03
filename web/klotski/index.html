@@ -371,11 +371,24 @@
     const path = solveFromCurrent();
     if(!path.length){ toast('这个局面已经解不出来了，点「重置」重来'); sndBlocked(); return false; }
     hintMove = null;
-    demo = { path: path, idx: 0, t: DEMO_GAP };   // 第一步立刻走
-    $('btnDemo').textContent = '⏹ 停止';
-    $('btnDemo').classList.add('on');
+    demo = { path: path, idx: 0, t: DEMO_GAP, paused: false };   // 第一步立刻走
+    syncDemoBtn();
     toast('自动演示中：共 ' + path.length + ' 步（不计入你的记录）');
     return true;
+  }
+  /** ★ 演示暂停/继续（用户要求：演示中只能"看完结束 / 暂停继续 / 退出到起始"三选一） */
+  function toggleDemoPause(){
+    if(!demo) return false;
+    demo.paused = !demo.paused;
+    syncDemoBtn();
+    toast(demo.paused ? '演示已暂停（「▶ 继续」恢复，「✕ 退出演示」回到起始）' : '继续演示');
+    return true;
+  }
+  function syncDemoBtn(){
+    const b = $('btnDemo');
+    if(!demo){ b.textContent = '▶ 演示'; b.classList.remove('on'); }
+    else if(demo.paused){ b.textContent = '▶ 继续'; b.classList.add('on'); }
+    else { b.textContent = '⏸ 暂停'; b.classList.add('on'); }
   }
   function stopDemo(){
     if(!demo) return false;
@@ -395,7 +408,12 @@
       won = true; state = 'won'; glowT = 1; shake = 1;
       sndWin();
       effects.push({ x: BX + BOARD / 2, y: BY + BOARD * 0.45, t: 0, txt:'曹操脱险！' + steps + ' 步', color:'#ffd166' });
-      if(demoMove){ stopDemo(); toast('演示完成：这一关最少 ' + curLevel().min + ' 步，点「重置」可以自己试试'); return; }
+      if(demoMove){
+        // ★ 演示看完即结束，并回到本关起始状态（演示的走法不计入记录/通关）
+        stopDemo(); reset();
+        toast('演示结束（已回到起始状态）：本关最少 ' + curLevel().min + ' 步，自己试试吧');
+        return;
+      }
       if(!best || steps < best){ best = steps; setNum(bestKey(setId, lvIdx), best); }
       setNum(clearKey(setId, lvIdx), 1);
       showPanel();
@@ -409,8 +427,20 @@
     $('overText').textContent = (rec ? '新纪录！' : '本局 ' + steps + ' 步 · ') +
       '本关最少 ' + lv.min + ' 步' + (rec ? '' : '，你的记录 ' + best + ' 步');
     $('overText').className = rec ? 'rec' : '';
-    const hasNext = lvIdx + 1 < curSet().levels.length;
+    // ★ 跨关卡集推进：本集最后一关通关 → 引导进入下一个关卡集第 1 关
+    const setDone = lvIdx + 1 >= curSet().levels.length;
+    const nextSet = setId + 1 < LEVEL_SETS.length ? LEVEL_SETS[setId + 1] : null;
+    const hasNext = !setDone || !!nextSet;
     $('overNext').style.display = hasNext ? '' : 'none';
+    if(setDone && nextSet){
+      $('overText').textContent += '　★ ' + curSet().name + '已全部通关！';
+      $('overNext').textContent = '进入「' + nextSet.name + '」第 1 关 →';
+    }else if(setDone){
+      $('overText').textContent += '　★ 三套关卡集已全部通关，厉害！';
+      $('overNext').textContent = '下一关 →';
+    }else{
+      $('overNext').textContent = '下一关 →';
+    }
     $('over').classList.add('on');
     sndPanel();
   }
@@ -432,7 +462,7 @@
     if(!p) return;
     if(kind === 'down'){
       if(hintOn) hintOn = false;
-      if(demo) stopDemo();                   // 玩家一动手，演示即停
+      if(demo){ toast('演示进行中：点「⏸ 暂停」可暂停/继续，点「✕ 退出演示」回到起始状态'); return; }   // ★ 演示中不允许接管
       hintMove = null;
       audio();
       const hit = pieceAt(p.x, p.y);
@@ -808,7 +838,7 @@
       hintMove.t -= dt;
       if(hintMove.t <= 0) hintMove = null;
     }
-    if(demo){
+    if(demo && !demo.paused){
       demo.t += dt;
       while(demo && demo.t >= DEMO_GAP){
         demo.t -= DEMO_GAP;
@@ -880,13 +910,20 @@
 
   /* ---------- 按钮 / 提示 / 诊断 ---------- */
   $('overRetry').onclick = () => { sndClick(); reset(); };
-  $('btnUndo').onclick = () => { audio(); hintMove = null; stopDemo(); undo(); };
-  $('btnHint').onclick = () => { audio(); sndClick(); showHint(); };
-  $('btnDemo').onclick = () => { audio(); sndClick(); if(demo) stopDemo(); else startDemo(); };
-  $('btnReset').onclick = () => { audio(); sndClick(); reset(); toast('已重置本关'); };
+  $('btnUndo').onclick = () => { audio(); if(demo){ toast('演示进行中：请先「✕ 退出演示」'); return; } hintMove = null; undo(); };
+  $('btnHint').onclick = () => { audio(); sndClick(); if(demo){ toast('演示进行中：请先「✕ 退出演示」'); return; } showHint(); };
+  $('btnDemo').onclick = () => { audio(); sndClick(); if(demo) toggleDemoPause(); else startDemo(); };
+  $('btnReset').onclick = () => { audio(); sndClick();
+    if(demo){ stopDemo(); reset(); toast('已退出演示，回到本关起始状态'); }
+    else { reset(); toast('已重置本关'); } };
   $('overNext').onclick = () => {
-    sndClick();
-    if(lvIdx + 1 < curSet().levels.length){ lvIdx++; reset(); }
+    sndClick(); $('over').classList.remove('on');
+    if(lvIdx + 1 < curSet().levels.length){ lvIdx++; }
+    else if(setId + 1 < LEVEL_SETS.length){          // ★ 跨集：进入下一套的第 1 关
+      setId++; lvIdx = 0;
+      toast('进入「' + curSet().name + '」第 1 关');
+    }
+    reset();
   };
   function renderLv(){
     const tabs = $('lvTabs'); tabs.innerHTML = '';
@@ -1006,6 +1043,7 @@
     selected, hintOn, soundOn, effects: effects.length,
     hint: hintMove ? { id: hintMove.id, dr: hintMove.dr, dc: hintMove.dc, n: hintMove.n, t: hintMove.t } : null,
     demo: demo ? { idx: demo.idx, total: demo.path.length } : null,
+    demoPaused: demo ? !!demo.paused : null,
     setId, lvIdx, setIds: LEVEL_SETS.map(s => s.id), setNames: LEVEL_SETS.map(s => s.name),
     levelMin: curLevel().min, levelName: curLevel().name,
     levelCounts: LEVEL_SETS.map(s => s.levels.length),
@@ -1036,6 +1074,10 @@
   };
   window.__klotskiLabel = (type, w, h, name) => labelLayout(type, w, h, name);
   window.__klotskiHint = () => showHint();
+  window.__klotskiDemoPause = () => toggleDemoPause();
+  window.__klotskiExitDemo = () => { const had = !!demo; if(demo){ stopDemo(); reset(); } return had; };
+  window.__klotskiNext = () => { $('overNext').onclick(); return { setId: setId, lvIdx: lvIdx }; };
+  window.__klotskiOverNext = () => ({ text: $('overNext').textContent, body: $('overText').textContent, shown: $('overNext').style.display !== 'none' });
   window.__klotskiDemo = () => startDemo();
   window.__klotskiStopDemo = () => stopDemo();
   window.__klotskiSolve = () => solveFromCurrent().map(m => ({ w:m.w, h:m.h, fr:m.fr, fc:m.fc, dr:m.dr, dc:m.dc, n:m.n }));

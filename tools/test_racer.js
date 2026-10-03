@@ -1111,6 +1111,36 @@ section('19) ★ 路肩硬挡（开不出路边）+ 4→5 车道等比缩小');
   reset(12);
 }
 
+/* ================= 20) ★ 5 条车道都要有敌车 ================= */
+section('20) ★ 每条车道都必须会刷新（回归：spawnRow 曾写死 [0,1,2,3]）');
+{
+  reset(21); noSpawn(false);
+  win.__racerInput({ gas: true });
+  const seen = new Set(), hits = {};
+  for(let i = 0; i < 9000; i++){
+    win.__racerStep(1 / 60);
+    const s = R();
+    for(const o of win.__racerObjs()){
+      if(seen.has(o.id)) continue;
+      seen.add(o.id);
+      const L = Math.floor((o.x - s.ROAD_L) / s.LANE_W);
+      if(L >= 0 && L < s.LANES) hits[L] = (hits[L] || 0) + 1;
+    }
+    if(i % 400 === 0) win.__racerClearObjs();
+  }
+  win.__racerInput({ gas: false });
+  const lanes = Object.keys(hits).map(Number).sort((a, b) => a - b);
+  const vals = lanes.map(l => hits[l]);
+  ok(R().LANES === 5, '车道数为 5');
+  ok(lanes.length === 5, '★ 5 条车道全部会刷新敌车/障碍（覆盖 ' + lanes.join(',') + '）',
+     '实际覆盖 ' + lanes.length + ' 条');
+  ok(lanes.every((l, i) => l === i), '★ 车道号连续 0~4（不存在"永远空着"的车道）');
+  ok(Math.min.apply(null, vals) >= 2, '★ 每条车道都刷到 ≥2 个对象（' + vals.join('/') + '）');
+  ok(Math.max.apply(null, vals) / Math.min.apply(null, vals) < 8, '★ 分布无极端偏斜（最多/最少 = ' +
+     (Math.max.apply(null, vals) / Math.min.apply(null, vals)).toFixed(1) + '）');
+  noSpawn(true); reset(22);
+}
+
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');

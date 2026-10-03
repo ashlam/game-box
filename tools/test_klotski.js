@@ -592,32 +592,52 @@ section('12) ★ 提示 与 自动演示');
   win.__klotskiSetPiece('曹操', 3, 1); win.__klotskiCheckWin();
   ok(win.__klotskiHint() === false, '已过关时提示返回 false（不误报）');
 
-  // —— 自动演示：走完能过关，但不计入玩家记录 ——
+  // —— 自动演示：走完即结束并回到起始状态，不计入任何记录 ——
   resetIntro();                                  // 入门第 1 关（最少 2 步）
   const lvMin = R().levelMin;
+  const startBoard = JSON.stringify(R().pieces.map(p => [p.r, p.c]));
   const pathLen = win.__klotskiSolve().length;
   ok(pathLen === lvMin, '入门第 1 关求解器给 ' + pathLen + ' 步（= 声明最少 ' + lvMin + ' 步）');
   ok(win.__klotskiDemo() === true, '启动自动演示返回 true');
   ok(!!R().demo, '演示状态已建立（共 ' + R().demo.total + ' 步）');
-  // 用可推进模拟时钟驱动演示
+  ok(R().demoPaused === false, '演示默认在播放（未暂停）');
+  ok(win.__klotskiDemoPause() === true, '点「暂停」→ 返回 true');
+  const pausedIdx = R().demo.idx;
+  for(let i = 0; i < 10; i++) win.__klotskiStep(0.6);
+  ok(R().demo && R().demo.idx === pausedIdx, '★ 暂停期间演示不再推进（停在第 ' + pausedIdx + ' 步）');
+  ok(R().demoPaused === true, '状态里能读到"已暂停"');
+  ok(win.__klotskiDemoPause() === true, '再点一次 → 继续播放');
+  win.__klotskiStep(0.6);
+  ok(!R().demo || R().demo.idx > pausedIdx,
+     '★ 继续后演示恢复推进（本关只有 ' + lvMin + ' 步，可能直接走完 → ' + (R().demo ? ('第 ' + R().demo.idx + ' 步') : '已完成') + '）');
   let guard = 0;
   while(R().demo && guard++ < 2000) win.__klotskiStep(0.6);
   run(30);
   s = R();
   ok(!s.demo, '★ 演示会自己走完并结束（不需要玩家操作）');
-  ok(s.won === true, '★ 演示走完后盘面确实过关了');
+  ok(s.won === false, '★ 演示走完后不停在已解开的盘面，而是回到起始状态');
+  ok(JSON.stringify(s.pieces.map(p => [p.r, p.c])) === startBoard, '★ 盘面逐子在起始位置（演示结果不留存）');
   ok(s.steps === 0, '★ 演示走的步数不计入玩家步数（steps 仍为 0）');
   ok(s.best === 0, '★ 演示不会刷新玩家的最少步数记录（best 仍为空）');
   ok(store['gklotski_cleared_intro_1'] === undefined, '★ 演示不会被记成"已通关"');
 
-  // —— 演示中玩家一动手就停 ——
+  // —— ★ 演示中玩家不能接管（只能：看完 / 暂停继续 / 退出到起始）——
   reset();
   ok(win.__klotskiDemo() === true, '再启动一次演示（古典第 1 关，90 步）');
   ok(!!R().demo, '演示进行中');
-  win.__klotskiDrag(3, 1, 0, 1);                 // 玩家拖动车辆
-  ok(!R().demo, '★ 玩家一动手，自动演示立即停止');
+  const boardBefore = JSON.stringify(R().pieces.map(p => [p.r, p.c]));
+  const idxBefore = R().demo.idx;
+  win.__klotskiDrag(3, 1, 0, 1);
+  ok(!!R().demo, '★ 演示中玩家动手 → 演示不中断（不允许从演示中间接管）');
+  ok(JSON.stringify(R().pieces.map(p => [p.r, p.c])) === boardBefore, '★ 盘面没有被玩家改动');
+  ok(R().demo.idx >= idxBefore, '★ 演示仍在自己推进');
+  win.__klotskiStep(0.6); win.__klotskiStep(0.6);
+  ok(R().demo.idx > idxBefore, '演示已走若干步');
+  ok(win.__klotskiExitDemo() === true, '点「✕ 退出演示」→ 返回 true');
+  ok(!R().demo, '★ 退出后演示已结束');
+  ok(JSON.stringify(R().pieces.map(p => [p.r, p.c])) === boardBefore, '★ 退出演示 → 盘面回到起始状态');
   win.__klotskiStopDemo();
-  ok(!R().demo, '手动停止演示也安全（幂等）');
+  ok(!R().demo, '对已结束的演示再调停止也安全（幂等）');
 
   // 提示会被手动操作清掉
   reset();
@@ -629,64 +649,50 @@ section('12) ★ 提示 与 自动演示');
 }
 
 /* ================= 13) ★ 回归：演示/提示 与 重置、重开的交互 ================= */
-section('13) ★ 回归：演示结束 → 重置 → 再演示');
+section('13) ★ 演示生命周期（看完 / 退出收拾干净）+ 关卡集推进');
 {
-  resetIntro();                                  // 入门第 1 关（最少 2 步）
-  ok(win.__klotskiDemo() === true, '第 1 次演示能启动');
-  let guard = 0;
-  while(R().demo && guard++ < 2000) win.__klotskiStep(0.6);
-  run(30);
-  ok(R().won === true && !R().demo, '第 1 次演示自动走完并过关');
-
-  els.btnReset.onclick();                        // 点「⟲ 重置」
-  run(20);
-  ok(R().won === false && R().state === 'play' && R().steps === 0, '点重置：回到初始局面');
-
-  // ★ 这就是用户报的 bug：演示完 → 重置 → 再点自动演示没反应
-  ok(win.__klotskiDemo() === true, '★ 回归：重置后**再点演示仍有反应**（能启动）');
-  ok(!!R().demo, '★ 演示状态确实建立了');
-  guard = 0;
-  while(R().demo && guard++ < 2000) win.__klotskiStep(0.6);
-  run(30);
-  ok(R().won === true, '★ 第 2 次演示同样能自动走完并过关');
-  ok(R().steps === 0 && R().best === 0, '★ 第 2 次演示依然不计步、不刷新记录');
-
-  // 同一关反复"演示→重置"3 轮都不能哑火
-  let rounds = 0;
-  for(let k = 0; k < 3; k++){
-    els.btnReset.onclick(); run(10);
-    if(!win.__klotskiDemo()) break;
-    let g2 = 0;
-    while(R().demo && g2++ < 2000) win.__klotskiStep(0.6);
+  for(let round = 0; round < 3; round++){
+    reset();
+    const start = JSON.stringify(R().pieces.map(p => [p.r, p.c]));
+    ok(win.__klotskiDemo() === true, '第 ' + (round + 1) + ' 轮：启动演示');
+    let g = 0; while(R().demo && g++ < 3000) win.__klotskiStep(0.6);
     run(20);
-    if(R().won) rounds++;
+    ok(!R().demo && R().won === false && JSON.stringify(R().pieces.map(p => [p.r, p.c])) === start,
+       '★ 第 ' + (round + 1) + ' 轮：看完 → 结束并回到起始状态');
+    ok(win.__klotskiDemo() === true, '第 ' + (round + 1) + ' 轮：再启动');
+    win.__klotskiStep(0.6); win.__klotskiStep(0.6); win.__klotskiStep(0.6);
+    ok(R().demo && R().demo.idx > 0, '演示已走 ' + (R().demo ? R().demo.idx : 0) + ' 步');
+    ok(win.__klotskiExitDemo() === true, '点「退出演示」');
+    ok(!R().demo && JSON.stringify(R().pieces.map(p => [p.r, p.c])) === start,
+       '★ 第 ' + (round + 1) + ' 轮：退出 → 回到起始状态');
   }
-  ok(rounds === 3, '★ 连做 3 轮「重置→演示」都正常走完（' + rounds + '/3）');
 
-  // 提示 → 缓存 → 重置 → 提示，也要正常
-  reset();
-  ok(win.__klotskiHint() === true, '先给一次提示（填充求解缓存）');
-  win.__klotskiDrag(3, 1, 0, 1); run(20);        // 动一步（提示消失）
-  els.btnReset.onclick(); run(20);
-  ok(win.__klotskiHint() === true, '★ 重置后再点提示仍有反应');
-  const h2 = R().hint;
-  ok(!!h2, '★ 提示给出了走法');
-  ok(win.__klotskiMove(h2.id, h2.dr, h2.dc, h2.n) === h2.n, '★ 重置后提示给出的走法依然可走通（不会再指向过期的车）');
+  // ★ 关卡集推进：入门最后一关通关 → 面板提示并可进入中级第 1 关
+  win.__klotskiGoto(0, 7);
+  let s = R();
+  ok(s.setId === 0 && s.lvIdx === 7, '定位到「入门关卡」最后一关');
+  win.__klotskiSetPiece('曹操', 3, 1);
+  win.__klotskiCheckWin();
+  run(20);
+  const btn = win.__klotskiOverNext();
+  ok(btn.shown === true, '★ 本集最后一关通关后，「下一关」按钮仍可用（会跨集）');
+  ok(/中级/.test(btn.text), '★ 按钮文案提示进入中级关卡集：' + btn.text);
+  const jumped = win.__klotskiNext();
+  ok(jumped.setId === 1 && jumped.lvIdx === 0, '★ 点一下真的切到「中级关卡」第 1 关');
+  s = R();
+  ok(s.levelMin === 28, '★ 切过去的正是中级第 1 关（最少 28 步）');
 
-  // 演示到一半 → 撤销 → 再演示
-  reset();
-  win.__klotskiDemo(); run(60); win.__klotskiStep(0.6);
-  const mid = R();
-  ok(!!mid.demo, '演示进行中');
-  win.__klotskiStopDemo();
-  ok(!R().demo, '中途停止');
-  win.__klotskiUndo(); run(20);
-  ok(win.__klotskiDemo() === true, '★ 停止 + 撤销后还能重新启动演示');
-  win.__klotskiStopDemo();
+  win.__klotskiGoto(2, 3);
+  win.__klotskiSetPiece('曹操', 3, 1);
+  win.__klotskiCheckWin();
+  run(20);
+  const last = win.__klotskiOverNext();
+  ok(last.shown === false, '★ 三套走完的最后一关：不再显示「下一关」');
+  ok(/全部通关/.test(last.body), '★ 面板正文提示全部通关：…' + last.body.slice(-18));
   reset();
 }
 
-/* ================= 14) 车名标签排布 ================= */
+
 section('14) 车名标签：居中、不出车身');
 {
   // 用真实格子尺寸量（横刀立马：CELL 由布局算出）

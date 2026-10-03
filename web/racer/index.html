@@ -302,7 +302,7 @@
   }
   function spawnRow(y, easy){
     const diff = clamp((stage - 1) * 0.18 + distance / 26000, 0, 1);
-    const lanes = [0, 1, 2, 3];
+    const lanes = Array.from({ length: LANES }, (_, i) => i);   // ★ 车道号随 LANES 生成（原来写死 [0,1,2,3] → 5 车道时第 5 道永远不出敌车）
     for(let i = lanes.length - 1; i > 0; i--){ const j = Math.floor(rng() * (i + 1)); const t = lanes[i]; lanes[i] = lanes[j]; lanes[j] = t; }
     const maxOcc = easy ? 1 : (rng() < 0.35 + 0.4 * diff ? 2 : 1);
     // ★ 每排最多占 LANES-2 条道（4 车道至少留 2 条空）—— 不允许"并排把路堵死"
