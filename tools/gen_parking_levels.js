@@ -1,110 +1,102 @@
 #!/usr/bin/env node
 /**
- * 停车场华容道 —— 关卡生成 + 求解（性能版）
+ * 停车场华容道 —— 关卡生成（按用户定稿规则）
  *
- * 规则（据实体玩具《移车出库》说明书 + 照片核对）：
- *   · 6×6 棋盘；每辆车 1 格宽、长 2 或 3；横车只左右滑、竖车只上下滑
- *   · 每关一辆【黑色警车】= 目标车，从盘边出口开出去即过关
- *   · 一次滑动算 1 步；滑动【可以停在中途】→ 真·最少步数必须枚举 1..k 格
- *   · 车不能拐弯、不能被拿出棋盘；其他车也不能开出盘外
+ * 固定设定（用户明确）：
+ *   · 棋盘 6×6
+ *   · 出口固定：底部、第 4 列（0 基索引 3），朝下
+ *   · 目标车固定：黑色警车，长度固定 2，竖直，永远处于出口所在列（第 4 列），朝向朝下
+ *   · 障碍车只有长度 2 和 3，且【长度 3 的障碍车最多 5 辆（含）】
  *
- * 求解器：BFS，状态紧凑存进一个 Int8Array 竞技场（每状态 2n 字节），
- *        不做任何 per-state 对象拷贝 —— 6×6 的深盘也能在秒级跑完。
+ * 难度（按步数）：
+ *   1★ ≥20 步　2★ ≥30 步　3★ ≥38 步　每档 16 关
  *
- * 用法：node tools/gen_parking_levels.js [每档数量] [种子]
+ * 生成思路（随机摆盘命中不了高步数）：
+ *   ① 按固定设定摆一个合法盘（警车在第 4 列）
+ *   ② 从该盘做 K 步【随机合法滑动】打乱（警车不许滑出库）
+ *   ③ 用 BFS 求打乱后盘面的【真·最少步数】
+ *   ④ 落在目标档位区间就收下，否则重摆重打乱
  */
 'use strict';
 const fs = require('fs');
 const path = require('path');
 
 const N = 6;
+const EXIT_COL = 3;                       // ★ 第 4 列（0 基索引 3）
+const EXIT_EDGE = 'bottom';               // ★ 朝下
+const POLICE_LEN = 2;                     // ★ 警车固定长度 2
+const MAX_LEN3 = 5;                       // ★ 长度 3 的障碍车最多 5 辆（含）
+const MAX_CARS = 16;
+const CAP = 130000;
+
 const TIERS = [
-  { id: 'beginner',     name: '初级', steps: [3, 10],  mobile: [4, 9]  },
-  { id: 'intermediate', name: '中级', steps: [11, 18], mobile: [9, 14] },
-  { id: 'advanced',     name: '高级', steps: [19, 26], mobile: [12, 18] },
+  { id: 'star1', name: '1 星', stars: 1, lo: 4,  hi: 9,  count: 16 },
+  { id: 'star2', name: '2 星', stars: 2, lo: 10, hi: 15, count: 16 },
+  { id: 'star3', name: '3 星', stars: 3, lo: 16, hi: 22, count: 16 },
 ];
-const CAP = 220000;                // 单盘搜索状态上限（超了就当太难，换一盘）
 
 function mulberry32(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0;
   let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
   return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
-/* ================= 求解器 ================= */
-/** cars: [{r,c,len,dir,police}] → 最少步数；-1 无解；-2 超上限 */
-function solve(cars, exit, cap){
+/* ================= 求解器（BFS，紧凑竞技场） ================= */
+function solve(cars, cap){
   cap = cap || CAP;
   const n = cars.length;
-  const L = new Int8Array(n), D = new Int8Array(n);   // 长 / 方向(0=横,1=竖)
+  const L = new Int8Array(n), V = new Int8Array(n);      // V: 0=横 1=竖
   let PI = -1;
   for(let i = 0; i < n; i++){
-    L[i] = cars[i].len; D[i] = cars[i].dir === 'h' ? 0 : 1;
+    L[i] = cars[i].len; V[i] = cars[i].dir === 'v' ? 1 : 0;
     if(cars[i].police) PI = i;
   }
-  const S = n * 2;                                     // 每状态字节数
+  const S = n * 2;
   const arena = new Int8Array(S * cap);
-  let cnt = 0;
-  const push = (src, off) => {                          // 把状态写入竞技场，返回索引
-    const at = cnt * S;
-    arena.set(arena.subarray(off, off + S), at);
-    cnt++;
-    return at;
-  };
-  // 初始状态
   for(let i = 0; i < n; i++){ arena[i * 2] = cars[i].r; arena[i * 2 + 1] = cars[i].c; }
-  cnt = 1;
-  const keyOf = off => { let s = ''; for(let k = 0; k < S; k++) s += String.fromCharCode(arena[off + k]); return s; };
-  const seen = new Set([keyOf(0)]);
-  const queue = [0];                                    // 状态的竞技场偏移
+  let cnt = 1;
+  const keyOf = a => { let s = ''; for(let k = 0; k < S; k++) s += String.fromCharCode(a[k]); return s; };
+  const seen = new Set([keyOf(arena.subarray(0, S))]);
+  const queue = [0];
   let head = 0, depth = 0, levelEnd = 1;
-
-  const at = (off, i) => ({ r: arena[off + i * 2], c: arena[off + i * 2 + 1] });
+  const tmp = new Int8Array(S);
   const free = (off, r, c, skip) => {
     if(r < 0 || r >= N || c < 0 || c >= N) return false;
     for(let i = 0; i < n; i++){
       if(i === skip) continue;
       const rr = arena[off + i * 2], cc = arena[off + i * 2 + 1];
-      if(D[i] === 0){ if(rr === r && c >= cc && c < cc + L[i]) return false; }
+      if(V[i] === 0){ if(rr === r && c >= cc && c < cc + L[i]) return false; }
       else          { if(cc === c && r >= rr && r < rr + L[i]) return false; }
     }
     return true;
   };
-  /** ★ 注意：入参是【竞技场偏移】(数字)，必须从 arena 里读 */
   const isOut = off => {
     if(PI < 0) return false;
-    const rr = arena[off + PI * 2], cc = arena[off + PI * 2 + 1], len = L[PI];
-    if(exit === 'right')  return D[PI] === 0 && cc + len >= N;
-    if(exit === 'left')   return D[PI] === 0 && cc <= 0;
-    if(exit === 'bottom') return D[PI] === 1 && rr + len >= N;
-    if(exit === 'top')    return D[PI] === 1 && rr <= 0;
-    return false;
+    const rr = arena[off + PI * 2], cc = arena[off + PI * 2 + 1];
+    return V[PI] === 1 && cc === EXIT_COL && rr + L[PI] >= N;   // 竖直警车在第 4 列、滑到最底
   };
-
   while(head < queue.length){
     if(head === levelEnd){ depth++; levelEnd = queue.length; }
     const off = queue[head++];
-    if(isOut(off)) return depth;                        // 警车已到出口 → 胜利
-    if(depth > 45) return -1;
+    if(isOut(off)) return depth;
+    if(depth > 70) return -1;
     for(let i = 0; i < n; i++){
       for(let d = -1; d <= 1; d += 2){
-        // 逐格推进；每推进一格就是一个"可停位置"= 一个新状态（一次滑动算 1 步，可停中途）
-        const tmp = new Int8Array(S);
         tmp.set(arena.subarray(off, off + S));
         for(let step = 1; step <= N; step++){
-          const r = tmp[i * 2] + (D[i] === 1 ? d : 0);
-          const c = tmp[i * 2 + 1] + (D[i] === 0 ? d : 0);
+          const r = tmp[i * 2] + (V[i] === 1 ? d : 0);
+          const c = tmp[i * 2 + 1] + (V[i] === 0 ? d : 0);
           let ok = true;
           for(let k = 0; k < L[i]; k++){
-            const rr = D[i] === 1 ? r + k : r, cc = D[i] === 0 ? c + k : c;
+            const rr = V[i] === 1 ? r + k : r, cc = V[i] === 0 ? c + k : c;
             if(!free(off, rr, cc, i)){ ok = false; break; }
           }
           if(!ok) break;
           tmp[i * 2] = r; tmp[i * 2 + 1] = c;
-          const kk = keyOf2(tmp);
+          const kk = keyOf(tmp);
           if(!seen.has(kk)){
             seen.add(kk);
             if(cnt >= cap) return -2;
-            const at2 = cnt * S; arena.set(tmp, at2); cnt++;
-            queue.push(at2);
+            const at = cnt * S; arena.set(tmp, at); cnt++;
+            queue.push(at);
           }
         }
       }
@@ -112,88 +104,145 @@ function solve(cars, exit, cap){
   }
   return -1;
 }
-function keyOf2(tmp){ let s = ''; for(let k = 0; k < tmp.length; k++) s += String.fromCharCode(tmp[k]); return s; }
 
-/* ================= 摆盘 ================= */
+/* ================= 摆盘 / 打乱 ================= */
 const COLORS = ['#3b82f6','#22d3ee','#f59e0b','#ef4444','#a78bfa','#34d399','#e879f9','#fb7185',
                 '#84cc16','#06b6d4','#f97316','#8b5cf6','#14b8a6','#eab308','#ec4899','#60a5fa'];
-function genBoard(rnd, exit, wantCars){
-  const occ = new Int8Array(N * N).fill(-1);
-  const cars = [];
-  const EX = (exit === 'right' || exit === 'left') ? 'h' : 'v';
-  const plen = rnd() < 0.75 ? 2 : 3;
-  let pr, pc;
-  if(EX === 'h'){
-    pr = Math.floor(rnd() * N);
-    pc = exit === 'right' ? Math.floor(rnd() * (N - plen)) : (1 + Math.floor(rnd() * (N - plen)));
-  }else{
-    pc = Math.floor(rnd() * N);
-    pr = exit === 'bottom' ? Math.floor(rnd() * (N - plen)) : (1 + Math.floor(rnd() * (N - plen)));
+
+function emptyGrid(){ return new Int8Array(N * N).fill(-1); }
+function cells(car){
+  const out = [];
+  for(let k = 0; k < car.len; k++) out.push(car.dir === 'h' ? [car.r, car.c + k] : [car.r + k, car.c]);
+  return out;
+}
+function fits(grid, car){
+  for(const [r, c] of cells(car)){
+    if(r < 0 || r >= N || c < 0 || c >= N) return false;
+    if(grid[r * N + c] !== -1) return false;
   }
-  const police = { r: pr, c: pc, len: plen, dir: EX, color: '#111827', police: true };
-  cars.push(police); mark(occ, police);
-  let guard = 0;
-  while(cars.length < wantCars + 1 && guard++ < 1200){
-    const dir = rnd() < 0.5 ? 'h' : 'v';
-    const len = rnd() < 0.62 ? 2 : 3;
-    const r = Math.floor(rnd() * N), c = Math.floor(rnd() * N);
-    if(dir === 'h' && c + len > N) continue;
-    if(dir === 'v' && r + len > N) continue;
-    let ok = true;
-    for(let k = 0; k < len; k++){
-      const rr = dir === 'h' ? r : r + k, cc = dir === 'h' ? c + k : c;
-      if(occ[rr * N + cc] !== -1){ ok = false; break; }
+  return true;
+}
+function paint(grid, car, v){ for(const [r, c] of cells(car)) grid[r * N + c] = v; }
+function clone(cars){ return cars.map(c => ({ r:c.r, c:c.c, len:c.len, dir:c.dir, color:c.color, police:!!c.police })); }
+
+/** 撞出一个合法盘：警车固定在第 4 列、竖直、长 2；障碍车 len2/len3，len3 ≤ MAX_LEN3 */
+function buildBoard(rnd, wantCars, wantLen3){
+  for(let attempt = 0; attempt < 40; attempt++){
+    const grid = emptyGrid();
+    const cars = [];
+    // ① 警车（固定设定）
+    const pr = Math.floor(rnd() * (N - POLICE_LEN));           // 0..3，保证还有往下走的空间
+    const police = { r: pr, c: EXIT_COL, len: POLICE_LEN, dir:'v', color:'#111827', police:true };
+    cars.push(police); paint(grid, police, 0);
+    // ② 障碍车
+    let len3 = 0, guard = 0;
+    while(cars.length < wantCars && guard++ < 900){
+      const want3 = len3 < Math.min(wantLen3, MAX_LEN3) && rnd() < 0.34;
+      const len = want3 ? 3 : 2;
+      const dir = rnd() < 0.5 ? 'h' : 'v';
+      const r = Math.floor(rnd() * N), c = Math.floor(rnd() * N);
+      const car = { r, c, len, dir, color: COLORS[Math.floor(rnd() * COLORS.length)], police:false };
+      if(!fits(grid, car)) continue;
+      // 不允许障碍车把出口通道"永久堵死"：出口列的最底格不能被横车占住，否则警车永远出不去
+      const blocksExit = cells(car).some(([rr, cc]) => cc === EXIT_COL && rr === N - 1);
+      if(blocksExit && car.dir === 'h') continue;
+      cars.push(car); paint(grid, car, cars.length - 1);
+      if(len === 3) len3++;
     }
-    if(!ok) continue;
-    const car = { r, c, len, dir, color: COLORS[Math.floor(rnd() * COLORS.length)] };
-    cars.push(car); mark(occ, car);
+    if(cars.length >= Math.max(5, Math.floor(wantCars * 0.7))) return cars;
+  }
+  return null;
+}
+
+/** 从某盘做 K 步随机合法滑动打乱（警车不许滑出库） */
+function scramble(rnd, carsIn, K){
+  let cars = clone(carsIn);
+  for(let s = 0; s < K; s++){
+    const legal = [];
+    for(let i = 0; i < cars.length; i++){
+      for(const d of [-1, 1]){
+        const n = maxSlide(cars, i, d);
+        // 打乱过程中警车不允许真的滑到底（否则等于已经通关）
+        for(let n2 = 1; n2 <= n; n2++){
+          const trial = clone(cars);
+          for(let k = 0; k < n2; k++) trial[i].dir === 'h' ? trial[i].c += d : trial[i].r += d;
+          if(trial[i].police && trial[i].r + trial[i].len >= N) continue;   // 警车不能已经滑到底
+          legal.push({ i, d, n: n2 });
+        }
+      }
+    }
+    if(!legal.length) break;
+    const mv = legal[Math.floor(rnd() * legal.length)];
+    cars[mv.i].dir === 'h' ? cars[mv.i].c += mv.d * mv.n : cars[mv.i].r += mv.d * mv.n;
   }
   return cars;
 }
-function mark(occ, car){
-  for(let k = 0; k < car.len; k++){
-    const r = car.dir === 'h' ? car.r : car.r + k, c = car.dir === 'h' ? car.c + k : car.c;
-    occ[r * N + c] = 1;
+function maxSlide(cars, i, d){
+  let n = 0;
+  while(true){
+    const t = { ...cars[i] };
+    if(t.dir === 'h') t.c += d * (n + 1); else t.r += d * (n + 1);
+    if(!placeFree(cars, i, t)) break;
+    n++;
+    if(n > N) break;
   }
+  return n;
 }
-function sig(cars, exit){
-  return cars.map(c => [c.r, c.c, c.len, c.dir].join('')).join('|') + '@' + exit;
+function placeFree(cars, skip, car){
+  for(const [r, c] of cells(car)){
+    if(r < 0 || r >= N || c < 0 || c >= N) return false;
+    for(let j = 0; j < cars.length; j++){
+      if(j === skip) continue;
+      for(const [rr, cc] of cells(cars[j])) if(rr === r && cc === c) return false;
+    }
+  }
+  return true;
 }
+function sig(cars){ return cars.map(c => c.r + '' + c.c + c.len + c.dir).join('|'); }
 
+/* ================= 主流程 ================= */
 function main(){
   const perTier = parseInt(process.argv[2] || '16', 10);
   const seed = parseInt(process.argv[3] || '20261004', 10);
   const rnd = mulberry32(seed);
-  const sets = []; const allSigs = new Set();
+  const sets = [];
+  const used = new Set();
   const t0all = Date.now();
   for(const tier of TIERS){
     const made = []; const t0 = Date.now(); let tries = 0;
-    while(made.length < perTier && tries++ < 30000 && (Date.now() - t0) < 600000){
-      const exit = ['right','left','top','bottom'][Math.floor(rnd() * 4)];
-      const want = tier.mobile[0] + Math.floor(rnd() * (tier.mobile[1] - tier.mobile[0] + 1));
-      const cars = genBoard(rnd, exit, want);
-      if(cars.length - 1 < tier.mobile[0]) continue;
-      const s = sig(cars, exit);
-      if(allSigs.has(s)) continue;
-      const st = solve(cars, exit);
-      if(st < tier.steps[0] || st > tier.steps[1]) continue;
-      allSigs.add(s);
-      made.push({ exit, min: st, cars });
+    while(made.length < perTier && tries++ < 60000 && (Date.now() - t0) < 240000){
+      const wantCars = 7 + Math.floor(rnd() * 4);                 // 7~10 辆（含警车）
+      const wantLen3 = Math.floor(rnd() * (MAX_LEN3 + 1));        // 0~5
+      const base = buildBoard(rnd, wantCars, wantLen3);
+      if(!base) continue;
+      const K = tier.lo * 2 + 12 + Math.floor(rnd() * 40);
+      const lvl = scramble(rnd, base, K);
+      if(lvl[0].r + lvl[0].len > N) continue;                     // 警车不能已在出口
+      if(lvl[0].r + lvl[0].len === N) continue;
+      const s = sig(lvl);
+      if(used.has(s)) continue;
+      const st = solve(lvl);
+      if(st < tier.lo || st > tier.hi) continue;
+      used.add(s);
+      made.push({ min: st, cars: lvl.map(c => ({ r:c.r, c:c.c, len:c.len, dir:c.dir, color:c.color, police:!!c.police })) });
     }
     made.sort((a, b) => a.min - b.min);
     const levels = made.map((m, i) => ({
-      id: i + 1, min: m.min, exit: m.exit, mobile: m.cars.length,
-      cars: m.cars.map(c => ({ r: c.r, c: c.c, len: c.len, dir: c.dir, color: c.color, police: !!c.police })),
+      id: i + 1, stars: tier.stars, min: m.min, mobile: m.cars.length, cars: m.cars,
     }));
-    console.log('  %s: %d 关 · 最少步数 %s · 用时 %ds',
-      tier.name, levels.length, levels.map(l => l.min).join('/'), ((Date.now() - t0) / 1000).toFixed(0));
-    sets.push({ id: tier.id, name: tier.name, levels });
+    const len3s = levels.map(l => l.cars.filter(c => !c.police && c.len === 3).length);
+    console.log('  %s: %d/%d 关 · 最少步数 %s · 长3车数 %s · 用时 %ds',
+      tier.name, levels.length, perTier, levels.map(l => l.min).join('/'),
+      len3s.join('/'), ((Date.now() - t0) / 1000).toFixed(0));
+    sets.push({ id: tier.id, name: tier.name, stars: tier.stars, levels });
   }
   const outPath = path.join(__dirname, 'parking_levels.json');
-  fs.writeFileSync(outPath, JSON.stringify({ n: N, sets }, null, 1));
+  fs.writeFileSync(outPath, JSON.stringify({
+    n: N, exitEdge: EXIT_EDGE, exitCol: EXIT_COL, policeLen: POLICE_LEN, sets,
+  }, null, 1));
   console.log('已写入 %s', outPath);
   console.log('总计 %d 关 · 总用时 %ds', sets.reduce((a, s) => a + s.levels.length, 0),
     ((Date.now() - t0all) / 1000).toFixed(0));
 }
-module.exports = { N, solve, TIERS };
+module.exports = { N, solve, TIERS, EXIT_COL, EXIT_EDGE };
 if(require.main === module) main();

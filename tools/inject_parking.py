@@ -13,6 +13,9 @@ else:
     h = re.sub(r"let LEVEL_SETS = .*?;\s*// 注入过", "let LEVEL_SETS = " + js + ";  // 注入过", h, count=1, flags=re.S)
     if js not in h:
         h = re.sub(r"let LEVEL_SETS = [^\n]*;", "let LEVEL_SETS = " + js + ";", h, count=1)
+if '__PARKING_META__' in h:
+    meta = json.dumps({k: data[k] for k in ('n', 'exitEdge', 'exitCol', 'policeLen') if k in data}, ensure_ascii=False)
+    h = h.replace('__PARKING_META__', meta, 1)
 html_p.write_text(h, encoding='utf-8')
 tot = sum(len(s['levels']) for s in data['sets'])
 print('已注入：%d 个关卡集 / %d 关' % (len(data['sets']), tot))

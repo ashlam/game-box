@@ -156,58 +156,79 @@ section('1) 关卡数据完整性（全关卡遍历）');
   ok(badMobile === 0, '★ 车辆数字段与实际车数一致（不符 ' + badMobile + '）');
   ok(badMin === 0, '★ 每关都标了最少步数（缺 ' + badMin + '）');
   ok(total > 0, '共 ' + total + ' 关');
+
+  // ★ 用户定稿的固定设定逐关校验
+  let badCol = 0, badLen = 0, badDir = 0, badLen3 = 0, badKind = 0;
+  for(let si = 0; si < s.setCount; si++){
+    const info = win.__parkingTiers()[si];
+    for(let li = 0; li < info.count; li++){
+      win.__parkingGoto(si, li);
+      const g = R();
+      const pl = g.cars.find(c => c.police);
+      if(!pl) continue;
+      if(pl.c !== 3) badCol++;
+      if(pl.len !== 2) badLen++;
+      if(pl.dir !== 'v') badDir++;
+      if(g.exit !== 'bottom') badDir++;
+      if(g.cars.filter(c => !c.police && c.len === 3).length > 5) badLen3++;
+      if(g.cars.some(c => c.len !== 2 && c.len !== 3)) badKind++;
+    }
+  }
+  ok(badCol === 0, '★ 每关警车都在第 4 列（不符 ' + badCol + '）');
+  ok(badLen === 0, '★ 每关警车长度都是 2（不符 ' + badLen + '）');
+  ok(badDir === 0, '★ 每关警车都竖直、出口都在底部（不符 ' + badDir + '）');
+  ok(badKind === 0, '★ 所有车只有长 2 或长 3（异常 ' + badKind + '）');
+  ok(badLen3 === 0, '★ 长 3 障碍车每关 ≤ 5 辆（超限 ' + badLen3 + '）');
 }
 
 /* ================= 2) 滑动规则 ================= */
-section('2) 滑动规则');
+section('2) 滑动规则（固定设定：6×6、出口=底部第4列、警车竖直长2）');
 {
   win.__parkingGoto(0, 0);
   win.__parkingSetCars([
-    { r:2, c:0, len:2, dir:'h', color:'#3b82f6', police:true },
-    { r:0, c:3, len:3, dir:'v', color:'#ef4444', police:false },
+    { r:0, c:3, len:2, dir:'v', color:'#111827', police:true },
+    { r:2, c:0, len:3, dir:'v', color:'#ef4444', police:false },
   ]);
   ok(R().policeIdx === 0, '警车是第 0 辆');
-  ok(win.__parkingCanStep(0, 1) === true, '警车向右可动（前方空）');
-  ok(win.__parkingCanStep(0, -1) === false, '警车向左不能动（已贴左边界）');
-  ok(win.__parkingCanStep(1, 1) === true, '竖车向下可动');
-  // 横车只能左右：用一次"竖直方向"的调用验证不可能发生（接口按轴向取值，这里验证被挡逻辑）
+  ok(win.__parkingCanStep(0, 1) === true, '警车向下可动（前方空）');
+  ok(win.__parkingCanStep(0, -1) === false, '警车向上不能动（已贴顶边界）');
+  ok(win.__parkingCanStep(1, 1) === true, '竖障碍车向下可动');
   win.__parkingSetCars([
-    { r:2, c:0, len:2, dir:'h', color:'#3b82f6', police:true },
-    { r:2, c:2, len:2, dir:'h', color:'#22d3ee', police:false },
+    { r:1, c:3, len:2, dir:'v', color:'#111827', police:true },
+    { r:3, c:3, len:2, dir:'v', color:'#22d3ee', police:false },
   ]);
-  ok(win.__parkingCanStep(0, 1) === false, '★ 前方被别的车挡住 → 动不了');
+  ok(win.__parkingCanStep(0, 1) === false, '★ 正下方被别的车挡住 → 动不了');
   ok(win.__parkingCanStep(1, 1) === true, '被挡的那辆自己可以动');
-  // 不能出盘
-  win.__parkingSetCars([{ r:2, c:4, len:2, dir:'h', color:'#111827', police:true }]);
-  ok(win.__parkingCanStep(0, 1) === false, '★ 再往右会出盘 → 不允许（车不能离开棋盘）');
+  win.__parkingSetCars([{ r:4, c:3, len:2, dir:'v', color:'#111827', police:true }]);
+  ok(win.__parkingCanStep(0, 1) === false, '★ 再往下会出盘 → 不允许（车不能离开棋盘）');
 }
 
 /* ================= 3) 步数口径 + 胜利 ================= */
 section('3) 步数口径与胜利条件');
 {
-  ok(!!gotoExit('right'), '找到一关出口在右侧');
-  win.__parkingSetCars([{ r:2, c:0, len:2, dir:'h', color:'#111827', police:true }]);
-  ok(R().exit === 'right', '该关出口 = 右（与警车朝向一致）');
-  const n = win.__parkingSlide(0, 1, 4);
-  ok(n === 4, '滑了 4 格（c 0→4，2 格长 → 4+2=6 贴到右边）');
-  ok(R().steps === 1, '★ 无论滑几格，一次滑动只计 1 步（实际 ' + R().steps + '）');
-  ok(R().out === true, '★ 警车到达出口边 → 判定出库');
-
-  // 方向不对不算胜利：出口在右，警车往左滑不算
-  gotoExit('right');
+  ok(!!gotoExit('bottom'), '找到出口在底部第 4 列的关卡（固定设定）');
   win.__parkingSetCars([{ r:2, c:3, len:2, dir:'v', color:'#111827', police:true }]);
-  ok(R().out === false, '竖车在"右出口"关卡里不算出库（朝向与出口不符）');
+  ok(R().exit === 'bottom', '出口 = 底部（与警车朝向一致）');
+  const n = win.__parkingSlide(0, 1, 2);
+  ok(n === 2, '向下滑 2 格（r 2→4，长 2 → 4+2=6 贴到底边）');
+  ok(R().steps === 1, '★ 无论滑几格，一次滑动只计 1 步（实际 ' + R().steps + '）');
+  ok(R().out === true, '★ 警车到达出口（底边第 4 列）→ 判定出库');
 
-  // 其他车不能开出盘：把一辆普通车推到边界，它最多贴边
-  gotoExit('right');
+  // 朝向不符 / 列不对：都不算出库
+  win.__parkingSetCars([{ r:2, c:3, len:2, dir:'h', color:'#111827', police:true }]);
+  ok(R().out === false, '横车在"底部出口"关卡不算出库（朝向不符）');
+  win.__parkingSetCars([{ r:4, c:1, len:2, dir:'v', color:'#111827', police:true }]);
+  ok(R().out === false, '★ 竖警车但不在第 4 列 → 也不算（出口固定在第 4 列）');
+
+  // 其他车不能开出盘
   win.__parkingSetCars([
-    { r:2, c:4, len:2, dir:'h', color:'#3b82f6', police:false },
-    { r:2, c:0, len:2, dir:'h', color:'#111827', police:true },
+    { r:4, c:0, len:2, dir:'v', color:'#3b82f6', police:false },
+    { r:2, c:3, len:2, dir:'v', color:'#111827', police:true },
   ]);
   win.__parkingSlide(0, 1, 9);
   const g = R();
-  ok(g.cars[0].c + g.cars[0].len === 6, '★ 普通车最多贴到盘边，不会掉出棋盘');
-  ok(g.state === 'play', '普通车贴边不触发任何胜利');
+  ok(g.cars[0].r + g.cars[0].len === 6, '★ 普通车最多贴到盘边，不会掉出棋盘');
+  ok(g.state === 'play', '普通车贴边不触发任何胜利（只有警车能出）');
 }
 
 /* ================= 4) 撤销 / 重置 ================= */
@@ -215,7 +236,7 @@ section('4) 撤销与重置');
 {
   win.__parkingGoto(0, 0);
   win.__parkingSetCars([
-    { r:2, c:0, len:2, dir:'h', color:'#111827', police:true },
+    { r:2, c:3, len:2, dir:'v', color:'#111827', police:true },
     { r:0, c:0, len:2, dir:'v', color:'#3b82f6', police:false },
   ]);
   const before = JSON.stringify(R().cars);
@@ -295,7 +316,7 @@ section('6) 提示与演示（演示只能看完 / 暂停继续 / 退出到起�
 section('7) 音效（含塑料片咔哒）');
 {
   win.__parkingGoto(0, 0);
-  win.__parkingSetCars([{ r:2, c:0, len:2, dir:'h', color:'#111827', police:true }]);
+  win.__parkingSetCars([{ r:2, c:3, len:2, dir:'v', color:'#111827', police:true }]);
   ok(win.__parkingAudio() === true, '音频上下文已初始化（真实游玩时首次触摸自动完成）');
   const a = noiseNodes + toneNodes;
   win.__parkingSlide(0, 1, 2);
