@@ -21,10 +21,10 @@ const path = require('path');
 const N = 6, EXIT_COL = 3, POLICE_LEN = 2, MAX_LEN3 = 5;
 const CAP = 200000;
 const TIERS = [
-  { id: 'star1', name: '1 星', stars: 1, lo: 14, hi: 19, count: 16 },   // ★ 新增：入门档
-  { id: 'star2', name: '2 星', stars: 2, lo: 20, hi: 29, count: 16 },   // 原 1 星
-  { id: 'star3', name: '3 星', stars: 3, lo: 30, hi: 37, count: 16 },   // 原 2 星
-  { id: 'star4', name: '4 星', stars: 4, lo: 38, hi: 999, count: 16 },  // 原 3 星
+  { id: 'star1', name: '1 星', stars: 1, lo: 14, hi: 22, count: 30 },   // 入门档（上限放宽到 22 步）
+  { id: 'star2', name: '2 星', stars: 2, lo: 23, hi: 29, count: 40 },
+  { id: 'star3', name: '3 星', stars: 3, lo: 30, hi: 37, count: 40 },
+  { id: 'star4', name: '4 星', stars: 4, lo: 38, hi: 999, count: 40 },
 ];
 const COLORS = ['#3b82f6','#22d3ee','#f59e0b','#ef4444','#a78bfa','#34d399','#e879f9','#fb7185',
                 '#84cc16','#06b6d4','#f97316','#8b5cf6','#14b8a6','#eab308','#ec4899','#60a5fa'];
@@ -215,7 +215,7 @@ function main(){
       for(let b = a + 1; b < obstacles.length; b++) combos.push([obstacles[a], obstacles[b]]);
     // 打乱后取前若干个，避免总在同一批上耗时间
     combos.sort(() => rnd() - 0.5);
-    for(const rm of combos.slice(0, 14)){
+    for(const rm of combos.slice(0, 26)){
       if((got1.length >= need1.count && got2.length >= need2.count && got3.length >= need3.count) || (Date.now() - t0) > maxMs) break;
       const sub = [];
       const removed = new Set(rm);
@@ -236,13 +236,13 @@ function main(){
             const k2 = key(sub2);
             if(used.has(k2)) continue;
             const st2 = solve(sub2.map(c => ({ r: c.r, c: c.c, len: c.len, dir: c.dir, police: c.dir === 'v' && c.letter === 'A' })));
-            if(st2 >= 20 && st2 <= 29){
+            if(st2 >= 23 && st2 <= 29){
               used.add(k2); got2.push({ min: st2, src: seed.no + '-r' + rm.join(',') + '-' + j, cars: toLevel(sub2) });
               break;
             }
           }
         }
-      } else if(st >= 20 && st <= 29 && got2.length < need2.count){
+      } else if(st >= 23 && st <= 29 && got2.length < need2.count){
         used.add(k); got2.push({ min: st, src: seed.no + '-r' + rm.join(','), cars: toLevel(sub) });
         // ★ 级联两层：再删 1~2 辆 → 14~19（1★ 入门档）
         if(got1.length < need1.count){
@@ -253,18 +253,18 @@ function main(){
             const k2 = key(sub2);
             if(used.has(k2)) continue;
             const st2 = solve(sub2.map(c => ({ r: c.r, c: c.c, len: c.len, dir: c.dir, police: c.dir === 'v' && c.letter === 'A' })));
-            if(st2 >= 14 && st2 <= 19){
+            if(st2 >= 14 && st2 <= 22){
               used.add(k2); got1.push({ min: st2, src: seed.no + '-r' + rm.join(',') + '-' + j, cars: toLevel(sub2) });
               break;
             }
           }
         }
-      } else if(st >= 14 && st <= 19 && got1.length < need1.count){
+      } else if(st >= 14 && st <= 22 && got1.length < need1.count){
         used.add(k); got1.push({ min: st, src: seed.no + '-r' + rm.join(','), cars: toLevel(sub) });
       }
     }
     if(((got1.length + got2.length) % 4) === 0 && (Date.now() - t0) > 20000) {
-      process.stdout.write('    …1★ ' + got1.length + '/16 · 2★ ' + got2.length + '/16 · 3★ ' + got3.length + '/16\r');
+      process.stdout.write('    …1★ ' + got1.length + '/' + need1.count + ' · 2★ ' + got2.length + '/' + need2.count + ' · 3★ ' + got3.length + '/' + need3.count + '   \r');
     }
   }
   for(const [t, got] of [[need1, got1], [need2, got2], [need3, got3]]){
