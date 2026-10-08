@@ -21,9 +21,10 @@ const path = require('path');
 const N = 6, EXIT_COL = 3, POLICE_LEN = 2, MAX_LEN3 = 5;
 const CAP = 200000;
 const TIERS = [
-  { id: 'star1', name: '1 星', stars: 1, lo: 20, hi: 29, count: 16 },
-  { id: 'star2', name: '2 星', stars: 2, lo: 30, hi: 37, count: 16 },
-  { id: 'star3', name: '3 星', stars: 3, lo: 38, hi: 999, count: 16 },
+  { id: 'star1', name: '1 星', stars: 1, lo: 14, hi: 19, count: 16 },   // ★ 新增：入门档
+  { id: 'star2', name: '2 星', stars: 2, lo: 20, hi: 29, count: 16 },   // 原 1 星
+  { id: 'star3', name: '3 星', stars: 3, lo: 30, hi: 37, count: 16 },   // 原 2 星
+  { id: 'star4', name: '4 星', stars: 4, lo: 38, hi: 999, count: 16 },  // 原 3 星
 ];
 const COLORS = ['#3b82f6','#22d3ee','#f59e0b','#ef4444','#a78bfa','#34d399','#e879f9','#fb7185',
                 '#84cc16','#06b6d4','#f97316','#8b5cf6','#14b8a6','#eab308','#ec4899','#60a5fa'];
@@ -170,9 +171,9 @@ function main(){
   const sets = [];
   const used = new Set();
 
-  // ── 3★：直接取，按步数铺开（38 → 60）──
+  // ── 4★（最难档）：直接取源数据，按步数铺开（38 → 60）──
   {
-    const t = TIERS[2];
+    const t = TIERS[3];
     const sorted = pool.slice().sort((a, b) => a.min - b.min || (rnd() - 0.5));
     const byStep = {};
     for(const p of sorted) (byStep[p.min] = byStep[p.min] || []).push(p);
@@ -199,12 +200,12 @@ function main(){
 
   // ── 2★ / 1★：从 38~50 步的盘面删掉 1~2 辆障碍车，BFS 反算 ──
   const seeds = pool.filter(p => p.min >= 38 && p.min <= 50).sort((a, b) => a.min - b.min);
-  const need2 = TIERS[1], need1 = TIERS[0];
-  const got2 = [], got1 = [];
+  const need3 = TIERS[2], need2 = TIERS[1], need1 = TIERS[0];
+  const got3 = [], got2 = [], got1 = [];
   const t0 = Date.now();
   const maxMs = parseInt(process.argv[3] || '420000', 10);
   for(const seed of seeds){
-    if((got1.length >= need1.count && got2.length >= need2.count) || (Date.now() - t0) > maxMs) break;
+    if((got1.length >= need1.count && got2.length >= need2.count && got3.length >= need3.count) || (Date.now() - t0) > maxMs) break;
     const cars = seed.cars;
     const obstacles = cars.map((c, i) => ({ c, i })).filter(x => x.c.letter !== 'A').map(x => x.i);
     // 组合：删 1 辆 / 删 2 辆
@@ -215,7 +216,7 @@ function main(){
     // 打乱后取前若干个，避免总在同一批上耗时间
     combos.sort(() => rnd() - 0.5);
     for(const rm of combos.slice(0, 14)){
-      if((got1.length >= need1.count && got2.length >= need2.count) || (Date.now() - t0) > maxMs) break;
+      if((got1.length >= need1.count && got2.length >= need2.count && got3.length >= need3.count) || (Date.now() - t0) > maxMs) break;
       const sub = [];
       const removed = new Set(rm);
       cars.forEach((c, i) => { if(!removed.has(i)) sub.push(c); });
@@ -224,10 +225,10 @@ function main(){
       if(used.has(k)) continue;
       const st = solve(sub.map(c => ({ r: c.r, c: c.c, len: c.len, dir: c.dir, police: c.dir === 'v' && c.letter === 'A' })));
       if(st < 0) continue;
-      if(st >= 30 && st <= 37 && got2.length < need2.count){
-        used.add(k); got2.push({ min: st, src: seed.no + '-r' + rm.join(','), cars: toLevel(sub) });
-        // ★ 级联：把降到 30~37 的那些盘面再删一辆，通常就落进 20~29（1★）
-        if(got1.length < need1.count){
+      if(st >= 30 && st <= 37 && got3.length < need3.count){
+        used.add(k); got3.push({ min: st, src: seed.no + '-r' + rm.join(','), cars: toLevel(sub) });
+        // ★ 级联一层：再删一辆 → 20~29（2★）
+        if(got2.length < need2.count){
           for(let j = 0; j < sub.length; j++){
             if(sub[j].letter === 'A') continue;
             const sub2 = sub.filter((_, x) => x !== j);
@@ -236,20 +237,37 @@ function main(){
             if(used.has(k2)) continue;
             const st2 = solve(sub2.map(c => ({ r: c.r, c: c.c, len: c.len, dir: c.dir, police: c.dir === 'v' && c.letter === 'A' })));
             if(st2 >= 20 && st2 <= 29){
+              used.add(k2); got2.push({ min: st2, src: seed.no + '-r' + rm.join(',') + '-' + j, cars: toLevel(sub2) });
+              break;
+            }
+          }
+        }
+      } else if(st >= 20 && st <= 29 && got2.length < need2.count){
+        used.add(k); got2.push({ min: st, src: seed.no + '-r' + rm.join(','), cars: toLevel(sub) });
+        // ★ 级联两层：再删 1~2 辆 → 14~19（1★ 入门档）
+        if(got1.length < need1.count){
+          for(let j = 0; j < sub.length; j++){
+            if(sub[j].letter === 'A') continue;
+            const sub2 = sub.filter((_, x) => x !== j);
+            if(!valid(sub2)) continue;
+            const k2 = key(sub2);
+            if(used.has(k2)) continue;
+            const st2 = solve(sub2.map(c => ({ r: c.r, c: c.c, len: c.len, dir: c.dir, police: c.dir === 'v' && c.letter === 'A' })));
+            if(st2 >= 14 && st2 <= 19){
               used.add(k2); got1.push({ min: st2, src: seed.no + '-r' + rm.join(',') + '-' + j, cars: toLevel(sub2) });
               break;
             }
           }
         }
-      } else if(st >= 20 && st <= 29 && got1.length < need1.count){
+      } else if(st >= 14 && st <= 19 && got1.length < need1.count){
         used.add(k); got1.push({ min: st, src: seed.no + '-r' + rm.join(','), cars: toLevel(sub) });
       }
     }
     if(((got1.length + got2.length) % 4) === 0 && (Date.now() - t0) > 20000) {
-      process.stdout.write('    …1★ ' + got1.length + '/16 · 2★ ' + got2.length + '/16\r');
+      process.stdout.write('    …1★ ' + got1.length + '/16 · 2★ ' + got2.length + '/16 · 3★ ' + got3.length + '/16\r');
     }
   }
-  for(const [t, got] of [[need1, got1], [need2, got2]]){
+  for(const [t, got] of [[need1, got1], [need2, got2], [need3, got3]]){
     got.sort((a, b) => a.min - b.min);
     sets.unshift({ id: t.id, name: t.name, stars: t.stars,
                    levels: got.map((p, i) => ({ id: i + 1, stars: t.stars, min: p.min, mobile: p.cars.length, src: p.src, cars: p.cars })) });

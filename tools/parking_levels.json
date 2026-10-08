@@ -13,6 +13,1541 @@
     {
      "id": 1,
      "stars": 1,
+     "min": 15,
+     "mobile": 11,
+     "src": "16014-r1,12",
+     "cars": [
+      {
+       "r": 0,
+       "c": 5,
+       "len": 3,
+       "dir": "v",
+       "color": "#3b82f6",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 4,
+       "len": 2,
+       "dir": "h",
+       "color": "#22d3ee",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 3,
+       "len": 2,
+       "dir": "h",
+       "color": "#f59e0b",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 4,
+       "len": 2,
+       "dir": "v",
+       "color": "#ef4444",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 2,
+       "len": 2,
+       "dir": "h",
+       "color": "#a78bfa",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 2,
+       "len": 2,
+       "dir": "h",
+       "color": "#34d399",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#e879f9",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 2,
+       "len": 3,
+       "dir": "v",
+       "color": "#fb7185",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 0,
+       "len": 2,
+       "dir": "h",
+       "color": "#84cc16",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 1,
+       "len": 2,
+       "dir": "v",
+       "color": "#06b6d4",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 3,
+       "len": 2,
+       "dir": "v",
+       "color": "#111827",
+       "police": true
+      }
+     ]
+    },
+    {
+     "id": 2,
+     "stars": 1,
+     "min": 15,
+     "mobile": 11,
+     "src": "16014-r1,6",
+     "cars": [
+      {
+       "r": 0,
+       "c": 5,
+       "len": 3,
+       "dir": "v",
+       "color": "#3b82f6",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 4,
+       "len": 2,
+       "dir": "h",
+       "color": "#22d3ee",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 3,
+       "len": 2,
+       "dir": "h",
+       "color": "#f59e0b",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 4,
+       "len": 2,
+       "dir": "v",
+       "color": "#ef4444",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 2,
+       "len": 2,
+       "dir": "h",
+       "color": "#a78bfa",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#34d399",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 2,
+       "len": 3,
+       "dir": "v",
+       "color": "#e879f9",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 0,
+       "len": 2,
+       "dir": "h",
+       "color": "#fb7185",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 1,
+       "len": 2,
+       "dir": "v",
+       "color": "#84cc16",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 0,
+       "len": 2,
+       "dir": "v",
+       "color": "#06b6d4",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 3,
+       "len": 2,
+       "dir": "v",
+       "color": "#111827",
+       "police": true
+      }
+     ]
+    },
+    {
+     "id": 3,
+     "stars": 1,
+     "min": 15,
+     "mobile": 10,
+     "src": "14720-r7,9",
+     "cars": [
+      {
+       "r": 0,
+       "c": 5,
+       "len": 2,
+       "dir": "v",
+       "color": "#3b82f6",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 4,
+       "len": 2,
+       "dir": "h",
+       "color": "#22d3ee",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 2,
+       "len": 3,
+       "dir": "h",
+       "color": "#f59e0b",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 3,
+       "len": 2,
+       "dir": "h",
+       "color": "#ef4444",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 3,
+       "len": 2,
+       "dir": "h",
+       "color": "#a78bfa",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 2,
+       "len": 3,
+       "dir": "h",
+       "color": "#34d399",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#e879f9",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 1,
+       "len": 2,
+       "dir": "v",
+       "color": "#fb7185",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 0,
+       "len": 3,
+       "dir": "v",
+       "color": "#84cc16",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 3,
+       "len": 2,
+       "dir": "v",
+       "color": "#111827",
+       "police": true
+      }
+     ]
+    },
+    {
+     "id": 4,
+     "stars": 1,
+     "min": 15,
+     "mobile": 11,
+     "src": "12793-r5",
+     "cars": [
+      {
+       "r": 0,
+       "c": 5,
+       "len": 2,
+       "dir": "v",
+       "color": "#3b82f6",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 3,
+       "len": 3,
+       "dir": "h",
+       "color": "#22d3ee",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 4,
+       "len": 2,
+       "dir": "h",
+       "color": "#f59e0b",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 4,
+       "len": 3,
+       "dir": "v",
+       "color": "#ef4444",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 1,
+       "len": 3,
+       "dir": "h",
+       "color": "#a78bfa",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#34d399",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 2,
+       "len": 2,
+       "dir": "v",
+       "color": "#e879f9",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 0,
+       "len": 2,
+       "dir": "h",
+       "color": "#fb7185",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 1,
+       "len": 2,
+       "dir": "v",
+       "color": "#84cc16",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 0,
+       "len": 2,
+       "dir": "v",
+       "color": "#06b6d4",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 3,
+       "len": 2,
+       "dir": "v",
+       "color": "#111827",
+       "police": true
+      }
+     ]
+    },
+    {
+     "id": 5,
+     "stars": 1,
+     "min": 16,
+     "mobile": 13,
+     "src": "16463-r6",
+     "cars": [
+      {
+       "r": 2,
+       "c": 4,
+       "len": 2,
+       "dir": "h",
+       "color": "#3b82f6",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 5,
+       "len": 3,
+       "dir": "v",
+       "color": "#22d3ee",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 3,
+       "len": 2,
+       "dir": "h",
+       "color": "#f59e0b",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 3,
+       "len": 2,
+       "dir": "h",
+       "color": "#ef4444",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 4,
+       "len": 2,
+       "dir": "v",
+       "color": "#a78bfa",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 2,
+       "len": 2,
+       "dir": "h",
+       "color": "#34d399",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#e879f9",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#fb7185",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 2,
+       "len": 2,
+       "dir": "v",
+       "color": "#84cc16",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 1,
+       "len": 2,
+       "dir": "v",
+       "color": "#06b6d4",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 0,
+       "len": 2,
+       "dir": "h",
+       "color": "#f97316",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 0,
+       "len": 2,
+       "dir": "v",
+       "color": "#8b5cf6",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 3,
+       "len": 2,
+       "dir": "v",
+       "color": "#111827",
+       "police": true
+      }
+     ]
+    },
+    {
+     "id": 6,
+     "stars": 1,
+     "min": 16,
+     "mobile": 10,
+     "src": "14720-r7,11",
+     "cars": [
+      {
+       "r": 0,
+       "c": 5,
+       "len": 2,
+       "dir": "v",
+       "color": "#3b82f6",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 4,
+       "len": 2,
+       "dir": "h",
+       "color": "#22d3ee",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 2,
+       "len": 3,
+       "dir": "h",
+       "color": "#f59e0b",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 3,
+       "len": 2,
+       "dir": "h",
+       "color": "#ef4444",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 3,
+       "len": 2,
+       "dir": "h",
+       "color": "#a78bfa",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 2,
+       "len": 3,
+       "dir": "h",
+       "color": "#34d399",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#e879f9",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 0,
+       "len": 2,
+       "dir": "h",
+       "color": "#fb7185",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 1,
+       "len": 2,
+       "dir": "v",
+       "color": "#84cc16",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 3,
+       "len": 2,
+       "dir": "v",
+       "color": "#111827",
+       "police": true
+      }
+     ]
+    },
+    {
+     "id": 7,
+     "stars": 1,
+     "min": 16,
+     "mobile": 11,
+     "src": "12793-r2",
+     "cars": [
+      {
+       "r": 0,
+       "c": 5,
+       "len": 2,
+       "dir": "v",
+       "color": "#3b82f6",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 3,
+       "len": 3,
+       "dir": "h",
+       "color": "#22d3ee",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 4,
+       "len": 3,
+       "dir": "v",
+       "color": "#f59e0b",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 2,
+       "len": 2,
+       "dir": "h",
+       "color": "#ef4444",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 1,
+       "len": 3,
+       "dir": "h",
+       "color": "#a78bfa",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#34d399",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 2,
+       "len": 2,
+       "dir": "v",
+       "color": "#e879f9",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 0,
+       "len": 2,
+       "dir": "h",
+       "color": "#fb7185",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 1,
+       "len": 2,
+       "dir": "v",
+       "color": "#84cc16",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 0,
+       "len": 2,
+       "dir": "v",
+       "color": "#06b6d4",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 3,
+       "len": 2,
+       "dir": "v",
+       "color": "#111827",
+       "police": true
+      }
+     ]
+    },
+    {
+     "id": 8,
+     "stars": 1,
+     "min": 17,
+     "mobile": 11,
+     "src": "16463-r7,13-4",
+     "cars": [
+      {
+       "r": 2,
+       "c": 4,
+       "len": 2,
+       "dir": "h",
+       "color": "#3b82f6",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 5,
+       "len": 3,
+       "dir": "v",
+       "color": "#22d3ee",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 3,
+       "len": 2,
+       "dir": "h",
+       "color": "#f59e0b",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 3,
+       "len": 2,
+       "dir": "h",
+       "color": "#ef4444",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 1,
+       "len": 3,
+       "dir": "h",
+       "color": "#a78bfa",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#34d399",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#e879f9",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 2,
+       "len": 2,
+       "dir": "v",
+       "color": "#fb7185",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 1,
+       "len": 2,
+       "dir": "v",
+       "color": "#84cc16",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 0,
+       "len": 2,
+       "dir": "h",
+       "color": "#06b6d4",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 3,
+       "len": 2,
+       "dir": "v",
+       "color": "#111827",
+       "police": true
+      }
+     ]
+    },
+    {
+     "id": 9,
+     "stars": 1,
+     "min": 17,
+     "mobile": 10,
+     "src": "14720-r9,11",
+     "cars": [
+      {
+       "r": 0,
+       "c": 5,
+       "len": 2,
+       "dir": "v",
+       "color": "#3b82f6",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 4,
+       "len": 2,
+       "dir": "h",
+       "color": "#22d3ee",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 2,
+       "len": 3,
+       "dir": "h",
+       "color": "#f59e0b",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 3,
+       "len": 2,
+       "dir": "h",
+       "color": "#ef4444",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 3,
+       "len": 2,
+       "dir": "h",
+       "color": "#a78bfa",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 2,
+       "len": 3,
+       "dir": "h",
+       "color": "#34d399",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 2,
+       "len": 2,
+       "dir": "v",
+       "color": "#e879f9",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#fb7185",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 1,
+       "len": 2,
+       "dir": "v",
+       "color": "#84cc16",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 3,
+       "len": 2,
+       "dir": "v",
+       "color": "#111827",
+       "police": true
+      }
+     ]
+    },
+    {
+     "id": 10,
+     "stars": 1,
+     "min": 17,
+     "mobile": 11,
+     "src": "14720-r3",
+     "cars": [
+      {
+       "r": 0,
+       "c": 5,
+       "len": 2,
+       "dir": "v",
+       "color": "#3b82f6",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 4,
+       "len": 2,
+       "dir": "h",
+       "color": "#22d3ee",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 2,
+       "len": 3,
+       "dir": "h",
+       "color": "#f59e0b",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 3,
+       "len": 2,
+       "dir": "h",
+       "color": "#ef4444",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 2,
+       "len": 3,
+       "dir": "h",
+       "color": "#a78bfa",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 2,
+       "len": 2,
+       "dir": "v",
+       "color": "#34d399",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#e879f9",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 0,
+       "len": 2,
+       "dir": "h",
+       "color": "#fb7185",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 1,
+       "len": 2,
+       "dir": "v",
+       "color": "#84cc16",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 0,
+       "len": 3,
+       "dir": "v",
+       "color": "#06b6d4",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 3,
+       "len": 2,
+       "dir": "v",
+       "color": "#111827",
+       "police": true
+      }
+     ]
+    },
+    {
+     "id": 11,
+     "stars": 1,
+     "min": 18,
+     "mobile": 11,
+     "src": "18559-r4",
+     "cars": [
+      {
+       "r": 0,
+       "c": 5,
+       "len": 3,
+       "dir": "v",
+       "color": "#3b82f6",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 4,
+       "len": 2,
+       "dir": "h",
+       "color": "#22d3ee",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 3,
+       "len": 3,
+       "dir": "h",
+       "color": "#f59e0b",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 3,
+       "len": 3,
+       "dir": "h",
+       "color": "#ef4444",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 4,
+       "len": 2,
+       "dir": "v",
+       "color": "#a78bfa",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 2,
+       "len": 2,
+       "dir": "v",
+       "color": "#34d399",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#e879f9",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 0,
+       "len": 2,
+       "dir": "h",
+       "color": "#fb7185",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 0,
+       "len": 2,
+       "dir": "v",
+       "color": "#84cc16",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 0,
+       "len": 2,
+       "dir": "v",
+       "color": "#06b6d4",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 3,
+       "len": 2,
+       "dir": "v",
+       "color": "#111827",
+       "police": true
+      }
+     ]
+    },
+    {
+     "id": 12,
+     "stars": 1,
+     "min": 18,
+     "mobile": 11,
+     "src": "12793-r8",
+     "cars": [
+      {
+       "r": 0,
+       "c": 5,
+       "len": 2,
+       "dir": "v",
+       "color": "#3b82f6",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 3,
+       "len": 3,
+       "dir": "h",
+       "color": "#22d3ee",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 4,
+       "len": 2,
+       "dir": "h",
+       "color": "#f59e0b",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 4,
+       "len": 3,
+       "dir": "v",
+       "color": "#ef4444",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 2,
+       "len": 2,
+       "dir": "h",
+       "color": "#a78bfa",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 1,
+       "len": 3,
+       "dir": "h",
+       "color": "#34d399",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#e879f9",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 0,
+       "len": 2,
+       "dir": "h",
+       "color": "#fb7185",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 1,
+       "len": 2,
+       "dir": "v",
+       "color": "#84cc16",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 0,
+       "len": 2,
+       "dir": "v",
+       "color": "#06b6d4",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 3,
+       "len": 2,
+       "dir": "v",
+       "color": "#111827",
+       "police": true
+      }
+     ]
+    },
+    {
+     "id": 13,
+     "stars": 1,
+     "min": 19,
+     "mobile": 10,
+     "src": "19224-r0,11",
+     "cars": [
+      {
+       "r": 3,
+       "c": 3,
+       "len": 3,
+       "dir": "h",
+       "color": "#3b82f6",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 4,
+       "len": 2,
+       "dir": "h",
+       "color": "#22d3ee",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 4,
+       "len": 3,
+       "dir": "v",
+       "color": "#f59e0b",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 2,
+       "len": 2,
+       "dir": "h",
+       "color": "#ef4444",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#a78bfa",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 2,
+       "len": 2,
+       "dir": "v",
+       "color": "#34d399",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#e879f9",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 0,
+       "len": 2,
+       "dir": "h",
+       "color": "#fb7185",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 1,
+       "len": 2,
+       "dir": "v",
+       "color": "#84cc16",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 3,
+       "len": 2,
+       "dir": "v",
+       "color": "#111827",
+       "police": true
+      }
+     ]
+    },
+    {
+     "id": 14,
+     "stars": 1,
+     "min": 19,
+     "mobile": 10,
+     "src": "16182-r0,12-9",
+     "cars": [
+      {
+       "r": 2,
+       "c": 4,
+       "len": 2,
+       "dir": "h",
+       "color": "#3b82f6",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 5,
+       "len": 3,
+       "dir": "v",
+       "color": "#22d3ee",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 3,
+       "len": 2,
+       "dir": "h",
+       "color": "#f59e0b",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 4,
+       "len": 2,
+       "dir": "v",
+       "color": "#ef4444",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 2,
+       "len": 2,
+       "dir": "h",
+       "color": "#a78bfa",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#34d399",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 0,
+       "len": 3,
+       "dir": "h",
+       "color": "#e879f9",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 1,
+       "len": 2,
+       "dir": "v",
+       "color": "#fb7185",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 0,
+       "len": 2,
+       "dir": "v",
+       "color": "#84cc16",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 3,
+       "len": 2,
+       "dir": "v",
+       "color": "#111827",
+       "police": true
+      }
+     ]
+    },
+    {
+     "id": 15,
+     "stars": 1,
+     "min": 19,
+     "mobile": 11,
+     "src": "16182-r0-9",
+     "cars": [
+      {
+       "r": 2,
+       "c": 4,
+       "len": 2,
+       "dir": "h",
+       "color": "#3b82f6",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 5,
+       "len": 3,
+       "dir": "v",
+       "color": "#22d3ee",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 3,
+       "len": 2,
+       "dir": "h",
+       "color": "#f59e0b",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 4,
+       "len": 2,
+       "dir": "v",
+       "color": "#ef4444",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 2,
+       "len": 2,
+       "dir": "h",
+       "color": "#a78bfa",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#34d399",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 0,
+       "len": 3,
+       "dir": "h",
+       "color": "#e879f9",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 1,
+       "len": 2,
+       "dir": "v",
+       "color": "#fb7185",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 0,
+       "len": 2,
+       "dir": "v",
+       "color": "#84cc16",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 0,
+       "len": 2,
+       "dir": "v",
+       "color": "#06b6d4",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 3,
+       "len": 2,
+       "dir": "v",
+       "color": "#111827",
+       "police": true
+      }
+     ]
+    },
+    {
+     "id": 16,
+     "stars": 1,
+     "min": 19,
+     "mobile": 11,
+     "src": "16014-r4-2",
+     "cars": [
+      {
+       "r": 0,
+       "c": 5,
+       "len": 3,
+       "dir": "v",
+       "color": "#3b82f6",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 5,
+       "len": 2,
+       "dir": "v",
+       "color": "#22d3ee",
+       "police": false
+      },
+      {
+       "r": 2,
+       "c": 3,
+       "len": 2,
+       "dir": "h",
+       "color": "#f59e0b",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 2,
+       "len": 2,
+       "dir": "h",
+       "color": "#ef4444",
+       "police": false
+      },
+      {
+       "r": 5,
+       "c": 2,
+       "len": 2,
+       "dir": "h",
+       "color": "#a78bfa",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 1,
+       "len": 2,
+       "dir": "h",
+       "color": "#34d399",
+       "police": false
+      },
+      {
+       "r": 1,
+       "c": 2,
+       "len": 3,
+       "dir": "v",
+       "color": "#e879f9",
+       "police": false
+      },
+      {
+       "r": 3,
+       "c": 0,
+       "len": 2,
+       "dir": "h",
+       "color": "#fb7185",
+       "police": false
+      },
+      {
+       "r": 4,
+       "c": 1,
+       "len": 2,
+       "dir": "v",
+       "color": "#84cc16",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 0,
+       "len": 2,
+       "dir": "v",
+       "color": "#06b6d4",
+       "police": false
+      },
+      {
+       "r": 0,
+       "c": 3,
+       "len": 2,
+       "dir": "v",
+       "color": "#111827",
+       "police": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "star2",
+   "name": "2 星",
+   "stars": 2,
+   "levels": [
+    {
+     "id": 1,
+     "stars": 2,
      "min": 20,
      "mobile": 11,
      "src": "16182-r6-0",
@@ -109,7 +1644,7 @@
     },
     {
      "id": 2,
-     "stars": 1,
+     "stars": 2,
      "min": 22,
      "mobile": 11,
      "src": "16182-r0,12",
@@ -206,7 +1741,7 @@
     },
     {
      "id": 3,
-     "stars": 1,
+     "stars": 2,
      "min": 22,
      "mobile": 11,
      "src": "16182-r6,11",
@@ -303,7 +1838,7 @@
     },
     {
      "id": 4,
-     "stars": 1,
+     "stars": 2,
      "min": 22,
      "mobile": 12,
      "src": "16182-r0",
@@ -408,7 +1943,7 @@
     },
     {
      "id": 5,
-     "stars": 1,
+     "stars": 2,
      "min": 23,
      "mobile": 12,
      "src": "16463-r10-2",
@@ -513,7 +2048,7 @@
     },
     {
      "id": 6,
-     "stars": 1,
+     "stars": 2,
      "min": 25,
      "mobile": 11,
      "src": "16463-r4,13-2",
@@ -610,7 +2145,7 @@
     },
     {
      "id": 7,
-     "stars": 1,
+     "stars": 2,
      "min": 27,
      "mobile": 10,
      "src": "40259-r4,12-8",
@@ -699,7 +2234,7 @@
     },
     {
      "id": 8,
-     "stars": 1,
+     "stars": 2,
      "min": 27,
      "mobile": 12,
      "src": "16463-r4-2",
@@ -804,7 +2339,7 @@
     },
     {
      "id": 9,
-     "stars": 1,
+     "stars": 2,
      "min": 27,
      "mobile": 12,
      "src": "16463-r7,13",
@@ -909,7 +2444,7 @@
     },
     {
      "id": 10,
-     "stars": 1,
+     "stars": 2,
      "min": 28,
      "mobile": 10,
      "src": "21573-r3,8-3",
@@ -998,7 +2533,7 @@
     },
     {
      "id": 11,
-     "stars": 1,
+     "stars": 2,
      "min": 28,
      "mobile": 12,
      "src": "16014-r4",
@@ -1103,7 +2638,7 @@
     },
     {
      "id": 12,
-     "stars": 1,
+     "stars": 2,
      "min": 29,
      "mobile": 10,
      "src": "40259-r7,12-8",
@@ -1192,7 +2727,7 @@
     },
     {
      "id": 13,
-     "stars": 1,
+     "stars": 2,
      "min": 29,
      "mobile": 10,
      "src": "21573-r8,12-4",
@@ -1281,7 +2816,7 @@
     },
     {
      "id": 14,
-     "stars": 1,
+     "stars": 2,
      "min": 29,
      "mobile": 11,
      "src": "21573-r8-4",
@@ -1378,7 +2913,7 @@
     },
     {
      "id": 15,
-     "stars": 1,
+     "stars": 2,
      "min": 29,
      "mobile": 10,
      "src": "21573-r2,12-3",
@@ -1467,7 +3002,7 @@
     },
     {
      "id": 16,
-     "stars": 1,
+     "stars": 2,
      "min": 29,
      "mobile": 11,
      "src": "21573-r9-2",
@@ -1565,13 +3100,13 @@
    ]
   },
   {
-   "id": "star2",
-   "name": "2 星",
-   "stars": 2,
+   "id": "star3",
+   "name": "3 星",
+   "stars": 3,
    "levels": [
     {
      "id": 1,
-     "stars": 2,
+     "stars": 3,
      "min": 30,
      "mobile": 12,
      "src": "21573-r9",
@@ -1676,7 +3211,7 @@
     },
     {
      "id": 2,
-     "stars": 2,
+     "stars": 3,
      "min": 30,
      "mobile": 13,
      "src": "16463-r10",
@@ -1789,7 +3324,7 @@
     },
     {
      "id": 3,
-     "stars": 2,
+     "stars": 3,
      "min": 30,
      "mobile": 12,
      "src": "16182-r6",
@@ -1894,7 +3429,7 @@
     },
     {
      "id": 4,
-     "stars": 2,
+     "stars": 3,
      "min": 30,
      "mobile": 12,
      "src": "16014-r10",
@@ -1999,7 +3534,7 @@
     },
     {
      "id": 5,
-     "stars": 2,
+     "stars": 3,
      "min": 31,
      "mobile": 11,
      "src": "40259-r4,12",
@@ -2096,7 +3631,7 @@
     },
     {
      "id": 6,
-     "stars": 2,
+     "stars": 3,
      "min": 31,
      "mobile": 11,
      "src": "21573-r8,12",
@@ -2193,7 +3728,7 @@
     },
     {
      "id": 7,
-     "stars": 2,
+     "stars": 3,
      "min": 32,
      "mobile": 12,
      "src": "16463-r4,13",
@@ -2298,7 +3833,7 @@
     },
     {
      "id": 8,
-     "stars": 2,
+     "stars": 3,
      "min": 32,
      "mobile": 12,
      "src": "16014-r2",
@@ -2403,7 +3938,7 @@
     },
     {
      "id": 9,
-     "stars": 2,
+     "stars": 3,
      "min": 32,
      "mobile": 12,
      "src": "9401-r2,4",
@@ -2508,7 +4043,7 @@
     },
     {
      "id": 10,
-     "stars": 2,
+     "stars": 3,
      "min": 33,
      "mobile": 11,
      "src": "21573-r2,12",
@@ -2605,7 +4140,7 @@
     },
     {
      "id": 11,
-     "stars": 2,
+     "stars": 3,
      "min": 34,
      "mobile": 11,
      "src": "40259-r7,12",
@@ -2702,7 +4237,7 @@
     },
     {
      "id": 12,
-     "stars": 2,
+     "stars": 3,
      "min": 34,
      "mobile": 11,
      "src": "21573-r3,8",
@@ -2799,7 +4334,7 @@
     },
     {
      "id": 13,
-     "stars": 2,
+     "stars": 3,
      "min": 34,
      "mobile": 13,
      "src": "16463-r4",
@@ -2912,7 +4447,7 @@
     },
     {
      "id": 14,
-     "stars": 2,
+     "stars": 3,
      "min": 34,
      "mobile": 10,
      "src": "12793-r0,6",
@@ -3001,7 +4536,7 @@
     },
     {
      "id": 15,
-     "stars": 2,
+     "stars": 3,
      "min": 35,
      "mobile": 12,
      "src": "21573-r8",
@@ -3106,7 +4641,7 @@
     },
     {
      "id": 16,
-     "stars": 2,
+     "stars": 3,
      "min": 36,
      "mobile": 13,
      "src": "9401-r2",
@@ -3220,13 +4755,13 @@
    ]
   },
   {
-   "id": "star3",
-   "name": "3 星",
-   "stars": 3,
+   "id": "star4",
+   "name": "4 星",
+   "stars": 4,
    "levels": [
     {
      "id": 1,
-     "stars": 3,
+     "stars": 4,
      "min": 38,
      "mobile": 13,
      "src": "6323",
@@ -3339,7 +4874,7 @@
     },
     {
      "id": 2,
-     "stars": 3,
+     "stars": 4,
      "min": 38,
      "mobile": 13,
      "src": "40259",
@@ -3452,7 +4987,7 @@
     },
     {
      "id": 3,
-     "stars": 3,
+     "stars": 4,
      "min": 39,
      "mobile": 11,
      "src": "1809",
@@ -3549,7 +5084,7 @@
     },
     {
      "id": 4,
-     "stars": 3,
+     "stars": 4,
      "min": 39,
      "mobile": 13,
      "src": "28276",
@@ -3662,7 +5197,7 @@
     },
     {
      "id": 5,
-     "stars": 3,
+     "stars": 4,
      "min": 40,
      "mobile": 10,
      "src": "1830",
@@ -3751,7 +5286,7 @@
     },
     {
      "id": 6,
-     "stars": 3,
+     "stars": 4,
      "min": 41,
      "mobile": 12,
      "src": "10066",
@@ -3856,7 +5391,7 @@
     },
     {
      "id": 7,
-     "stars": 3,
+     "stars": 4,
      "min": 42,
      "mobile": 11,
      "src": "4170",
@@ -3953,7 +5488,7 @@
     },
     {
      "id": 8,
-     "stars": 3,
+     "stars": 4,
      "min": 43,
      "mobile": 11,
      "src": "1108",
@@ -4050,7 +5585,7 @@
     },
     {
      "id": 9,
-     "stars": 3,
+     "stars": 4,
      "min": 44,
      "mobile": 12,
      "src": "16014",
@@ -4155,7 +5690,7 @@
     },
     {
      "id": 10,
-     "stars": 3,
+     "stars": 4,
      "min": 45,
      "mobile": 12,
      "src": "11516",
@@ -4260,7 +5795,7 @@
     },
     {
      "id": 11,
-     "stars": 3,
+     "stars": 4,
      "min": 46,
      "mobile": 13,
      "src": "10658",
@@ -4373,7 +5908,7 @@
     },
     {
      "id": 12,
-     "stars": 3,
+     "stars": 4,
      "min": 47,
      "mobile": 10,
      "src": "1045",
@@ -4462,7 +5997,7 @@
     },
     {
      "id": 13,
-     "stars": 3,
+     "stars": 4,
      "min": 48,
      "mobile": 13,
      "src": "37740",
@@ -4575,7 +6110,7 @@
     },
     {
      "id": 14,
-     "stars": 3,
+     "stars": 4,
      "min": 49,
      "mobile": 13,
      "src": "4192",
@@ -4688,7 +6223,7 @@
     },
     {
      "id": 15,
-     "stars": 3,
+     "stars": 4,
      "min": 50,
      "mobile": 12,
      "src": "4643",
@@ -4793,7 +6328,7 @@
     },
     {
      "id": 16,
-     "stars": 3,
+     "stars": 4,
      "min": 51,
      "mobile": 13,
      "src": "4780",
