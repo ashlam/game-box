@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>停车场华容道 · 小游戏盒子</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171b22; --line:#252b36; --text:#e8ecf4; --dim:#93a0b4; --accent:#ffcc33;
+    --grass:#4f9d5d; --grass2:#3f8a4d; --lot:#5b6472; --lot2:#525b69; --mark:#e8edf5;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{
+    background:
+      radial-gradient(120% 80% at 50% 0%, #1b2230 0%, var(--bg) 60%),
+      var(--bg);
+    color:var(--text);
+    font:15px/1.45 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    display:flex; flex-direction:column; height:100%;
+    overflow:hidden; user-select:none; -webkit-user-select:none;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .top{display:flex;align-items:center;gap:8px;padding:8px 10px 6px;flex:0 0 auto}
+  .top a.back{color:var(--dim);text-decoration:none;font-size:22px;padding:2px 6px;border-radius:8px}
+  .top h1{font-size:16px;margin:0;font-weight:650;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .top h1 small{color:var(--dim);font-weight:400;font-size:11.5px;margin-left:6px}
+  .top button{
+    background:var(--panel);border:1px solid var(--line);color:var(--text);
+    font:inherit;font-size:12px;padding:5px 9px;border-radius:9px;white-space:nowrap;
+  }
+  .top button.on{background:#2b3446;border-color:#3d4a63;color:#fff}
+  .bar{display:flex;gap:6px;padding:0 10px 6px;flex:0 0 auto}
+  .bar button{
+    flex:1;background:var(--panel);border:1px solid var(--line);color:var(--text);
+    font:inherit;font-size:12.5px;padding:7px 4px;border-radius:10px;
+  }
+  .bar button:active{background:#20262f}
+  .bar button.on{background:#2b3446;border-color:#3d4a63}
+  #stage{flex:1 1 auto;position:relative;min-height:0;overflow:hidden}
+  canvas{display:block;background:transparent}
+  #dbg{
+    position:absolute;left:6px;bottom:6px;right:6px;font:10.5px/1.5 ui-monospace,Menlo,Consolas,monospace;
+    color:#9fb0c8;background:rgba(10,13,18,.72);border:1px solid #26303d;border-radius:8px;
+    padding:6px 8px;display:none;white-space:pre-wrap;word-break:break-all;user-select:text;-webkit-user-select:text;
+  }
+  #dbg.on{display:block}
+  .overlay{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(8,10,14,.72);backdrop-filter:blur(3px);padding:16px;z-index:5;
+  }
+  .overlay.on{display:flex}
+  .panel{
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 16px 14px;
+    width:min(420px,100%);box-shadow:0 18px 40px rgba(0,0,0,.5);
+  }
+  .panel h2{margin:0 0 6px;font-size:17px}
+  .panel .sub{color:var(--dim);font-size:12.5px;margin-bottom:10px}
+  .panel .big{font-size:30px;font-weight:700;color:var(--accent);margin:2px 0 10px}
+  .panel .rec{color:#7ee787}
+  .panel .btns{display:flex;gap:8px;margin-top:12px}
+  .panel button{
+    flex:1;background:#222936;border:1px solid #303a4a;color:var(--text);font:inherit;
+    font-size:13.5px;padding:10px 6px;border-radius:11px;
+  }
+  .panel button.pri{background:#2f5fd0;border-color:#3f74e8;color:#fff;font-weight:600}
+  #lv{position:absolute;inset:0;display:none;background:rgba(8,10,14,.8);z-index:6;padding:14px;overflow:auto}
+  #lv.on{display:block}
+  .set-tabs{display:flex;gap:6px;margin-bottom:10px}
+  .set-tabs button{
+    flex:1;background:#1b212b;border:1px solid #2a3342;color:var(--dim);font:inherit;font-size:13px;
+    padding:8px 4px;border-radius:10px;
+  }
+  .set-tabs button.on{background:#2b3446;color:#fff;border-color:#3d4a63}
+  .set-tabs button.has::after{content:' ✓';color:#7ee787}
+  .lv-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}
+  .lv-grid button{
+    background:#1b212b;border:1px solid #2a3342;color:var(--text);font:inherit;
+    padding:8px 2px;border-radius:10px;line-height:1.25;
+  }
+  .lv-grid button b{display:block;font-size:14px}
+  .lv-grid button i{display:block;font-size:10px;color:var(--dim);font-style:normal}
+  .lv-grid button.done{border-color:#2f6b3f;background:#1b2a20}
+  .lv-grid button.done i{color:#7ee787}
+  .lv-grid button.on{background:#2b3446;border-color:#3d4a63}
+  #lvClose{position:sticky;bottom:0;margin-top:12px;width:100%;background:#222936;border:1px solid #303a4a;
+    color:var(--text);font:inherit;padding:10px;border-radius:11px}
+  #toast{
+    position:absolute;left:50%;bottom:14px;transform:translate(-50%,10px);opacity:0;
+    background:rgba(16,20,27,.95);border:1px solid #2c3542;color:#e8ecf4;font-size:12.5px;
+    padding:8px 13px;border-radius:11px;transition:.22s;pointer-events:none;max-width:90%;text-align:center;z-index:8;
+  }
+  #toast.on{opacity:1;transform:translate(-50%,0)}
+  .hint{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:4;
+    background:rgba(16,20,27,.93);border:1px solid #2c3542;border-radius:14px;padding:14px 16px;
+    width:min(360px,86%);font-size:13px;line-height:1.7;display:none}
+  .hint.on{display:block}
+  .hint b{color:var(--accent)}
+  .hint button{margin-top:10px;width:100%;background:#222936;border:1px solid #303a4a;color:var(--text);
+    font:inherit;padding:9px;border-radius:10px}
+</style>
+</head>
+<body>
+  <div class="top">
+    <a class="back" href="../index.html">‹</a>
+    <h1>停车场华容道 <small>移车出库 · 6×6</small></h1>
+    <button id="btnUndo">↶ 撤销</button>
+    <button id="btnSound">🔊</button>
+    <button id="btnDiag">诊断</button>
+    <button id="btnLv">☰ 关卡</button>
+  </div>
+  <div class="bar">
+    <button id="btnReset">⟲ 重置本关</button>
+    <button id="btnHint">💡 提示</button>
+    <button id="btnDemo">▶ 自动演示</button>
+  </div>
+  <div id="stage"><canvas id="cv"></canvas></div>
+
+  <div class="hint" id="hintCard">
+    <div><b>目标</b>：把<b>黑色警车</b>从盘边<b>黄色出口</b>开出去。</div>
+    <div><b>怎么动</b>：拖动车辆沿它的朝向滑动（横车左右、竖车上下）。一次滑动算 1 步，可停在中途。</div>
+    <div>车辆不能拐弯、不能开出盘外（只有警车能从出口出去）。</div>
+    <button id="hintOk">开始</button>
+  </div>
+
+  <div class="overlay" id="over">
+    <div class="panel">
+      <h2 id="overTitle">过关！</h2>
+      <div class="sub" id="overSub"></div>
+      <div class="big" id="overSteps">0 步</div>
+      <div class="sub" id="overText"></div>
+      <div class="btns">
+        <button id="overRetry">再来一次</button>
+        <button class="pri" id="overNext" style="display:none">下一关 →</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="lv">
+    <div class="set-tabs" id="lvTabs"></div>
+    <div class="lv-grid" id="lvGrid"></div>
+    <button id="lvClose">关闭</button>
+  </div>
+
+  <div id="toast"></div>
+  <div id="dbg"></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+  const lerp = (a, b, t) => a + (b - a) * t;
+
+  /* ============================================================
+     关卡数据（由 tools/gen_parking_levels.js 生成后注入）
+     ============================================================ */
+  const N = 6;
+  const META = {"n": 6, "exitEdge": "bottom", "exitCol": 3, "policeLen": 2};   // 由 tools/inject_parking.py 注入（模板里是 { exitCol: 3 }）
+  const EXIT_COL = (META && META.exitCol != null) ? META.exitCol : 3;
+  const EXIT_LINE = (META && META.exitLine != null) ? META.exitLine : 2;   // ★ 固定出口列（底部第 4 列）
+  let LEVEL_SETS = [{"id":"star1","name":"1 星","stars":1,"levels":[{"id":1,"stars":1,"min":15,"mobile":11,"src":"16014-r1,12","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":2,"stars":1,"min":15,"mobile":11,"src":"16014-r1,6","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":3,"stars":1,"min":15,"mobile":10,"src":"14720-r7,9","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":0,"c":2,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":1,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":3,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#34d399","police":false},{"r":3,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":3,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":4,"stars":1,"min":15,"mobile":11,"src":"12793-r5","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":3,"len":3,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":4,"len":3,"dir":"v","color":"#ef4444","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":5,"stars":1,"min":16,"mobile":13,"src":"16463-r6","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":6,"stars":1,"min":16,"mobile":11,"src":"16463-r12,13-4","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":7,"stars":1,"min":16,"mobile":10,"src":"14720-r7,11","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":0,"c":2,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":1,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":3,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#34d399","police":false},{"r":3,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":8,"stars":1,"min":16,"mobile":11,"src":"12793-r2","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":3,"len":3,"dir":"h","color":"#22d3ee","police":false},{"r":0,"c":4,"len":3,"dir":"v","color":"#f59e0b","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":9,"stars":1,"min":17,"mobile":11,"src":"19224-r7","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":3,"len":3,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":4,"len":3,"dir":"v","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":10,"stars":1,"min":17,"mobile":11,"src":"16463-r7,13-4","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":11,"stars":1,"min":17,"mobile":10,"src":"14720-r9,11","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":0,"c":2,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":1,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":3,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#34d399","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":12,"stars":1,"min":17,"mobile":11,"src":"14720-r3","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":0,"c":2,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":3,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":3,"c":0,"len":3,"dir":"v","color":"#06b6d4","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":13,"stars":1,"min":18,"mobile":11,"src":"18559-r4","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":3,"len":3,"dir":"h","color":"#ef4444","police":false},{"r":1,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":2,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":4,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":14,"stars":1,"min":18,"mobile":11,"src":"16463-r8,12-4","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":15,"stars":1,"min":18,"mobile":12,"src":"16463-r4,12","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":16,"stars":1,"min":18,"mobile":11,"src":"12793-r8","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":3,"len":3,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":4,"len":3,"dir":"v","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":17,"stars":1,"min":19,"mobile":10,"src":"19224-r0,11","cars":[{"r":3,"c":3,"len":3,"dir":"h","color":"#3b82f6","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":0,"c":4,"len":3,"dir":"v","color":"#f59e0b","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":5,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":18,"stars":1,"min":19,"mobile":10,"src":"18559-r3,5","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":2,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":0,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":4,"c":0,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":19,"stars":1,"min":19,"mobile":12,"src":"16463-r4,7","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":20,"stars":1,"min":19,"mobile":11,"src":"16014-r4-2","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":21,"stars":1,"min":19,"mobile":11,"src":"14720-r11","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":0,"c":2,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":1,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":3,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#34d399","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":22,"stars":1,"min":20,"mobile":10,"src":"16182-r6,12-0","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#34d399","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":23,"stars":1,"min":20,"mobile":10,"src":"16182-r4,11-0","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#34d399","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":24,"stars":1,"min":21,"mobile":10,"src":"19224-r8,11","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":3,"len":3,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":4,"len":3,"dir":"v","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":25,"stars":1,"min":21,"mobile":11,"src":"16014-r9,12","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":26,"stars":1,"min":22,"mobile":11,"src":"16463-r2,8-8","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":4,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":27,"stars":1,"min":22,"mobile":11,"src":"16182-r0,12","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":28,"stars":1,"min":22,"mobile":11,"src":"16182-r6,11","cars":[{"r":0,"c":3,"len":3,"dir":"h","color":"#3b82f6","police":false},{"r":2,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":29,"stars":1,"min":22,"mobile":12,"src":"16182-r0","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":30,"stars":1,"min":22,"mobile":10,"src":"14720-r2-3","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":1,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#ef4444","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":3,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":3,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]}]},{"id":"star2","name":"2 星","stars":2,"levels":[{"id":1,"stars":2,"min":23,"mobile":12,"src":"16463-r10-2","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":4,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":2,"stars":2,"min":23,"mobile":11,"src":"16182-r6,12","cars":[{"r":0,"c":3,"len":3,"dir":"h","color":"#3b82f6","police":false},{"r":2,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":3,"stars":2,"min":23,"mobile":11,"src":"8904-r0","cars":[{"r":2,"c":3,"len":3,"dir":"h","color":"#3b82f6","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":4,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#ef4444","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":2,"c":2,"len":3,"dir":"v","color":"#34d399","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":1,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":4,"stars":2,"min":23,"mobile":11,"src":"8904-r2","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":2,"c":3,"len":3,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#ef4444","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":2,"c":2,"len":3,"dir":"v","color":"#34d399","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":1,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":5,"stars":2,"min":24,"mobile":11,"src":"16014-r2-9","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":6,"stars":2,"min":24,"mobile":11,"src":"16014-r10-7","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":7,"stars":2,"min":24,"mobile":10,"src":"12201-r8,10","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":8,"stars":2,"min":24,"mobile":10,"src":"12201-r10,11","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":5,"c":0,"len":3,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":9,"stars":2,"min":24,"mobile":13,"src":"9401-r10","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":0,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#fb7185","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":10,"stars":2,"min":24,"mobile":11,"src":"8670-r12-1","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":11,"stars":2,"min":25,"mobile":11,"src":"16463-r4,13-2","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":1,"len":3,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":12,"stars":2,"min":25,"mobile":11,"src":"14720-r2","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":1,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":3,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":3,"c":0,"len":3,"dir":"v","color":"#06b6d4","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":13,"stars":2,"min":25,"mobile":10,"src":"12201-r8,11","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":14,"stars":2,"min":25,"mobile":11,"src":"12201-r3","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#34d399","police":false},{"r":5,"c":0,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":15,"stars":2,"min":25,"mobile":11,"src":"9401-r2,4-2","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":16,"stars":2,"min":25,"mobile":12,"src":"9401-r4,13","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":17,"stars":2,"min":25,"mobile":11,"src":"8670-r6-1","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":3,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":18,"stars":2,"min":26,"mobile":12,"src":"16463-r8,12","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":4,"c":1,"len":3,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":19,"stars":2,"min":26,"mobile":12,"src":"16463-r12,13","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":4,"c":1,"len":3,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#f97316","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":20,"stars":2,"min":26,"mobile":12,"src":"9401-r7,13","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":0,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":21,"stars":2,"min":26,"mobile":12,"src":"9401-r2-12","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":22,"stars":2,"min":26,"mobile":12,"src":"9401-r3-12","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":23,"stars":2,"min":27,"mobile":10,"src":"40259-r4,12-8","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":24,"stars":2,"min":27,"mobile":12,"src":"16463-r4-2","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":1,"len":3,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":25,"stars":2,"min":27,"mobile":12,"src":"16463-r7,13","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":4,"c":1,"len":3,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":26,"stars":2,"min":27,"mobile":11,"src":"16182-r4,11","cars":[{"r":0,"c":3,"len":3,"dir":"h","color":"#3b82f6","police":false},{"r":2,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":27,"stars":2,"min":27,"mobile":10,"src":"12201-r8-8","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":28,"stars":2,"min":27,"mobile":11,"src":"8670-r4,12","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":3,"len":3,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":29,"stars":2,"min":28,"mobile":10,"src":"21573-r3,8-3","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":4,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":30,"stars":2,"min":28,"mobile":11,"src":"16182-r6-9","cars":[{"r":0,"c":3,"len":3,"dir":"h","color":"#3b82f6","police":false},{"r":2,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":31,"stars":2,"min":28,"mobile":12,"src":"16014-r4","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":32,"stars":2,"min":28,"mobile":11,"src":"7649-r11","cars":[{"r":1,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":0,"c":4,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":33,"stars":2,"min":29,"mobile":10,"src":"40259-r7,12-8","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":34,"stars":2,"min":29,"mobile":10,"src":"21573-r8,12-4","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":4,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":35,"stars":2,"min":29,"mobile":11,"src":"21573-r8-4","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":4,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":36,"stars":2,"min":29,"mobile":10,"src":"21573-r2,12-3","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":37,"stars":2,"min":29,"mobile":11,"src":"21573-r9-2","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":38,"stars":2,"min":29,"mobile":12,"src":"16463-r2,8","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":4,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":39,"stars":2,"min":29,"mobile":11,"src":"9401-r3,7-2","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":0,"c":4,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":40,"stars":2,"min":29,"mobile":11,"src":"8670-r4,6","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":3,"len":3,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":3,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]}]},{"id":"star3","name":"3 星","stars":3,"levels":[{"id":1,"stars":3,"min":30,"mobile":12,"src":"21573-r9","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":4,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":2,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":2,"stars":3,"min":30,"mobile":13,"src":"16463-r10","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":4,"c":1,"len":3,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":3,"stars":3,"min":30,"mobile":12,"src":"16182-r6","cars":[{"r":0,"c":3,"len":3,"dir":"h","color":"#3b82f6","police":false},{"r":2,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":4,"stars":3,"min":30,"mobile":12,"src":"16014-r10","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":5,"stars":3,"min":30,"mobile":12,"src":"9401-r3,7","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":6,"stars":3,"min":30,"mobile":12,"src":"7614-r6,8","cars":[{"r":3,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":1,"len":3,"dir":"v","color":"#fb7185","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":7,"stars":3,"min":31,"mobile":11,"src":"40259-r4,12","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":8,"stars":3,"min":31,"mobile":11,"src":"21573-r8,12","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":4,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":2,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":9,"stars":3,"min":31,"mobile":12,"src":"7614-r8,13","cars":[{"r":3,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":1,"len":3,"dir":"v","color":"#84cc16","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":10,"stars":3,"min":32,"mobile":12,"src":"16463-r4,13","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":11,"stars":3,"min":32,"mobile":12,"src":"16014-r2","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":12,"stars":3,"min":32,"mobile":12,"src":"16014-r7","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":13,"stars":3,"min":32,"mobile":12,"src":"9401-r2,4","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":14,"stars":3,"min":32,"mobile":11,"src":"7034-r3,6","cars":[{"r":3,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":1,"len":3,"dir":"v","color":"#fb7185","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":15,"stars":3,"min":33,"mobile":11,"src":"21573-r2,12","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":16,"stars":3,"min":33,"mobile":12,"src":"7614-r3,6","cars":[{"r":3,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":1,"len":3,"dir":"v","color":"#fb7185","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":17,"stars":3,"min":33,"mobile":12,"src":"7614-r3,12","cars":[{"r":3,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":1,"len":3,"dir":"v","color":"#84cc16","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":18,"stars":3,"min":33,"mobile":12,"src":"7614-r3,7","cars":[{"r":3,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":1,"len":3,"dir":"v","color":"#fb7185","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":19,"stars":3,"min":34,"mobile":11,"src":"40259-r7,12","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":20,"stars":3,"min":34,"mobile":12,"src":"26175-r12","cars":[{"r":3,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":3,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#e879f9","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#fb7185","police":false},{"r":5,"c":1,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":1,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#f97316","police":false},{"r":3,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":21,"stars":3,"min":34,"mobile":11,"src":"21573-r3,8","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":4,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":22,"stars":3,"min":34,"mobile":10,"src":"19224-r0,8","cars":[{"r":3,"c":3,"len":3,"dir":"h","color":"#3b82f6","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":0,"c":4,"len":3,"dir":"v","color":"#f59e0b","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":23,"stars":3,"min":34,"mobile":13,"src":"16463-r4","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":24,"stars":3,"min":34,"mobile":13,"src":"9401-r4","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":25,"stars":3,"min":34,"mobile":12,"src":"7614-r1,11","cars":[{"r":3,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":1,"len":3,"dir":"v","color":"#84cc16","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":26,"stars":3,"min":34,"mobile":12,"src":"7614-r1,7","cars":[{"r":3,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":1,"len":3,"dir":"v","color":"#fb7185","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":27,"stars":3,"min":34,"mobile":12,"src":"7614-r1,12","cars":[{"r":3,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":1,"len":3,"dir":"v","color":"#84cc16","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":28,"stars":3,"min":34,"mobile":12,"src":"7614-r1,13","cars":[{"r":3,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":1,"len":3,"dir":"v","color":"#84cc16","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":29,"stars":3,"min":35,"mobile":12,"src":"21573-r8","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":4,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":2,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":30,"stars":3,"min":35,"mobile":11,"src":"12201-r8","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":31,"stars":3,"min":35,"mobile":11,"src":"8904-r3","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":2,"c":3,"len":3,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#ef4444","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":2,"c":2,"len":3,"dir":"v","color":"#34d399","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":1,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":32,"stars":3,"min":35,"mobile":12,"src":"8670-r12","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":3,"len":3,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":33,"stars":3,"min":35,"mobile":13,"src":"7614-r3","cars":[{"r":3,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":1,"len":3,"dir":"v","color":"#84cc16","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":34,"stars":3,"min":36,"mobile":11,"src":"12590-r0","cars":[{"r":3,"c":3,"len":3,"dir":"h","color":"#3b82f6","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":0,"c":4,"len":3,"dir":"v","color":"#f59e0b","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":5,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":35,"stars":3,"min":36,"mobile":13,"src":"9401-r2","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":36,"stars":3,"min":36,"mobile":13,"src":"9401-r3","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":37,"stars":3,"min":36,"mobile":11,"src":"8401-r6","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":3,"len":3,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":4,"len":3,"dir":"v","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":38,"stars":3,"min":36,"mobile":13,"src":"7614-r7","cars":[{"r":3,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":1,"len":3,"dir":"v","color":"#84cc16","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":39,"stars":3,"min":36,"mobile":13,"src":"7614-r11","cars":[{"r":3,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":1,"c":1,"len":3,"dir":"v","color":"#06b6d4","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":40,"stars":3,"min":37,"mobile":12,"src":"8670-r6","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":3,"len":3,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]}]},{"id":"star4","name":"4 星","stars":4,"levels":[{"id":1,"stars":4,"min":38,"mobile":13,"src":"6323","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":4,"len":3,"dir":"v","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":4,"c":0,"len":3,"dir":"h","color":"#84cc16","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":0,"c":0,"len":3,"dir":"v","color":"#8b5cf6","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":2,"stars":4,"min":38,"mobile":13,"src":"40259","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#f97316","police":false},{"r":1,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":3,"stars":4,"min":38,"mobile":14,"src":"4687","cars":[{"r":3,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":1,"c":1,"len":3,"dir":"v","color":"#06b6d4","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#8b5cf6","police":false},{"r":1,"c":0,"len":3,"dir":"v","color":"#14b8a6","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":4,"stars":4,"min":38,"mobile":13,"src":"16014","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#84cc16","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":5,"stars":4,"min":39,"mobile":11,"src":"1809","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":2,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":3,"c":5,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":0,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":4,"c":2,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":3,"dir":"h","color":"#34d399","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":6,"stars":4,"min":39,"mobile":13,"src":"28276","cars":[{"r":1,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":1,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":7,"stars":4,"min":39,"mobile":13,"src":"18796","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":2,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":0,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":0,"c":1,"len":3,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#fb7185","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":8,"stars":4,"min":39,"mobile":13,"src":"5425","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":1,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":5,"c":3,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":5,"c":1,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":3,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":9,"stars":4,"min":40,"mobile":10,"src":"1830","cars":[{"r":2,"c":3,"len":3,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#e879f9","police":false},{"r":1,"c":1,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":10,"stars":4,"min":40,"mobile":14,"src":"8839","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":3,"len":3,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":3,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#14b8a6","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":11,"stars":4,"min":40,"mobile":11,"src":"5151","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":2,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":3,"c":0,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":1,"len":3,"dir":"v","color":"#fb7185","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":12,"stars":4,"min":41,"mobile":12,"src":"10066","cars":[{"r":1,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":2,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":3,"len":3,"dir":"h","color":"#ef4444","police":false},{"r":2,"c":2,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#34d399","police":false},{"r":3,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":4,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":1,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":0,"len":3,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":13,"stars":4,"min":41,"mobile":14,"src":"1361","cars":[{"r":1,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":5,"c":3,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":5,"c":0,"len":3,"dir":"h","color":"#06b6d4","police":false},{"r":1,"c":1,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":2,"c":0,"len":3,"dir":"v","color":"#14b8a6","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":14,"stars":4,"min":41,"mobile":10,"src":"1799","cars":[{"r":2,"c":3,"len":3,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#34d399","police":false},{"r":1,"c":1,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":15,"stars":4,"min":42,"mobile":11,"src":"4170","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":2,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":5,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":0,"len":3,"dir":"h","color":"#fb7185","police":false},{"r":0,"c":1,"len":3,"dir":"v","color":"#84cc16","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":16,"stars":4,"min":42,"mobile":12,"src":"5686","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":2,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":1,"c":4,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":2,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":1,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":3,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":17,"stars":4,"min":42,"mobile":13,"src":"3126","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":2,"c":2,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":4,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":3,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":1,"c":1,"len":3,"dir":"v","color":"#fb7185","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":18,"stars":4,"min":43,"mobile":11,"src":"1108","cars":[{"r":2,"c":3,"len":3,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":0,"c":1,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#34d399","police":false},{"r":1,"c":1,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":4,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":19,"stars":4,"min":43,"mobile":12,"src":"4482","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#ef4444","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":2,"len":3,"dir":"v","color":"#34d399","police":false},{"r":3,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":3,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":20,"stars":4,"min":43,"mobile":13,"src":"1326","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":2,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":3,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":4,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":3,"c":0,"len":3,"dir":"v","color":"#8b5cf6","police":false},{"r":3,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":21,"stars":4,"min":44,"mobile":12,"src":"16014","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":2,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":1,"c":4,"len":3,"dir":"v","color":"#f59e0b","police":false},{"r":4,"c":2,"len":3,"dir":"h","color":"#ef4444","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":22,"stars":4,"min":44,"mobile":12,"src":"3811","cars":[{"r":0,"c":3,"len":3,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":1,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":2,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#34d399","police":false},{"r":0,"c":2,"len":3,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":23,"stars":4,"min":44,"mobile":12,"src":"5398","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":2,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":3,"dir":"h","color":"#84cc16","police":false},{"r":0,"c":1,"len":3,"dir":"v","color":"#06b6d4","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":24,"stars":4,"min":45,"mobile":12,"src":"11516","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":1,"c":4,"len":3,"dir":"v","color":"#f59e0b","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#ef4444","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":25,"stars":4,"min":45,"mobile":12,"src":"9904","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":1,"c":4,"len":3,"dir":"v","color":"#f59e0b","police":false},{"r":4,"c":2,"len":3,"dir":"h","color":"#ef4444","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":26,"stars":4,"min":45,"mobile":12,"src":"6449","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":1,"c":4,"len":3,"dir":"v","color":"#f59e0b","police":false},{"r":4,"c":2,"len":3,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":1,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":27,"stars":4,"min":46,"mobile":13,"src":"10658","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":2,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":3,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":4,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":5,"c":2,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":3,"dir":"h","color":"#84cc16","police":false},{"r":0,"c":1,"len":3,"dir":"v","color":"#06b6d4","police":false},{"r":4,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":0,"c":0,"len":3,"dir":"v","color":"#8b5cf6","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":28,"stars":4,"min":46,"mobile":12,"src":"12990","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":1,"c":4,"len":2,"dir":"v","color":"#a78bfa","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":2,"c":1,"len":2,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":4,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":29,"stars":4,"min":46,"mobile":13,"src":"1239","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":5,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":0,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":0,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":1,"c":1,"len":2,"dir":"h","color":"#34d399","police":false},{"r":2,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":4,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":30,"stars":4,"min":47,"mobile":10,"src":"1045","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":3,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":1,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":31,"stars":4,"min":47,"mobile":13,"src":"1977","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":2,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":3,"c":5,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":0,"c":4,"len":2,"dir":"v","color":"#ef4444","police":false},{"r":4,"c":2,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#34d399","police":false},{"r":0,"c":1,"len":3,"dir":"h","color":"#e879f9","police":false},{"r":1,"c":2,"len":3,"dir":"v","color":"#fb7185","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":4,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":1,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":32,"stars":4,"min":47,"mobile":13,"src":"4968","cars":[{"r":0,"c":5,"len":2,"dir":"v","color":"#3b82f6","police":false},{"r":2,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":1,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":1,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":3,"c":0,"len":2,"dir":"h","color":"#06b6d4","police":false},{"r":0,"c":0,"len":3,"dir":"v","color":"#f97316","police":false},{"r":4,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":3,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":33,"stars":4,"min":48,"mobile":13,"src":"37740","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":4,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":1,"c":4,"len":2,"dir":"v","color":"#34d399","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":4,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":34,"stars":4,"min":48,"mobile":11,"src":"5082","cars":[{"r":0,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":1,"c":4,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":3,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":3,"c":0,"len":3,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":35,"stars":4,"min":48,"mobile":11,"src":"2295","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":3,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":36,"stars":4,"min":49,"mobile":13,"src":"4192","cars":[{"r":3,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":4,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":1,"c":4,"len":2,"dir":"v","color":"#f59e0b","police":false},{"r":4,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":3,"c":2,"len":2,"dir":"h","color":"#34d399","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":4,"c":2,"len":2,"dir":"v","color":"#fb7185","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":1,"c":1,"len":3,"dir":"v","color":"#06b6d4","police":false},{"r":5,"c":0,"len":2,"dir":"h","color":"#f97316","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":37,"stars":4,"min":49,"mobile":13,"src":"24132","cars":[{"r":0,"c":5,"len":3,"dir":"v","color":"#3b82f6","police":false},{"r":3,"c":4,"len":2,"dir":"h","color":"#22d3ee","police":false},{"r":4,"c":3,"len":3,"dir":"h","color":"#f59e0b","police":false},{"r":5,"c":3,"len":3,"dir":"h","color":"#ef4444","police":false},{"r":0,"c":3,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":1,"c":4,"len":2,"dir":"v","color":"#34d399","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":2,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":3,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":4,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":2,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":38,"stars":4,"min":49,"mobile":11,"src":"2295","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":3,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":1,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#84cc16","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":39,"stars":4,"min":50,"mobile":12,"src":"4643","cars":[{"r":2,"c":4,"len":2,"dir":"h","color":"#3b82f6","police":false},{"r":3,"c":5,"len":3,"dir":"v","color":"#22d3ee","police":false},{"r":3,"c":3,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":2,"c":2,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":5,"c":1,"len":3,"dir":"h","color":"#a78bfa","police":false},{"r":0,"c":2,"len":2,"dir":"v","color":"#34d399","police":false},{"r":3,"c":2,"len":2,"dir":"v","color":"#e879f9","police":false},{"r":0,"c":0,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":1,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":2,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":2,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":0,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]},{"id":40,"stars":4,"min":51,"mobile":13,"src":"4780","cars":[{"r":0,"c":3,"len":3,"dir":"h","color":"#3b82f6","police":false},{"r":1,"c":5,"len":2,"dir":"v","color":"#22d3ee","police":false},{"r":4,"c":4,"len":2,"dir":"h","color":"#f59e0b","police":false},{"r":1,"c":3,"len":2,"dir":"h","color":"#ef4444","police":false},{"r":2,"c":3,"len":2,"dir":"h","color":"#a78bfa","police":false},{"r":5,"c":2,"len":3,"dir":"h","color":"#34d399","police":false},{"r":0,"c":2,"len":3,"dir":"v","color":"#e879f9","police":false},{"r":3,"c":1,"len":2,"dir":"h","color":"#fb7185","police":false},{"r":2,"c":0,"len":2,"dir":"h","color":"#84cc16","police":false},{"r":4,"c":1,"len":2,"dir":"v","color":"#06b6d4","police":false},{"r":0,"c":0,"len":2,"dir":"v","color":"#f97316","police":false},{"r":3,"c":0,"len":2,"dir":"v","color":"#8b5cf6","police":false},{"r":3,"c":3,"len":2,"dir":"v","color":"#111827","police":true}]}]}];      // [{id,name,levels:[{id,min,exit,mobile,cars:[...]}]}]
+
+  /* ---------- 几何 ---------- */
+  const HFIX = 560;
+  let W = 360, H = HFIX, S = 1, dprNow = 1, OFFX = 0, OFFY = 0;
+  let BX = 0, BY = 0, CELL = 50, BOARD = 300, GRASS = 14;
+  let cv, ctx;
+
+  function layout(){
+    const st = $('stage');
+    const availW = st.clientWidth || 360, availH = st.clientHeight || 560;
+    // 固定逻辑尺寸（竖屏比例）+ 居中留边：保证任何屏幕/朝向都一致
+    S = Math.min(availH / HFIX, availW / W);
+    H = HFIX;
+    OFFX = (availW - W * S) / 2; OFFY = (availH - H * S) / 2;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    dprNow = dpr;
+    cv.style.width = availW + 'px'; cv.style.height = availH + 'px';
+    cv.width = Math.round(availW * dpr); cv.height = Math.round(availH * dpr);
+    fit();
+  }
+  function fit(){
+    const top = 54, bottom = 56;               // 顶部标题/底部呼吸
+    BOARD = Math.min(W - 24, H - top - bottom);
+    CELL = BOARD / N;
+    BX = (W - BOARD) / 2; BY = top + (H - top - bottom - BOARD) / 2;
+    GRASS = Math.max(9, CELL * 0.34);
+  }
+  function cellX(c){ return BX + c * CELL; }
+  function cellY(r){ return BY + r * CELL; }
+  function cx(c){ return BX + (c + 0.5) * CELL; }
+  function cy(r){ return BY + (r + 0.5) * CELL; }
+
+  /* ---------- 玩具配色 ---------- */
+  const POLICE = { body:'#1b1f27', roof:'#e9edf5', lightA:'#ff3b30', lightB:'#3b82f6', accent:'#f4f7fb' };
+  const TIRE = '#141922';
+  const CARCOLORS = {
+    '#3b82f6':'#1d4ed8', '#22d3ee':'#0891b2', '#f59e0b':'#b45309', '#ef4444':'#b91c1c',
+    '#a78bfa':'#7c3aed', '#34d399':'#059669', '#e879f9':'#a21caf', '#fb7185':'#be123c',
+    '#84cc16':'#4d7c0f', '#06b6d4':'#0e7490', '#f97316':'#c2410c', '#8b5cf6':'#6d28d9',
+    '#14b8a6':'#0f766e', '#eab308':'#a16207', '#ec4899':'#9d174d', '#60a5fa':'#2563eb',
+  };
+  const dark = c => CARCOLORS[c] || '#111827';
+
+  /* ---------- 状态 ---------- */
+  let setId = 0, lvIdx = 0;
+  let cars = [];                  // [{r,c,len,dir,color,police}]
+  let start = [];                 // 本关初始布局（快照）
+  let history = [];
+  let exit = 'right';
+  let steps = 0, best = 0, state = 'play';   // play | won
+  let drag = null;                // {idx, axis, from, at, moveFrom, moved}
+  let anim = null;                // 警车开出动画 {t, fromR, fromC}
+  let demo = null;                // {path, idx, t, paused}
+  let hintMove = null, hintT = 0;
+  let effects = [], pops = [], shake = 0, glowT = 0;
+  let soundOn = true, tGlobal = 0, lastTs = 0, raf = null, hintOn = true;
+  let fps = 0, drawMs = 0, frameN = 0, frameT = 0, lastFrameTs = 0;
+
+  const bestKey = (s, i) => 'parking_best_v3_' + LEVEL_SETS[s].id + '_' + LEVEL_SETS[s].levels[i].id;
+  const clearKey = (s, i) => 'parking_cleared_v3_' + LEVEL_SETS[s].id + '_' + LEVEL_SETS[s].levels[i].id;
+  const getNum = k => { const v = parseInt(localStorage.getItem(k) || '0', 10); return isNaN(v) ? 0 : v; };
+  const setNum = (k, v) => { try{ localStorage.setItem(k, String(v)); }catch(e){} };
+
+  const curSet = () => LEVEL_SETS[setId];
+  const curLevel = () => LEVEL_SETS[setId].levels[lvIdx];
+
+  /* ============================================================
+     规则
+     ============================================================ */
+  function cellsOf(car){
+    const out = [];
+    for(let k = 0; k < car.len; k++){
+      out.push(car.dir === 'h' ? [car.r, car.c + k] : [car.r + k, car.c]);
+    }
+    return out;
+  }
+  /** 某格是否被别的车占（skip 索引除外） */
+  function blocked(r, c, skip){
+    if(r < 0 || r >= N || c < 0 || c >= N) return true;
+    return cars.some((o, i) => {
+      if(i === skip) return false;
+      const cs = cellsOf(o);
+      return cs.some(([rr, cc]) => rr === r && cc === c);
+    });
+  }
+  /** 该车能否沿方向 d 移动 1 格 */
+  function canStep(idx, d){
+    const car = cars[idx];
+    const nr = car.r + (car.dir === 'v' ? d : 0);
+    const nc = car.c + (car.dir === 'h' ? d : 0);
+    for(let k = 0; k < car.len; k++){
+      const rr = car.dir === 'v' ? nr + k : nr, cc = car.dir === 'h' ? nc + k : nc;
+      if(blocked(rr, cc, idx)) return false;
+    }
+    return true;
+  }
+  const police = () => cars.find(c => c.police);
+  function policeOut(car){
+    if(!car) return false;
+    if(exit === 'right')  return car.dir === 'h' && car.r === EXIT_LINE && car.c + car.len >= N;
+    if(exit === 'left')   return car.dir === 'h' && car.r === EXIT_LINE && car.c <= 0;
+    if(exit === 'bottom') return car.dir === 'v' && car.c === EXIT_COL && car.r + car.len >= N;   // ★ 必须对准固定出口列
+    if(exit === 'top')    return car.dir === 'v' && car.c === EXIT_COL && car.r <= 0;
+    return false;
+  }
+  const exitEdge = () => exit;
+
+  /* ============================================================
+     求解器（BFS，一次滑动算 1 步、可停中途）
+     ============================================================ */
+  function solveCars(carsIn, exitDir, cap){
+    cap = cap || 160000;
+    const n = carsIn.length;
+    const L = carsIn.map(c => c.len), V = carsIn.map(c => c.dir === 'v' ? 1 : 0);
+    let PI = -1; carsIn.forEach((c, i) => { if(c.police) PI = i; });
+    const S2 = n * 2;
+    const arena = new Int8Array(S2 * Math.min(cap, 120000));
+    for(let i = 0; i < n; i++){ arena[i * 2] = carsIn[i].r; arena[i * 2 + 1] = carsIn[i].c; }
+    let cnt = 1;
+    const keyOf = a => { let s = ''; for(let k = 0; k < S2; k++) s += String.fromCharCode(a[k]); return s; };
+    const seen = new Set([keyOf(arena.subarray(0, S2))]);
+    const queue = [0];
+    let head = 0, depth = 0, levelEnd = 1;
+    const tmp = new Int8Array(S2);
+    const free = (off, r, c, skip) => {
+      if(r < 0 || r >= N || c < 0 || c >= N) return false;
+      for(let i = 0; i < n; i++){
+        if(i === skip) continue;
+        const rr = arena[off + i * 2], cc = arena[off + i * 2 + 1];
+        if(V[i] === 0){ if(rr === r && c >= cc && c < cc + L[i]) return false; }
+        else          { if(cc === c && r >= rr && r < rr + L[i]) return false; }
+      }
+      return true;
+    };
+    const isOut = off => {
+      if(PI < 0) return false;
+      const rr = arena[off + PI * 2], cc = arena[off + PI * 2 + 1], len = L[PI];
+      if(exitDir === 'right')  return V[PI] === 0 && cc + len >= N;
+      if(exitDir === 'left')   return V[PI] === 0 && cc <= 0;
+      if(exitDir === 'bottom') return V[PI] === 1 && rr + len >= N;
+      if(exitDir === 'top')    return V[PI] === 1 && rr <= 0;
+      return false;
+    };
+    while(head < queue.length){
+      if(head === levelEnd){ depth++; levelEnd = queue.length; }
+      const off = queue[head++];
+      if(isOut(off)) return { steps: depth, path: null };
+      if(depth > 60) return null;
+      for(let i = 0; i < n; i++){
+        for(let d = -1; d <= 1; d += 2){
+          tmp.set(arena.subarray(off, off + S2));
+          for(let step = 1; step <= N; step++){
+            const r = tmp[i * 2] + (V[i] === 1 ? d : 0);
+            const c = tmp[i * 2 + 1] + (V[i] === 0 ? d : 0);
+            let ok = true;
+            for(let k = 0; k < L[i]; k++){
+              const rr = V[i] === 1 ? r + k : r, cc = V[i] === 0 ? c + k : c;
+              if(!free(off, rr, cc, i)){ ok = false; break; }
+            }
+            if(!ok) break;
+            tmp[i * 2] = r; tmp[i * 2 + 1] = c;
+            const kk = keyOf(tmp);
+            if(!seen.has(kk)){
+              seen.add(kk);
+              if(cnt >= Math.min(cap, 120000)) return null;
+              const at = cnt * S2; arena.set(tmp, at); cnt++;
+              queue.push(at);
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+  /** 求一条最优解（含走法序列）—— 供提示/演示用 */
+  function solvePath(){
+    const n = cars.length;
+    const key = cs => cs.map(c => c.r * 100 + c.c).join(',');
+    const startKey = key(cars);
+    const q = [cars.map(c => ({ r:c.r, c:c.c, len:c.len, dir:c.dir, police:!!c.police }))];
+    const from = new Map([[startKey, null]]);
+    let head = 0, guard = 0;
+    while(head < q.length && guard++ < 120000){
+      const st = q[head++];
+      const p = st.find(c => c.police);
+      if(policeOutOf(p, st)){                       // 回溯路径
+        const path = []; let k = key(st);
+        while(from.get(k)){ const [pk, mv] = from.get(k); path.push(mv); k = pk; }
+        return path.reverse();
+      }
+      for(let i = 0; i < n; i++){
+        for(let d = -1; d <= 1; d += 2){
+          for(let step = 1; step <= N; step++){
+            const ns = st.map(c => ({ ...c }));
+            const c = ns[i];
+            let ok = true;
+            for(let k = 0; k < step; k++){
+              const nr = c.r + (c.dir === 'v' ? d : 0), nc = c.c + (c.dir === 'h' ? d : 0);
+              let freeCell = true;
+              for(let j = 0; j < c.len; j++){
+                const rr = c.dir === 'v' ? nr + j : nr, cc = c.dir === 'h' ? nc + j : nc;
+                if(rr < 0 || rr >= N || cc < 0 || cc >= N){ freeCell = false; break; }
+                if(ns.some((o, oi) => oi !== i && cellsOf(o).some(([a, b]) => a === rr && b === cc))){ freeCell = false; break; }
+              }
+              if(!freeCell){ ok = false; break; }
+              c.r = nr; c.c = nc;
+            }
+            if(!ok) continue;
+            const k2 = key(ns);
+            if(!from.has(k2)){
+              from.set(k2, [key(st), { i, d, n: step }]);
+              q.push(ns);
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+  function policeOutOf(p, st){
+    if(!p) return false;
+    if(exit === 'right')  return p.dir === 'h' && p.r === EXIT_LINE && p.c + p.len >= N;
+    if(exit === 'left')   return p.dir === 'h' && p.r === EXIT_LINE && p.c <= 0;
+    if(exit === 'bottom') return p.dir === 'v' && p.c === EXIT_COL && p.r + p.len >= N;
+    if(exit === 'top')    return p.dir === 'v' && p.c === EXIT_COL && p.r <= 0;
+    return false;
+  }
+
+  /* ============================================================
+     移动 / 撤销 / 胜负
+     ============================================================ */
+  function snapshot(){
+    return { cars: cars.map(c => ({ r:c.r, c:c.c, len:c.len, dir:c.dir, color:c.color, police:!!c.police })), steps: steps };
+  }
+  function restore(snap){
+    cars = snap.cars.map(c => ({ ...c }));
+    steps = snap.steps;
+    state = 'play';
+    $('over').classList.remove('on');
+    pops = []; effects = []; hintMove = null;
+  }
+  /** 一次滑动（从当前位置滑到 targetCell）—— 计 1 步、逐格咔哒 */
+  function applySlide(idx, d, n, silent){
+    const car = cars[idx];
+    for(let k = 0; k < n; k++){
+      if(!canStep(idx, d)) return 0;
+      car.dir === 'h' ? car.c += d : car.r += d;
+      if(!silent){ sndTick(k); }
+    }
+    return n;
+  }
+  function undo(){
+    if(demo){ toast('演示进行中：请先「退出演示」'); return 0; }
+    if(!history.length){ toast('没有可撤销的步骤'); sndBlocked(); return 0; }
+    restore(history.pop());
+    sndUndo();
+    return 1;
+  }
+  function finish(){
+    state = 'won';
+    glowT = 1; shake = 0.6; sndWin();
+    const lv = curLevel();
+    const rec = !best || steps < best;
+    if(rec) best = steps;
+    if(!demo) { if(rec){ setNum(bestKey(setId, lvIdx), steps); } setNum(clearKey(setId, lvIdx), 1); }
+    effects.push({ x: BX + BOARD / 2, y: BY + BOARD * 0.42, t: 0, txt: '警车出库！' + steps + ' 步', color: '#ffd166' });
+    // 记录玩家记录
+    const st = getNum(bestKey(setId, lvIdx));
+    if(!st || steps < st) setNum(bestKey(setId, lvIdx), steps);
+    setTimeout(() => { if(state === 'won' && !demo) showPanel(); }, 900);
+  }
+  function showPanel(){
+    $('overSteps').textContent = steps + ' 步';
+    const lv = curLevel();
+    const rec = (best === steps) && steps > 0;
+    $('overTitle').textContent = '过关！' + curSet().name + ' · 第 ' + lv.id + ' 关';
+    $('overSub').textContent = (lv.stars ? '★'.repeat(lv.stars) + ' · ' : '') + '本关最少 ' + lv.min + ' 步 · 车辆 ' + lv.mobile + ' 辆';
+    $('overText').textContent = (rec ? '★ 新纪录！' : '你的记录 ' + (getNum(bestKey(setId, lvIdx)) || '—') + ' 步');
+    $('overText').className = rec ? 'rec' : '';
+    const setDone = lvIdx + 1 >= curSet().levels.length;
+    const nextSet = setId + 1 < LEVEL_SETS.length ? LEVEL_SETS[setId + 1] : null;
+    $('overNext').style.display = (!setDone || nextSet) ? '' : 'none';
+    if(setDone && nextSet){
+      $('overText').textContent += '　★ ' + curSet().name + '已全部通关！';
+      $('overNext').textContent = '进入「' + nextSet.name + '」第 1 关 →';
+    } else if(setDone){
+      $('overText').textContent += '　★ 三册已全部通关，厉害！';
+      $('overNext').textContent = '下一关 →';
+    } else {
+      $('overNext').textContent = '下一关 →';
+    }
+    $('over').classList.add('on');
+    sndPanel();
+  }
+
+  /* ============================================================
+     关卡装载
+     ============================================================ */
+  function loadLevel(si, li, quiet){
+    setId = clamp(si, 0, LEVEL_SETS.length - 1);
+    lvIdx = clamp(li, 0, curSet().levels.length - 1);
+    const lv = curLevel();
+    // ★ 出口固定（用户设定）：底部、第 4 列 —— 由 META 给出，关卡数据不再带 exit
+    exit = lv.exit || (META && META.exitEdge) || 'bottom';
+    cars = lv.cars.map(c => ({ r:c.r, c:c.c, len:c.len, dir:c.dir, color:c.color, police:!!c.police }));
+    start = snapshot();
+    history = [];
+    steps = 0;
+    best = getNum(bestKey(setId, lvIdx));
+    state = 'play';
+    drag = null; anim = null; demo = null; hintMove = null; pops = []; effects = [];
+    $('over').classList.remove('on');
+    setNum('parking_last', setId + ':' + lvIdx);
+    syncDemoBtn();
+    if(!quiet) toast('第 ' + lv.id + ' 关 · 最少 ' + lv.min + ' 步 · ' + lv.mobile + ' 辆车');
+  }
+  function reset(){
+    stopDemo(true);
+    restore(start);
+    steps = 0; history = []; drag = null; anim = null; hintMove = null;
+    toast('已重置本关');
+  }
+
+  /* ============================================================
+     输入：拖动车辆（沿自身朝向，1:1）
+     ============================================================ */
+  let cvRect = null;
+  function toLogical(clientX, clientY){
+    if(!cvRect) cvRect = cv.getBoundingClientRect();
+    return { x: (clientX - cvRect.left) / (cvRect.width / W), y: (clientY - cvRect.top) / (cvRect.height / H) };
+  }
+  function carAt(x, y){
+    if(x < BX || y < BY || x > BX + BOARD || y > BY + BOARD) return -1;
+    const c = Math.floor((x - BX) / CELL), r = Math.floor((y - BY) / CELL);
+    return cars.findIndex(car => cellsOf(car).some(([rr, cc]) => rr === r && cc === c));
+  }
+  function onDown(clientX, clientY){
+    if(state !== 'play') return;
+    if(hintOn){ hintOn = false; $('hintCard').classList.remove('on'); }
+    if(demo){ toast('演示进行中：点「⏸ 暂停」或「✕ 退出演示」'); return; }
+    const p = toLogical(clientX, clientY);
+    const i = carAt(p.x, p.y);
+    hintMove = null;
+    if(i < 0){ drag = null; return; }
+    drag = { idx: i, axis: cars[i].dir, ox: p.x, oy: p.y, moved: 0, snap: snapshot() };
+    sndPick();
+  }
+  function onMove(clientX, clientY){
+    if(!drag || state !== 'play') return;
+    const p = toLogical(clientX, clientY);
+    const car = cars[drag.idx];
+    // 沿轴向的 1:1 位移，换算成"目标格"，逐格推进（受阻挡就停）
+    const delta = drag.axis === 'h' ? (p.x - drag.ox) : (p.y - drag.oy);
+    const want = Math.round(delta / CELL);            // 想移动几格
+    if(want === drag.moved) return;
+    const d = want > drag.moved ? 1 : -1;
+    let n = Math.abs(want - drag.moved);
+    let moved = 0;
+    for(let k = 0; k < n; k++){
+      if(!canStep(drag.idx, d)){ sndBump(); break; }
+      car.dir === 'h' ? car.c += d : car.r += d;
+      moved++;
+      sndTick(k);
+    }
+    if(moved){
+      drag.moved += (d > 0 ? moved : -moved);
+      if(!hintMove) { /* 保持 */ }
+    }
+  }
+  function onUp(){
+    if(!drag) return;
+    const moved = Math.abs(drag.moved);
+    if(moved > 0){
+      history.push(drag.snap);
+      if(history.length > 200) history.shift();
+      steps += 1;                                     // ★ 一次滑动（无论几格）= 1 步
+      sndPlace();
+      if(policeOut(police())){
+        anim = { t: 0 };
+        sndExit();
+        setTimeout(() => finish(), 260);
+      }
+    }
+    drag = null;
+  }
+
+  /* ============================================================
+     提示 / 演示
+     ============================================================ */
+  function showHint(){
+    if(demo){ toast('演示进行中：请先「退出演示」'); return false; }
+    if(state !== 'play') return false;
+    const path = solvePath();
+    if(!path || !path.length){ toast('本关较复杂，提示暂时算不出来'); return false; }
+    const mv = path[0];
+    hintMove = mv; hintT = 3.2;
+    toast('试试把高亮的车往箭头方向滑动');
+    return true;
+  }
+  function startDemo(){
+    if(demo) return false;
+    const path = solvePath();
+    if(!path || !path.length){ toast('本关较复杂，演示暂时算不出来'); return false; }
+    hintMove = null;
+    demo = { path, idx: 0, t: DEMO_GAP, paused: false };
+    syncDemoBtn();
+    toast('自动演示中（' + path.length + ' 步）');
+    return true;
+  }
+  function toggleDemoPause(){
+    if(!demo) return false;
+    demo.paused = !demo.paused;
+    syncDemoBtn();
+    toast(demo.paused ? '演示已暂停' : '继续演示');
+    return true;
+  }
+  function stopDemo(quiet){
+    if(!demo) return false;
+    demo = null;
+    syncDemoBtn();
+    if(!quiet) toast('已退出演示，回到本关起始状态');
+    return true;
+  }
+  function syncDemoBtn(){
+    const b = $('btnDemo');
+    if(!demo){ b.textContent = '▶ 自动演示'; b.classList.remove('on'); }
+    else if(demo.paused){ b.textContent = '▶ 继续演示'; b.classList.add('on'); }
+    else { b.textContent = '⏸ 暂停演示'; b.classList.add('on'); }
+  }
+  const DEMO_GAP = 0.55;
+
+  /* ============================================================
+     音效（含用户要的"塑料片咔哒"）
+     ============================================================ */
+  let AC = null, noiseBuf = null;
+  function audio(){ try{ if(!AC){ const C = window.AudioContext || window.webkitAudioContext; AC = new C(); } if(AC.state === 'suspended') AC.resume(); }catch(e){} }
+  function noise(dur, opt){
+    if(!soundOn || !AC) return;
+    opt = opt || {};
+    try{
+      if(!noiseBuf){
+        noiseBuf = AC.createBuffer(1, AC.sampleRate * 0.4, AC.sampleRate);
+        const d = noiseBuf.getChannelData(0);
+        for(let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      const src = AC.createBufferSource(); src.buffer = noiseBuf;
+      const f = AC.createBiquadFilter(); f.type = opt.type || 'bandpass';
+      f.frequency.setValueAtTime(opt.freq || 2400, AC.currentTime);
+      if(opt.to) f.frequency.exponentialRampToValueAtTime(opt.to, AC.currentTime + dur);
+      f.Q.setValueAtTime(opt.q || 3.2, AC.currentTime);
+      const g = AC.createGain();
+      g.gain.setValueAtTime(opt.gain || 0.14, AC.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + dur);
+      src.connect(f); f.connect(g); g.connect(AC.destination);
+      src.start(); src.stop(AC.currentTime + dur);
+    }catch(e){}
+  }
+  function tone(freq, dur, opt){
+    if(!soundOn || !AC) return;
+    opt = opt || {};
+    try{
+      const o = AC.createOscillator(); o.type = opt.type || 'triangle';
+      o.frequency.setValueAtTime(freq, AC.currentTime);
+      if(opt.to) o.frequency.exponentialRampToValueAtTime(opt.to, AC.currentTime + dur);
+      const g = AC.createGain();
+      g.gain.setValueAtTime(opt.gain || 0.07, AC.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + dur);
+      o.connect(g); g.connect(AC.destination);
+      o.start(); o.stop(AC.currentTime + dur);
+    }catch(e){}
+  }
+  /** ★ 塑料片咔哒：短促带通噪声 + 一点点木质音头（每滑一格一声） */
+  function sndTick(k){
+    noise(0.035, { type:'bandpass', freq: 2600 + (k || 0) * 180, to: 1500, q: 5, gain: 0.13 });
+    tone(700 + (k || 0) * 40, 0.03, { type:'square', gain: 0.028, to: 420 });
+  }
+  function sndBump(){ noise(0.06, { type:'lowpass', freq: 420, gain: 0.1 }); }
+  function sndPick(){ noise(0.028, { type:'bandpass', freq: 3400, q: 6, gain: 0.08 }); }
+  function sndPlace(){ noise(0.05, { type:'bandpass', freq: 1900, to: 900, q: 4, gain: 0.11 }); tone(420, 0.05, { type:'triangle', gain: 0.05, to: 300 }); }
+  function sndUndo(){ tone(480, 0.09, { type:'triangle', gain: 0.06, to: 330 }); }
+  function sndBlocked(){ tone(180, 0.1, { type:'square', gain: 0.05, to: 140 }); }
+  function sndExit(){ tone(520, 0.5, { type:'sawtooth', gain: 0.05, to: 1100 }); noise(0.4, { type:'bandpass', freq: 900, to: 300, gain: 0.07 }); }
+  function sndWin(){ [660, 880, 1180].forEach((f, i) => setTimeout(() => tone(f, 0.22, { type:'triangle', gain: 0.07 }), i * 110)); }
+  function sndPanel(){ tone(760, 0.18, { type:'triangle', gain: 0.05, to: 520 }); }
+  function sndClick(){ noise(0.03, { type:'bandpass', freq: 3000, q: 5, gain: 0.07 }); }
+
+  /* ============================================================
+     绘制
+     ============================================================ */
+  function rr(c, x, y, w, h, r){
+    r = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
+  function drawGround(){
+    // 草地边框
+    ctx.fillStyle = '#3f8a4d';
+    rr(ctx, BX - GRASS, BY - GRASS, BOARD + GRASS * 2, BOARD + GRASS * 2, GRASS * 0.9); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.06)';
+    rr(ctx, BX - GRASS + 3, BY - GRASS + 3, BOARD + GRASS * 2 - 6, BOARD + GRASS * 2 - 6, GRASS * 0.7); ctx.fill();
+    // 停车场地面
+    ctx.fillStyle = '#5b6472';
+    rr(ctx, BX, BY, BOARD, BOARD, 6); ctx.fill();
+    // 车位白线（每格一个车位框）
+    ctx.strokeStyle = 'rgba(232,237,245,.30)'; ctx.lineWidth = 1.6;
+    for(let i = 0; i < N; i++){
+      for(let j = 0; j < N; j++){
+        rr(ctx, cellX(j) + CELL * 0.06, cellY(i) + CELL * 0.06, CELL * 0.88, CELL * 0.88, CELL * 0.14);
+        ctx.stroke();
+      }
+    }
+  }
+  /** 出口：在盘边画黄色缺口 + 箭头 */
+  function drawExit(){
+    const t = clamp(tGlobal % 1, 0, 1);
+    const pulse = 0.65 + 0.35 * Math.sin(tGlobal * 4);
+    let x0, y0, w, h, ax, ay;
+    const pl = police();
+    // ★ 固定出口（用户设定）：底部、第 4 列、朝下 —— 以关卡数据给出的列为准
+    const line = (exit === 'left' || exit === 'right') ? (pl ? pl.r : 0) : EXIT_COL;
+    if(exit === 'right'){ x0 = BX + BOARD - 2; y0 = cellY(line); w = GRASS + 2; h = CELL; ax = 1; ay = 0; }
+    else if(exit === 'left'){ x0 = BX - GRASS; y0 = cellY(line); w = GRASS; h = CELL; ax = -1; ay = 0; }
+    else if(exit === 'bottom'){ x0 = cellX(line); y0 = BY + BOARD - 2; w = CELL; h = GRASS + 2; ax = 0; ay = 1; }
+    else { x0 = cellX(line); y0 = BY - GRASS; w = CELL; h = GRASS; ax = 0; ay = -1; }
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,204,51,' + (0.35 + 0.4 * pulse) + ')';
+    rr(ctx, x0, y0, w, h, 4); ctx.fill();
+    // 三个黄色人字箭头（指向盘外）
+    ctx.strokeStyle = 'rgba(255,226,120,' + (0.7 + 0.3 * pulse) + ')';
+    ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+    for(let i = 0; i < 3; i++){
+      const c0 = (i - 1) * 0.26;
+      ctx.beginPath();
+      if(exit === 'right' || exit === 'left'){
+        const bx = x0 + w * 0.5 + ax * c0 * CELL * 0.5, by = y0 + h * 0.5;
+        ctx.moveTo(bx - 4 * ax, by - CELL * 0.22);
+        ctx.lineTo(bx + 5 * ax, by);
+        ctx.lineTo(bx - 4 * ax, by + CELL * 0.22);
+      } else {
+        const bx = x0 + w * 0.5, by = y0 + h * 0.5 + ay * c0 * CELL * 0.5;
+        ctx.moveTo(bx - CELL * 0.22, by - 4 * ay);
+        ctx.lineTo(bx, by + 5 * ay);
+        ctx.lineTo(bx + CELL * 0.22, by - 4 * ay);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  /** 一辆塑料玩具车（俯视） */
+  function drawCar(car, opt){
+    opt = opt || {};
+    const isP = car.police;
+    const pad = CELL * 0.055;
+    const x = cellX(car.c) + pad, y = cellY(car.r) + pad;
+    const w = (car.dir === 'h' ? car.len * CELL : CELL) - pad * 2;
+    const h = (car.dir === 'v' ? car.len * CELL : CELL) - pad * 2;
+    const r = Math.min(w, h) * 0.27;
+    ctx.save();
+    if(opt.alpha != null) ctx.globalAlpha = opt.alpha;
+    // 车身阴影
+    ctx.fillStyle = 'rgba(0,0,0,.28)';
+    rr(ctx, x + 1.5, y + 2.5, w, h, r); ctx.fill();
+    // 车身
+    const base = isP ? POLICE.body : car.color;
+    const grd = ctx.createLinearGradient(x, y, x + (car.dir === 'h' ? w : 0), y + (car.dir === 'v' ? h : 0));
+    grd.addColorStop(0, base);
+    grd.addColorStop(1, dark(base));
+    ctx.fillStyle = grd;
+    rr(ctx, x, y, w, h, r); ctx.fill();
+    // 高光边
+    ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1.6;
+    rr(ctx, x + 1, y + 1, w - 2, h - 2, r * 0.9); ctx.stroke();
+    // 车窗（沿车身方向排列 2~3 块）
+    const horiz = car.dir === 'h';
+    const long = horiz ? w : h, short = horiz ? h : w;
+    const nWin = car.len >= 3 ? 3 : 2;
+    ctx.fillStyle = isP ? 'rgba(28,34,44,.92)' : 'rgba(22,28,38,.82)';
+    for(let i = 0; i < nWin; i++){
+      const t0 = (i + 0.5) / nWin;
+      const wl = long * 0.72 / nWin, ww = short * 0.5;
+      const bx = horiz ? x + long * t0 - wl / 2 : x + (short - ww) / 2;
+      const by = horiz ? y + (short - ww) / 2 : y + long * t0 - wl / 2;
+      rr(ctx, bx, by, horiz ? wl : ww, horiz ? ww : wl, Math.min(wl, ww) * 0.32); ctx.fill();
+    }
+    // 警车：白门 + 红蓝警灯 + POLICE 字
+    if(isP){
+      ctx.fillStyle = POLICE.roof;
+      if(horiz) rr(ctx, x + w * 0.30, y + h * 0.08, w * 0.40, h * 0.16, h * 0.08);
+      else      rr(ctx, x + w * 0.08, y + h * 0.30, w * 0.16, h * 0.40, w * 0.08);
+      ctx.fill();
+      // 警灯（横车时在车顶中段、竖车同理）
+      const lw = horiz ? w * 0.17 : w * 0.42, lh = horiz ? h * 0.42 : h * 0.17;
+      const lx = horiz ? x + w * 0.415 : x + w * 0.29;
+      const ly = horiz ? y + h * 0.29 : y + h * 0.415;
+      const blink = (Math.floor(tGlobal * 6) % 2) === 0;
+      ctx.fillStyle = blink ? POLICE.lightA : POLICE.lightB;
+      rr(ctx, lx, ly, lw, lh, Math.min(lw, lh) * 0.34); ctx.fill();
+      // 灯罩外圈
+      ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1.2;
+      rr(ctx, lx, ly, lw, lh, Math.min(lw, lh) * 0.34); ctx.stroke();
+      // POLICE 反白条
+      ctx.fillStyle = 'rgba(255,255,255,.9)';
+      if(horiz) rr(ctx, x + w * 0.08, y + h * 0.42, w * 0.14, h * 0.16, 2);
+      else      rr(ctx, x + w * 0.42, y + h * 0.08, w * 0.16, h * 0.14, 2);
+      ctx.fill();
+    }
+    // 轮子（贴在车身四角外侧）
+    ctx.fillStyle = TIRE;
+    const tw = Math.max(2.2, Math.min(w, h) * 0.16), tl = Math.max(3.5, Math.min(w, h) * 0.24);
+    if(horiz){
+      [x + w * 0.18, x + w * 0.82].forEach(bx => {
+        rr(ctx, bx - tl / 2, y - tw * 0.42, tl, tw * 0.5, tw * 0.25); ctx.fill();
+        rr(ctx, bx - tl / 2, y + h - tw * 0.08, tl, tw * 0.5, tw * 0.25); ctx.fill();
+      });
+    } else {
+      [y + h * 0.18, y + h * 0.82].forEach(by => {
+        rr(ctx, x - tw * 0.42, by - tl / 2, tw * 0.5, tl, tw * 0.25); ctx.fill();
+        rr(ctx, x + w - tw * 0.08, by - tl / 2, tw * 0.5, tl, tw * 0.25); ctx.fill();
+      });
+    }
+    // 选中/拖动高亮
+    if(opt.sel){
+      ctx.strokeStyle = 'rgba(255,226,120,' + (0.6 + 0.4 * Math.sin(tGlobal * 9)) + ')';
+      ctx.lineWidth = 2.4;
+      rr(ctx, x - 3, y - 3, w + 6, h + 6, r + 3); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function drawHint(){
+    if(!hintMove) return;
+    const car = cars[hintMove.i];
+    if(!car) return;
+    drawCar(car, { sel: true });
+    const horiz = car.dir === 'h';
+    const nx = horiz ? (hintMove.d > 0 ? cellX(car.c + car.len) : cellX(car.c) - CELL * 0.9) : cellX(car.c);
+    const ny = horiz ? cellY(car.r) : (hintMove.d > 0 ? cellY(car.r + car.len) : cellY(car.r) - CELL * 0.9);
+    const mx = nx + (horiz ? CELL * 0.45 : CELL * 0.5), my = ny + (horiz ? CELL * 0.5 : CELL * 0.45);
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,226,120,.92)';
+    ctx.beginPath();
+    if(horiz){
+      const s = hintMove.d > 0 ? 1 : -1;
+      ctx.moveTo(mx + s * CELL * 0.28, my);
+      ctx.lineTo(mx - s * CELL * 0.06, my - CELL * 0.2);
+      ctx.lineTo(mx - s * CELL * 0.06, my + CELL * 0.2);
+    } else {
+      const s = hintMove.d > 0 ? 1 : -1;
+      ctx.moveTo(mx, my + s * CELL * 0.28);
+      ctx.lineTo(mx - CELL * 0.2, my - s * CELL * 0.06);
+      ctx.lineTo(mx + CELL * 0.2, my - s * CELL * 0.06);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  function draw(){
+    const t0 = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0;
+    ctx.setTransform(S * dprNow, 0, 0, S * dprNow, OFFX * dprNow, OFFY * dprNow);
+    ctx.clearRect(-40, -40, W + 80, H + 80);
+    drawGround();
+    drawExit();
+    // 车（先画非警车，警车最后 → 始终在最上层）
+    const order = cars.map((c, i) => i).sort((a, b) => (cars[a].police ? 1 : 0) - (cars[b].police ? 1 : 0));
+    for(const i of order){
+      const isDragging = drag && drag.idx === i;
+      drawCar(cars[i], { sel: !!isDragging, alpha: anim && cars[i].police ? clamp(1 - anim.t * 1.1, 0, 1) : 1 });
+    }
+    if(anim){
+      // 警车开出：沿出口方向滑出画面
+      const a = anim.t;
+      const pl = police();
+      const d = a * CELL * 3.2;
+      ctx.save();
+      ctx.globalAlpha = clamp(1 - a * 1.05, 0, 1);
+      const saveCar = { ...pl };
+      if(exit === 'right') pl.c = saveCar.c + d / CELL;
+      else if(exit === 'left') pl.c = saveCar.c - d / CELL;
+      else if(exit === 'bottom') pl.r = saveCar.r + d / CELL;
+      else pl.r = saveCar.r - d / CELL;
+      drawCar(pl, {});
+      pl.r = saveCar.r; pl.c = saveCar.c;
+      ctx.restore();
+    }
+    drawHint();
+    // 粒子 / 浮字
+    for(const p of pops){ ctx.globalAlpha = clamp(1 - p.t / 0.5, 0, 1); ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - 2, p.y - 2, 4, 4); }
+    ctx.globalAlpha = 1;
+    for(const e of effects){
+      ctx.save();
+      ctx.globalAlpha = clamp(1 - e.t / 1.1, 0, 1);
+      ctx.font = '700 ' + Math.round(CELL * 0.42) + 'px system-ui,sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = e.color;
+      ctx.fillText(e.txt, e.x, e.y - e.t * 34);
+      ctx.restore();
+    }
+    // HUD
+    ctx.save();
+    ctx.font = '600 ' + Math.round(15) + 'px system-ui,sans-serif';
+    ctx.fillStyle = '#93a0b4'; ctx.textAlign = 'left';
+    const starsTxt = curLevel().stars ? ' ' + '★'.repeat(curLevel().stars) : '';
+    ctx.fillText(curSet().name + starsTxt + ' · 第 ' + curLevel().id + ' 关', 10, 26);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#e8ecf4';
+    ctx.font = '700 20px system-ui,sans-serif';
+    ctx.fillText(steps + ' 步', W - 10, 28);
+    ctx.font = '12px system-ui,sans-serif';
+    ctx.fillStyle = '#93a0b4';
+    ctx.fillText('最少 ' + curLevel().min + ' · ' + curLevel().mobile + ' 辆车', W - 10, 46);
+    ctx.restore();
+    if(t0){
+      frameT += ((typeof performance !== 'undefined' && performance.now) ? performance.now() : 0) - t0;
+      frameN++;
+      if(frameN >= 30){ drawMs = frameT / frameN; frameN = 0; frameT = 0; }
+    }
+    if(shake > 0){ /* 轻微震屏由 step 衰减 */ }
+  }
+
+  /* ============================================================
+     主循环
+     ============================================================ */
+  function step(dt){
+    tGlobal += dt;
+    if(hintT > 0){ hintT -= dt; if(hintT <= 0) hintMove = null; }
+    if(shake > 0) shake = Math.max(0, shake - dt * 3);
+    if(glowT > 0) glowT = Math.max(0, glowT - dt * 1.6);
+    for(let i = pops.length - 1; i >= 0; i--){ pops[i].t += dt; if(pops[i].t > 0.5) pops.splice(i, 1); }
+    for(let i = effects.length - 1; i >= 0; i--){ effects[i].t += dt; if(effects[i].t > 1.2) effects.splice(i, 1); }
+    if(anim){ anim.t += dt; if(anim.t > 1) anim = null; }
+    if(demo && !demo.paused){
+      demo.t += dt;
+      while(demo && demo.t >= DEMO_GAP){
+        demo.t -= DEMO_GAP;
+        if(demo.idx >= demo.path.length){
+          stopDemo(true);
+          // 演示走完：回到起始状态（演示结果不留存）
+          const st = start.snapshot ? null : null;
+          restore(start); steps = 0; history = [];
+          toast('演示结束（已回到起始状态）');
+          break;
+        }
+        const mv = demo.path[demo.idx++];
+        const car = cars[mv.i];
+        if(!car) { stopDemo(true); break; }
+        const before = snapshot();
+        const n = applySlide(mv.i, mv.d, mv.n, true);
+        if(n > 0){
+          // 演示里警车到出口 → 直接判定演示完成
+          if(policeOut(police())){
+            stopDemo(true);
+            restore(start); steps = 0; history = [];
+            toast('演示结束：警车出库（已回到起始状态）');
+            break;
+          }
+        }
+      }
+    }
+  }
+  function frame(ts){
+    raf = requestAnimationFrame(frame);
+    if(!lastTs) lastTs = ts;
+    let dt = (ts - lastTs) / 1000; lastTs = ts;
+    if(!(dt > 0)) dt = 1 / 60;
+    dt = Math.min(dt, 1 / 20);
+    step(dt);
+    draw();
+    if(lastFrameTs){
+      const f = 1 / Math.max(0.001, (ts - lastFrameTs) / 1000);
+      fps = fps ? fps * 0.85 + f * 0.15 : f;
+    }
+    lastFrameTs = ts;
+  }
+
+  /* ============================================================
+     UI 绑定
+     ============================================================ */
+  function toast(msg){
+    const el = $('toast');
+    el.textContent = msg;
+    el.classList.add('on');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => el.classList.remove('on'), 1800);
+  }
+  function showDbg(){
+    const d = $('dbg');
+    d.classList.add('on');
+    const lv = curLevel();
+    d.textContent = [
+      '视口=' + window.innerWidth + '×' + window.innerHeight + ' dpr=' + dprNow + ' scale=' + S.toFixed(3) +
+        ' 留边=' + Math.round(OFFX) + '/' + Math.round(OFFY),
+      '棋盘=' + N + '×' + N + ' 格宽=' + CELL.toFixed(1) + ' 场地=' + BOARD.toFixed(0) + 'px',
+      '关卡集=' + curSet().name + '(' + curSet().id + ') 第' + lv.id + '关 最少=' + lv.min + ' 车=' + lv.mobile + ' 出口=' + lv.exit,
+      '步数=' + steps + ' 记录=' + (getNum(bestKey(setId, lvIdx)) || '—') + ' 撤销栈=' + history.length +
+        ' 演示=' + (demo ? (demo.paused ? '暂停' : '进行中') + ' ' + demo.idx + '/' + demo.path.length : '无'),
+      '性能: 约 ' + fps.toFixed(0) + ' fps · 绘制 ' + drawMs.toFixed(2) + ' ms/帧',
+      '车坐标: ' + cars.map((c, i) => (c.police ? '警' : i) + '(' + c.r + ',' + c.c + ',' + c.dir + c.len + ')').join(' '),
+    ].join('\n');
+  }
+  function renderLv(){
+    const tabs = $('lvTabs'); tabs.innerHTML = '';
+    LEVEL_SETS.forEach((s, i) => {
+      const b = document.createElement('button');
+      const done = s.levels.every((_, j) => getNum(clearKey(i, j)));
+      b.textContent = s.name + (done ? ' ✓' : '');
+      b.className = (i === setId ? 'on ' : '') + (done ? 'has' : '');
+      b.onclick = () => { setId = i; lvIdx = 0; renderLv(); };
+      tabs.appendChild(b);
+    });
+    const grid = $('lvGrid'); grid.innerHTML = '';
+    curSet().levels.forEach((lv, j) => {
+      const b = document.createElement('button');
+      const bs = getNum(bestKey(setId, j));
+      const stx = lv.stars ? '★'.repeat(lv.stars) + ' ' : '';
+      b.innerHTML = '<b>' + lv.id + '</b><i>' + stx + lv.min + '步' + (getNum(clearKey(setId, j)) ? ' ✓' : '') + '</i>';
+      b.className = (j === lvIdx ? 'on ' : '') + (getNum(clearKey(setId, j)) ? 'done' : '');
+      b.onclick = () => { lvIdx = j; $('lv').classList.remove('on'); sndClick(); loadLevel(setId, lvIdx); };
+      grid.appendChild(b);
+    });
+  }
+
+  function boot(){
+    cv = $('cv'); ctx = cv.getContext('2d');
+    layout();
+    // 上次玩的关卡
+    let last = null;
+    try{ last = localStorage.getItem('parking_last'); }catch(e){}
+    let si = 0, li = 0;
+    if(last && /^\d+:\d+$/.test(last)){
+      const [a, b] = last.split(':').map(Number);
+      if(a >= 0 && a < LEVEL_SETS.length && b >= 0 && b < LEVEL_SETS[a].levels.length){ si = a; li = b; }
+    }
+    loadLevel(si, li, true);
+    $('hintCard').classList.add('on');
+    window.addEventListener('resize', () => { cvRect = null; layout(); });
+    window.addEventListener('orientationchange', () => { cvRect = null; setTimeout(layout, 250); });
+    // 指针
+    const pd = e => { cvRect = null; audio(); onDown(e.clientX, e.clientY); };
+    const pm = e => { onMove(e.clientX, e.clientY); };
+    const pu = () => onUp();
+    cv.addEventListener('touchstart', e => { e.preventDefault(); pd(e.touches[0]); }, { passive:false });
+    cv.addEventListener('touchmove', e => { e.preventDefault(); if(drag) pm(e.touches[0]); }, { passive:false });
+    cv.addEventListener('touchend', e => { e.preventDefault(); pu(); }, { passive:false });
+    cv.addEventListener('mousedown', e => { e.preventDefault(); pd(e); });
+    window.addEventListener('mousemove', e => { if(drag) pm(e); });
+    window.addEventListener('mouseup', () => { if(drag) pu(); });
+    // 按钮
+    $('btnUndo').onclick = () => { audio(); sndClick(); undo(); };
+    $('btnReset').onclick = () => { audio(); sndClick(); if(demo){ stopDemo(true); restore(start); steps = 0; history = []; toast('已退出演示，回到本关起始状态'); } else reset(); };
+    $('btnHint').onclick = () => { audio(); sndClick(); showHint(); };
+    $('btnDemo').onclick = () => { audio(); sndClick(); if(demo) toggleDemoPause(); else startDemo(); };
+    $('btnSound').onclick = () => { soundOn = !soundOn; $('btnSound').textContent = soundOn ? '🔊' : '🔇'; toast(soundOn ? '音效开' : '音效关'); };
+    $('btnDiag').onclick = () => { sndClick(); showDbg(); };
+    $('btnLv').onclick = e => { e.stopPropagation(); sndClick(); renderLv(); $('lv').classList.add('on'); };
+    $('lvClose').onclick = () => $('lv').classList.remove('on');
+    $('hintOk').onclick = () => { sndClick(); $('hintCard').classList.remove('on'); hintOn = false; };
+    $('overRetry').onclick = () => { sndClick(); reset(); };
+    $('overNext').onclick = () => {
+      sndClick(); $('over').classList.remove('on');
+      if(lvIdx + 1 < curSet().levels.length) lvIdx++;
+      else if(setId + 1 < LEVEL_SETS.length){ setId++; lvIdx = 0; toast('进入「' + curSet().name + '」第 1 关'); }
+      loadLevel(setId, lvIdx);
+    };
+    if(/[?&]debug/.test(location.search)) showDbg();
+    raf = requestAnimationFrame(frame);
+  }
+
+  /* ---------- 测试钩子 ---------- */
+  window.__parking = () => ({
+    N, setId, lvIdx, steps, best, state, exit,
+    min: curLevel().min, mobile: curLevel().mobile, levelMin: curLevel().min,
+    W, H, S, dpr: dprNow, OFFX, OFFY, BX, BY, CELL, BOARD,
+    cars: cars.map(c => ({ r:c.r, c:c.c, len:c.len, dir:c.dir, color:c.color, police:!!c.police })),
+    policeIdx: cars.findIndex(c => c.police),
+    out: policeOut(police()),
+    historyLen: history.length,
+    demo: demo ? { idx: demo.idx, total: demo.path.length, paused: !!demo.paused } : null,
+    demoPaused: demo ? !!demo.paused : null,
+    hint: hintMove ? { ...hintMove } : null,
+    sets: LEVEL_SETS.map(s => ({ id: s.id, name: s.name, count: s.levels.length })),
+    setCount: LEVEL_SETS.length,
+    soundOn,
+  });
+  window.__parkingSetStage = (w, h) => {
+    const st = $('stage');
+    try{ st.style.width = w + 'px'; st.style.height = h + 'px'; }catch(e){}
+    try{ Object.defineProperty(st, 'clientWidth', { value: w, configurable: true });
+         Object.defineProperty(st, 'clientHeight', { value: h, configurable: true }); }catch(e){}
+    cvRect = null; layout(); return { W, H, S };
+  };
+  window.__parkingAudio = () => { audio(); return !!AC; };
+  window.__parkingStep = dt => step(dt);
+  window.__parkingDraw = () => draw();
+  window.__parkingReset = () => { reset(); return true; };
+  window.__parkingGoto = (s, i) => { loadLevel(s, i, true); return { setId, lvIdx }; };
+  window.__parkingUndo = () => undo();
+  window.__parkingSlide = (i, d, n) => {                 // 直接滑动（测试用），返回实际格数
+    if(state !== 'play' || demo) return 0;
+    const snap = snapshot();
+    const got = applySlide(i, d, n);
+    if(got > 0){ history.push(snap); steps += 1; if(got) sndPlace(); }
+    return got;
+  };
+  window.__parkingSolve = () => { const p = solvePath(); return p ? p.map(m => ({ i:m.i, d:m.d, n:m.n })) : null; };
+  window.__parkingHint = () => showHint();
+  window.__parkingDemo = () => startDemo();
+  window.__parkingDemoPause = () => toggleDemoPause();
+  window.__parkingExitDemo = () => { const had = !!demo; if(demo){ stopDemo(true); restore(start); steps = 0; history = []; } return had; };
+  window.__parkingNext = () => { $('overNext').onclick(); return { setId, lvIdx }; };
+  window.__parkingOverNext = () => ({ text: $('overNext').textContent, shown: $('overNext').style.display !== 'none' });
+  window.__parkingCanStep = (i, d) => canStep(i, d);
+  window.__parkingSetCars = list => { cars = list.map(c => ({ ...c })); start = snapshot(); return cars.length; };
+  window.__parkingFinish = () => { finish(); return state; };
+  window.__parkingBest = () => getNum(bestKey(setId, lvIdx));
+  window.__parkingTiers = () => TIER_INFO();
+
+  function TIER_INFO(){ return LEVEL_SETS.map(s => ({ id: s.id, name: s.name, count: s.levels.length,
+    mins: s.levels.map(l => l.min) })); }
+
+  document.addEventListener('DOMContentLoaded', boot);
+  if(document.readyState !== 'loading') boot();
+})();
+</script>
+</body>
+</html>
