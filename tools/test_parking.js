@@ -41,7 +41,10 @@ const mkEl = tag => { const s = new Set(); const el = {
   getContext: tag === 'canvas' ? (() => mkCtx()) : undefined,
   classList: { add: c => s.add(c), remove: c => s.delete(c), contains: c => s.has(c) },
   addEventListener(){}, appendChild(c){ this.children.push(c); return c; },
-  getBoundingClientRect(){ return { left: 0, top: 0, width: 390, height: 700 }; },
+  // ★ 动态桩：canvas 的 CSS 显示尺寸 = 缓冲区尺寸 / dpr（与真实浏览器一致；
+  //   写死尺寸会让横屏触摸换算用例失真）
+  // ★ dpr 必须和游戏一致地封顶 2（否则横屏触摸换算用例会因 2.625 vs 2 失真）
+  getBoundingClientRect(){ const d = Math.min(sandbox.window.devicePixelRatio || 1, 2); return { left: 0, top: 0, width: this.width / d, height: this.height / d }; },
   select(){}, setSelectionRange(){}, focus(){},
 }; return el; };
 const els = {};
@@ -354,6 +357,23 @@ section('8) 绘制冒烟与布局稳定性');
   const geoB = [b.W, b.H, b.CELL.toFixed(3), b.BX.toFixed(3), b.BY.toFixed(3)];
   ok(a.W === b.W && a.H === b.H, '★ 逻辑尺寸固定：竖屏/横屏都是 ' + a.W + '×' + a.H);
   ok(JSON.stringify(geoA) === JSON.stringify(geoB), '★ 转屏后棋盘几何完全一致（不随屏幕比例变形）');
+
+  // ★ 横屏触摸坐标换算：逻辑点 -> 屏幕点 -> 再换算回来，必须回到同一点（含最右列）
+  win.__parkingSetStage(740, 411);            // 横屏：S 由高度决定，画布比逻辑区宽得多
+  const L = R();
+  const pts = [[10, 10], [50, 300], [330, 300], [349, 549], [180, 280]];
+  const hit = pts.map(([lx, ly]) => {
+    const p = L.toLogical(L.OFFX + lx * L.S, L.OFFY + ly * L.S);
+    return Math.abs(p.x - lx) < 0.6 && Math.abs(p.y - ly) < 0.6;
+  });
+  ok(hit.every(Boolean),
+     '★ 横屏触摸坐标换算正确（5 取点全中，含最右列；OFFX=' + Math.round(L.OFFX) + ' S=' + L.S.toFixed(3) + '）',
+     hit.map((v, i) => i + ':' + (v ? '✓' : '✗')).join(' '));
+  // 回归保护：旧算法（除 cvRect.width/W）在横屏会把右侧点判成偏左
+  const oldWay = (349 * L.S + L.OFFX) / ((L.W * 0) + (411 / (L.S)) * 0 + (L.W) ) ;
+  const oldMap = (349 * L.S + L.OFFX) / (L.W / 1) * 0 + ((349 * L.S + L.OFFX) / (740 / L.W)) ;
+  ok(oldMap < 349 - 5, '★ 旧算法在横屏确实右偏（回归对照：旧算 ' + oldMap.toFixed(1) + ' vs 正确 349）');
+  win.__parkingSetStage(390, 700);
   win.__parkingSetStage(390, 700);
 }
 

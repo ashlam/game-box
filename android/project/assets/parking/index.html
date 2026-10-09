@@ -175,6 +175,7 @@
     S = Math.min(availH / HFIX, availW / W);
     H = HFIX;
     OFFX = (availW - W * S) / 2; OFFY = (availH - H * S) / 2;
+    cvRect = null;    // ★ 尺寸变了 → 缓存的 canvas 显示矩形作废（否则转屏后触摸坐标仍按旧尺寸换算）
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     dprNow = dpr;
     cv.style.width = availW + 'px'; cv.style.height = availH + 'px';
@@ -490,7 +491,15 @@
   let cvRect = null;
   function toLogical(clientX, clientY){
     if(!cvRect) cvRect = cv.getBoundingClientRect();
-    return { x: (clientX - cvRect.left) / (cvRect.width / W), y: (clientY - cvRect.top) / (cvRect.height / H) };
+    // ★ canvas 缓冲区 = availW×availH，逻辑区 W×H 经 S 缩放后在缓冲区内居中偏移 (OFFX,OFFY)。
+    //   竖屏时 S = availW/W（宽度受限）歪打正着；★横屏时 S = availH/H、画布比逻辑区宽得多，
+    //   必须「先换算回缓冲区像素 → 减留边 → 除 S」，否则整体左偏 → 右侧的车点不动。
+    const bx = (cv.width / dprNow) || 1;      // 缓冲区 CSS 宽 = availW
+    const by = (cv.height / dprNow) || 1;     // 缓冲区 CSS 高 = availH
+    const kx = (cvRect.width || bx) / bx;     // 元素实际显示尺寸 / 缓冲区尺寸
+    const ky = (cvRect.height || by) / by;
+    return { x: ((clientX - cvRect.left) / kx - OFFX) / S,
+             y: ((clientY - cvRect.top) / ky - OFFY) / S };
   }
   function carAt(x, y){
     if(x < BX || y < BY || x > BX + BOARD || y > BY + BOARD) return -1;
@@ -1037,6 +1046,7 @@
     N, setId, lvIdx, steps, best, state, exit,
     min: curLevel().min, mobile: curLevel().mobile, levelMin: curLevel().min,
     W, H, S, dpr: dprNow, OFFX, OFFY, BX, BY, CELL, BOARD,
+    toLogical: (x, y) => toLogical(x, y),
     cars: cars.map(c => ({ r:c.r, c:c.c, len:c.len, dir:c.dir, color:c.color, police:!!c.police })),
     policeIdx: cars.findIndex(c => c.police),
     out: policeOut(police()),
