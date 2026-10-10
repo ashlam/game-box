@@ -234,6 +234,42 @@ section('3) 步数口径与胜利条件');
   ok(g.state === 'play', '普通车贴边不触发任何胜利（只有警车能出）');
 }
 
+/* ===== 3.5) ★ 通关链路 + 跨星级推进（用户要求"确保"） ===== */
+section('3.5) 通关 → 面板 → 跨星级推进');
+{
+  const tiers = win.__parkingTiers();
+  ok(tiers.length >= 2, '至少两个星级（实际 ' + tiers.length + ' 个）');
+  const lastIdx = tiers[0].count - 1;
+  win.__parkingGoto(0, lastIdx);
+  ok(R().lvIdx === lastIdx, '已跳到「' + tiers[0].name + '」最后一关（第 ' + (lastIdx + 1) + ' 关）');
+  win.__parkingSetCars([{ r: 3, c: 3, len: 2, dir: 'v', color: '#111827', police: true }]);
+  const moved = win.__parkingSlide(0, 1, 1);
+  ok(moved === 1 && R().out === true, '★ 警车滑到底 → 判定出库');
+  win.__parkingFinish();                      // 真实链路里由 onUp 触发
+  ok(R().state === 'won', '★ 通关后 state = won（若为 play → 面板与跳转全废）');
+  ok(win.__parkingPanel() === true, '★ 通关面板已打开');
+  const info = win.__parkingPanelInfo();
+  ok(info.setDone === true, '面板识别"本星级最后一关已完成"');
+  ok(info.hasNextSet === true, '后面还有下一个星级');
+  ok(/进入「/.test(info.nextLabel) && /第 1 关/.test(info.nextLabel),
+     '★ 按钮文案指向下一星级第 1 关（实际："' + info.nextLabel + '"）');
+  ok(info.nextVisible === true, '★ 该按钮可见');
+  const after = win.__parkingNext();
+  ok(after.setId === 1 && after.lvIdx === 0,
+     '★ 推进后进入下一星级第 1 关（setId=' + after.setId + ' lvIdx=' + after.lvIdx + '）');
+  ok(R().state === 'play', '新关卡状态为 play');
+  ok(win.__parkingTiers()[R().setId].name === '2 星', '当前星级切到「2 星」');
+  // 最后一档：不能再往后跳，且文案不含 undefined
+  const lastSet = tiers.length - 1;
+  win.__parkingGoto(lastSet, tiers[lastSet].count - 1);
+  win.__parkingSetCars([{ r: 3, c: 3, len: 2, dir: 'v', color: '#111827', police: true }]);
+  win.__parkingSlide(0, 1, 1); win.__parkingFinish(); win.__parkingPanel();
+  const info2 = win.__parkingPanelInfo();
+  ok(info2.hasNextSet === false, '最后一档没有下一星级');
+  ok(!/undefined/.test(info2.nextLabel), '最后一档按钮文案不含 undefined（实际："' + info2.nextLabel + '"）');
+  win.__parkingGoto(0, 0);
+}
+
 /* ================= 4) 撤销 / 重置 ================= */
 section('4) 撤销与重置');
 {

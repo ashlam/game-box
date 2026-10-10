@@ -31,6 +31,8 @@
     font:inherit;font-size:12px;padding:5px 9px;border-radius:9px;white-space:nowrap;
   }
   .top button.on{background:#2b3446;border-color:#3d4a63;color:#fff}
+  .top button.off{opacity:.42}
+  .top button.undo-ready{background:#2b3446;border-color:#4a6ea8;color:#fff}
   .bar{display:flex;gap:6px;padding:0 10px 6px;flex:0 0 auto}
   .bar button{
     flex:1;background:var(--panel);border:1px solid var(--line);color:var(--text);
@@ -413,10 +415,17 @@
     }
     return n;
   }
+  function syncUndoBtn(){
+    const b = $('btnUndo'); if(!b) return;
+    const can = !demo && history.length > 0;
+    b.className = can ? 'undo-ready' : 'off';
+    b.textContent = can ? '↶ 撤销 ' + history.length : '↶ 撤销';
+  }
   function undo(){
     if(demo){ toast('演示进行中：请先「退出演示」'); return 0; }
     if(!history.length){ toast('没有可撤销的步骤'); sndBlocked(); return 0; }
     restore(history.pop());
+    syncUndoBtn();
     sndUndo();
     return 1;
   }
@@ -433,6 +442,15 @@
     if(!st || steps < st) setNum(bestKey(setId, lvIdx), steps);
     setTimeout(() => { if(state === 'won' && !demo) showPanel(); }, 900);
   }
+  /** 下一关；本套已通关则跨到下一星级第 1 关（★ 用户要求"确保"）*/
+  function nextLevel(){
+    $('over').classList.remove('on');
+    if(lvIdx + 1 < curSet().levels.length) lvIdx++;
+    else if(setId + 1 < LEVEL_SETS.length){ setId++; lvIdx = 0; toast('进入「' + curSet().name + '」第 1 关'); }
+    loadLevel(setId, lvIdx);
+    if(typeof syncUndoBtn === 'function') syncUndoBtn();
+    return { setId, lvIdx };
+  }
   function showPanel(){
     $('overSteps').textContent = steps + ' 步';
     const lv = curLevel();
@@ -448,7 +466,7 @@
       $('overText').textContent += '　★ ' + curSet().name + '已全部通关！';
       $('overNext').textContent = '进入「' + nextSet.name + '」第 1 关 →';
     } else if(setDone){
-      $('overText').textContent += '　★ 三册已全部通关，厉害！';
+      $('overText').textContent += '　★ 全部星级已通关，厉害！';
       $('overNext').textContent = '下一关 →';
     } else {
       $('overNext').textContent = '下一关 →';
@@ -543,7 +561,7 @@
     if(!drag) return;
     const moved = Math.abs(drag.moved);
     if(moved > 0){
-      history.push(drag.snap);
+      history.push(drag.snap); syncUndoBtn();
       if(history.length > 200) history.shift();
       steps += 1;                                     // ★ 一次滑动（无论几格）= 1 步
       sndPlace();
@@ -1022,6 +1040,7 @@
     window.addEventListener('mouseup', () => { if(drag) pu(); });
     // 按钮
     $('btnUndo').onclick = () => { audio(); sndClick(); undo(); };
+    syncUndoBtn();
     $('btnReset').onclick = () => { audio(); sndClick(); if(demo){ stopDemo(true); restore(start); steps = 0; history = []; toast('已退出演示，回到本关起始状态'); } else reset(); };
     $('btnHint').onclick = () => { audio(); sndClick(); showHint(); };
     $('btnDemo').onclick = () => { audio(); sndClick(); if(demo) toggleDemoPause(); else startDemo(); };
@@ -1031,12 +1050,7 @@
     $('lvClose').onclick = () => $('lv').classList.remove('on');
     $('hintOk').onclick = () => { sndClick(); $('hintCard').classList.remove('on'); hintOn = false; };
     $('overRetry').onclick = () => { sndClick(); reset(); };
-    $('overNext').onclick = () => {
-      sndClick(); $('over').classList.remove('on');
-      if(lvIdx + 1 < curSet().levels.length) lvIdx++;
-      else if(setId + 1 < LEVEL_SETS.length){ setId++; lvIdx = 0; toast('进入「' + curSet().name + '」第 1 关'); }
-      loadLevel(setId, lvIdx);
-    };
+    $('overNext').onclick = () => { sndClick(); nextLevel(); };
     if(/[?&]debug/.test(location.search)) showDbg();
     raf = requestAnimationFrame(frame);
   }
@@ -1084,10 +1098,20 @@
   window.__parkingDemoPause = () => toggleDemoPause();
   window.__parkingExitDemo = () => { const had = !!demo; if(demo){ stopDemo(true); restore(start); steps = 0; history = []; } return had; };
   window.__parkingNext = () => { $('overNext').onclick(); return { setId, lvIdx }; };
+  window.__parkingPanelInfo = () => ({
+    open: $('over').classList.contains('on'),
+    title: $('overTitle').textContent, sub: $('overSub').textContent,
+    text: $('overText').textContent,
+    nextLabel: $('overNext').textContent,
+    nextVisible: $('overNext').style.display !== 'none',
+    setDone: lvIdx + 1 >= curSet().levels.length,
+    hasNextSet: setId + 1 < LEVEL_SETS.length,
+  });
   window.__parkingOverNext = () => ({ text: $('overNext').textContent, shown: $('overNext').style.display !== 'none' });
   window.__parkingCanStep = (i, d) => canStep(i, d);
   window.__parkingSetCars = list => { cars = list.map(c => ({ ...c })); start = snapshot(); return cars.length; };
   window.__parkingFinish = () => { finish(); return state; };
+  window.__parkingPanel = () => { showPanel(); return $('over').classList.contains('on'); };
   window.__parkingBest = () => getNum(bestKey(setId, lvIdx));
   window.__parkingTiers = () => TIER_INFO();
 
