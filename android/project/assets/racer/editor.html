@@ -22,20 +22,39 @@
   .hint{color:var(--dim);font-size:12.5px;line-height:1.75;margin:0 0 12px}
   .hint b{color:#cfe0ff}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px}
-  .row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:9px}
-  .row label{font-size:14px;font-weight:600}
-  .val{font-variant-numeric:tabular-nums;font-size:13px;color:var(--dim)}
-  .val b{font-size:20px;color:var(--txt);font-weight:800}
-  .val.hot b{color:var(--hot)}
-  .sub{color:var(--dim);font-size:11.5px;line-height:1.6;margin-top:8px}
-  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:34px;background:transparent;margin:0}
-  input[type=range]::-webkit-slider-runnable-track{height:7px;border-radius:4px;background:#2f3646}
-  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;border-radius:50%;
-        background:var(--acc);border:3px solid #0f1115;margin-top:-10px;box-shadow:0 2px 8px rgba(0,0,0,.5)}
-  input[type=range].hot::-webkit-slider-thumb{background:var(--hot)}
-  input[type=range]::-moz-range-track{height:7px;border-radius:4px;background:#2f3646}
-  input[type=range]::-moz-range-thumb{width:22px;height:22px;border:3px solid #0f1115;border-radius:50%;background:var(--acc)}
-  .ticks{display:flex;justify-content:space-between;color:#5f6a7d;font-size:10.5px;margin-top:-6px}
+  .sec{font-size:13px;color:var(--txt);font-weight:800;margin:18px 2px 9px;display:flex;align-items:center;gap:8px}
+  .sec::after{content:'';flex:1;height:1px;background:var(--line)}
+  .frow{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .frow:last-child{margin-bottom:0}
+  .frow .lb{flex:1;font-size:13.5px;font-weight:600}
+  .frow .lb small{display:block;color:var(--dim);font-weight:400;font-size:11px;margin-top:2px;line-height:1.5}
+  .unit{color:var(--dim);font-size:11.5px;width:34px}
+  /* ★ 数字输入（代替原来的滑块）：- 输入 + */
+  .sp{display:inline-flex;align-items:stretch;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#12161e}
+  .sp button{width:32px;height:32px;border:0;background:#1e2430;color:var(--txt);font-size:17px;line-height:1;font-family:inherit}
+  .sp button:active{background:#2a3444}
+  .sp input{width:58px;height:32px;border:0;background:transparent;color:var(--txt);text-align:center;
+            font-size:14px;font-weight:800;font-family:inherit;-moz-appearance:textfield}
+  .sp input::-webkit-outer-spin-button,.sp input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .sp input:focus{outline:none;background:#1a2231}
+  .sp.hot input{color:var(--hot)}
+  /* ★ 对象图鉴 */
+  .obj{display:flex;gap:12px;align-items:flex-start}
+  .obj canvas{width:62px;height:92px;flex:0 0 62px;border-radius:11px;
+              background:linear-gradient(#313a4b 0%,#262d3a 55%,#1d222c 100%);border:1px solid #333c4d}
+  .oinfo{flex:1;min-width:0}
+  .nm{font-size:14.5px;font-weight:800;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .tag{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px;
+       background:rgba(91,140,255,.16);color:#9dbdff;border:1px solid rgba(91,140,255,.32)}
+  .tag.danger{background:rgba(255,107,91,.16);color:#ff9c8f;border-color:rgba(255,107,91,.38)}
+  .tag.eat{background:rgba(14,224,74,.14);color:#7dffa0;border-color:rgba(14,224,74,.34)}
+  .feat{color:var(--dim);font-size:11.5px;line-height:1.65;margin-top:3px}
+  .feat b{color:#cfe0ff;font-weight:600}
+  .grid2{display:grid;gap:7px;margin-top:9px}
+  .frow.mini .lb{font-size:12px;font-weight:600}
+  .frow.mini .lb small{display:none}
+  .sp.mini button{width:28px;height:28px;font-size:15px}
+  .sp.mini input{width:50px;height:28px;font-size:13px}
   pre{margin:0;white-space:pre-wrap;word-break:break-all;font-size:12.5px;line-height:1.8;
       font-family:ui-monospace,Menlo,Consolas,monospace;color:#a8c4ea}
   .btns{display:grid;gap:9px;margin-top:14px}
@@ -57,46 +76,23 @@
   <button id="btnOpen" class="pri">试玩</button>
 </div>
 
-<p class="hint">拖动下面的滑块调整，点 <b>保存并试玩</b> 即写入本机（localStorage）。
-火箭车下次打开会自动读取这里的参数。<span id="state" class="badge">当前：默认值</span></p>
+<p class="hint">直接点数字修改（也可以按 <b>− ＋</b> 微调），点 <b>保存并试玩</b> 写入本机。
+火箭车下次打开会自动读取这里的参数。<span id="state" class="badge">当前：默认值</span><br>
+★ 没有燃油了：<b>生命值既是血也是燃料</b> —— 跑着就掉、掉光就结束，绿星回血、每过一段补一次。</p>
 
-<div class="card">
-  <div class="row"><label>正常加速上限</label><span class="val"><b id="vVmax">800</b> km/h</span></div>
-  <input type="range" id="rVmax" min="200" max="1200" step="10" value="800">
-  <div class="ticks"><span>200</span><span>700</span><span>1200</span></div>
-  <div class="sub">按住油门能跑到的最高速度</div>
-</div>
+<div class="sec">一、速度与时间</div>
+<div id="globalBox"></div>
 
-<div class="card">
-  <div class="row"><label>开局时间</label><span class="val"><b id="vTime">55</b> 秒</span></div>
-  <input type="range" id="rTime" min="10" max="150" step="5" value="55">
-  <div class="ticks"><span>10</span><span>80</span><span>150</span></div>
-  <div class="sub">每局开始的倒计时</div>
-</div>
+<div class="sec">二、路上的东西</div>
+<p class="hint">下面是游戏里<b>每一种</b>障碍和车，左边就是它在路上的样子，右边是它的数值。
+想让哪个形象更特殊，单独改它的扣血和速度就行。</p>
+<div id="objBox"></div>
 
-<div class="card">
-  <div class="row"><label>过关加时</label><span class="val"><b id="vBonus">32</b> 秒</span></div>
-  <input type="range" id="rBonus" min="0" max="90" step="2" value="32">
-  <div class="ticks"><span>0</span><span>45</span><span>90</span></div>
-  <div class="sub">跑满一段（3600 距离）奖励的时间</div>
-</div>
+<div class="sec">三、能吃的</div>
+<div id="pickBox"></div>
 
+<div class="sec">四、换算结果</div>
 <div class="card">
-  <div class="row"><label>红星加速上限</label><span class="val hot"><b id="vBoost">1100</b> km/h</span></div>
-  <input type="range" id="rBoost" class="hot" min="500" max="2500" step="25" value="1100">
-  <div class="ticks"><span>500</span><span>1500</span><span>2500</span></div>
-  <div class="sub">吃到红色五角星后的最高速度（等于「正常上限 × 倍率」）</div>
-</div>
-
-<div class="card">
-  <div class="row"><label>红星持续时间</label><span class="val hot"><b id="vBoostT">8.0</b> 秒</span></div>
-  <input type="range" id="rBoostT" class="hot" min="1" max="15" step="0.5" value="8">
-  <div class="ticks"><span>1</span><span>8</span><span>15</span></div>
-  <div class="sub">吃到红星后高速维持多久</div>
-</div>
-
-<div class="card">
-  <div class="row"><label>换算结果</label><span class="val">游戏内部数值</span></div>
   <pre id="calc"></pre>
 </div>
 
@@ -113,50 +109,368 @@
   const $ = id => document.getElementById(id);
   const KEY = 'gracer_cfg';
   const KMH = 1.25;                       // 逻辑速度 → km/h 的换算（与游戏一致）
-  const DEF = { vMaxKmh: 800, timeStart: 55, timeBonus: 32, boostKmh: 1100, boostTime: 8 };
-  const RANGES = { vMaxKmh: [200, 1200], timeStart: [10, 150], timeBonus: [0, 90], boostKmh: [500, 2500], boostTime: [1, 15] };
+  const HP_MAX = 100;                     // 与游戏一致的生命值上限（只用来算"能撞几次"）
 
+  /* ---------- 一、整体参数 ---------- */
+  const GLOBALS = [
+    { k:'vMaxKmh',   id:'rVmax',   name:'正常加速上限', unit:'km/h', min:200, max:1200, step:10,  sub:'按住油门能跑到的最高速度' },
+    { k:'timeStart', id:'rTime',   name:'开局时间',     unit:'秒',   min:10,  max:150,  step:5,   sub:'每局开始的倒计时' },
+    { k:'timeBonus', id:'rBonus',  name:'过关加时',     unit:'秒',   min:0,   max:90,   step:2,   sub:'跑满一段（3600 距离）奖励的时间' },
+    { k:'boostKmh',  id:'rBoost',  name:'红星加速上限', unit:'km/h', min:500, max:2500, step:25,  sub:'吃到红五角星后的最高速度', hot:true },
+    { k:'boostTime', id:'rBoostT', name:'红星持续时间', unit:'秒',   min:1,   max:15,   step:0.5, sub:'吃到红星后高速维持多久', hot:true },
+    { k:'hpDrain',   id:'rHpDrain',  name:'生命自然消耗', unit:'点/秒', min:0, max:5, step:0.1, sub:'跑得越快掉得越快（停车也慢慢掉）；0 = 完全不掉', hot:true },
+    { k:'healFuel',  id:'rHealFuel', name:'绿星回血',     unit:'点',    min:0, max:100, step:5,  sub:'吃到绿色五角星恢复的生命' },
+    { k:'stageHeal', id:'rStageHeal',name:'每过一段补',   unit:'点',    min:0, max:100, step:5,  sub:'跑完一段"发工资"补多少；默认 15 与全速跑完一段的消耗打平' },
+  ];
+
+  /* ---------- 二、路上的东西（与游戏 ENEMY / 伤害表一一对应） ----------
+     v 是游戏里的逻辑速度，显示/编辑用 km/h（v × 1.25） */
+  const OBJS = [
+    { kind:'cone',   name:'锥桶',   tier:'block',  size:'最矮最小',  color:'#f2842b',
+      feat:'橙白锥体，<b>最轻</b>的路障', dmg:'dmgCone' },
+    { kind:'barrel', name:'油桶',   tier:'block',  size:'比锥桶高',  color:'#eef1f6',
+      feat:'白桶身 + 两道橙带，<b>最轻</b>的路障', dmg:'dmgBarrel' },
+    { kind:'sports', name:'跑车',   tier:'car',    color:'#c2a545', lite:'#ddc777', wf:1.00, hf:0.87, v:208,
+      feat:'<b>最快</b> · 车身低矮 · 会一路跑掉', dmg:'dmgSports', spd:'spdSports' },
+    { kind:'sedan',  name:'轿车',   tier:'car',    color:'#7d6a9c', lite:'#a596c0', wf:1.00, hf:1.00, v:150,
+      feat:'中速 · 标准车身 · 不变道', dmg:'dmgSedan', spd:'spdSedan' },
+    { kind:'weaver', name:'变道车', tier:'car',    color:'#c1703a', lite:'#d99a68', wf:1.00, hf:1.00, v:132,
+      feat:'★ 先亮<b>琥珀转向灯</b>再变道（可预判）', dmg:'dmgWeaver', spd:'spdWeaver' },
+    { kind:'truck',  name:'卡车',   tier:'truck',  color:'#b9c2cc', lite:'#d8dee6', wf:1.15, hf:1.42, v:88,  truck:true,
+      feat:'白货箱 + 蓝驾驶室 · 慢 · 不变道', dmg:'dmgTruck', spd:'spdTruck' },
+    { kind:'hauler', name:'大货车', tier:'hauler', color:'#6d7b8a', lite:'#98a8b8', wf:1.34, hf:1.95, v:62,  hauler:true, danger:true,
+      feat:'★ 橙黑危险条纹 + <b>「危」字</b> · 最重最慢 · <b>护盾无效</b>', dmg:'dmgHauler', spd:'spdHauler' },
+  ];
+
+  /* ---------- 三、能吃的（只读，帮助分清敌我） ---------- */
+  const PICKUPS = [
+    { kind:'fuel',  name:'绿色五角星', feat:'<b>恢复 {heal} 生命</b>（生命既是血也是燃料，没有单独的油箱了）' },
+    { kind:'boost', name:'红色五角星', feat:'<b>喷火加速</b>（不回血）；喷火中再吃 → 阶段2 护盾 / 阶段3 撞飞小车' },
+  ];
+
+  /* ---------- 默认值（游戏里的默认 = 这里的值） ---------- */
+  const DEF = {};
+  GLOBALS.forEach(g => { DEF[g.k] = { vMaxKmh:800, timeStart:55, timeBonus:32, boostKmh:1100, boostTime:8,
+                                      hpDrain:2.0, healFuel:20, stageHeal:15 }[g.k]; });
+  OBJS.forEach(o => {
+    if(o.dmg) DEF[o.dmg] = { block:30, car:40, truck:60, hauler:80 }[o.tier];
+    if(o.spd) DEF[o.spd] = Math.round(o.v * KMH);
+  });
+
+  /* ============================================================
+     缩略图：把游戏里的画法照搬一份（简化版），
+     让「哪种形象长什么样、扣多少血」一眼对得上
+     ============================================================ */
+  const TIRE = '#1a1c20', GLASS = '#cfeaff', TRUCKBOX = '#e8ecf2', CAB = '#3b7dd8';
+  function rr(c, x, y, w, h, r){
+    r = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+    c.beginPath();
+    c.moveTo(x + r, y); c.lineTo(x + w - r, y); c.quadraticCurveTo(x + w, y, x + w, y + r);
+    c.lineTo(x + w, y + h - r); c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    c.lineTo(x + r, y + h); c.quadraticCurveTo(x, y + h, x, y + h - r);
+    c.lineTo(x, y + r); c.quadraticCurveTo(x, y, x + r, y);
+    c.closePath();
+  }
+  function carShape(c, cx, cy, w, h, body, lite, opts){
+    const o = opts || {};
+    c.fillStyle = TIRE;
+    const tw = w * 0.16, th = h * 0.2;
+    rr(c, cx - w/2 - tw*0.3, cy - h*0.32, tw, th, 2); c.fill();
+    rr(c, cx + w/2 - tw*0.7, cy - h*0.32, tw, th, 2); c.fill();
+    rr(c, cx - w/2 - tw*0.3, cy + h*0.12, tw, th, 2); c.fill();
+    rr(c, cx + w/2 - tw*0.7, cy + h*0.12, tw, th, 2); c.fill();
+    const g = c.createLinearGradient(cx - w/2, 0, cx + w/2, 0);
+    g.addColorStop(0, lite); g.addColorStop(0.45, body); g.addColorStop(1, body);
+    c.fillStyle = g;
+    rr(c, cx - w/2, cy - h/2, w, h, Math.min(7, w*0.24)); c.fill();
+    c.strokeStyle = 'rgba(30,36,44,.5)'; c.lineWidth = 1.2;
+    rr(c, cx - w/2, cy - h/2, w, h, Math.min(7, w*0.24)); c.stroke();
+    c.fillStyle = GLASS;
+    rr(c, cx - w*0.34, cy - h*0.30, w*0.68, h*0.2, 3); c.fill();
+    rr(c, cx - w*0.34, cy + h*0.22, w*0.68, h*0.16, 3); c.fill();
+    c.fillStyle = 'rgba(255,255,255,.35)';
+    rr(c, cx - w*0.4, cy - h*0.06, w*0.24, h*0.34, 3); c.fill();
+    c.fillStyle = lite;
+    rr(c, cx - w*0.44, cy - h*0.52, w*0.88, h*0.08, 2); c.fill();
+    if(o.truck){
+      c.fillStyle = TRUCKBOX;
+      rr(c, cx - w*0.46, cy - h*0.42, w*0.92, h*0.62, 3); c.fill();
+      c.strokeStyle = 'rgba(30,36,44,.4)';
+      rr(c, cx - w*0.46, cy - h*0.42, w*0.92, h*0.62, 3); c.stroke();
+      c.fillStyle = CAB;
+      rr(c, cx - w*0.46, cy + h*0.20, w*0.92, h*0.20, 3); c.fill();
+    }
+  }
+  function haulerShape(c, cx, cy, w, h){
+    c.fillStyle = TIRE;
+    const tw = w * 0.15, th = h * 0.11;
+    for(const fx of [-0.5, 0.5]) for(const fy of [-0.33, -0.17, 0.28, 0.40]){
+      rr(c, cx + fx*w - tw/2, cy + fy*h, tw, th, 2); c.fill();
+    }
+    c.fillStyle = '#39424e';
+    rr(c, cx - w/2, cy - h/2, w, h, 4); c.fill();
+    const bx = cx - w*0.47, by = cy - h*0.48, bw = w*0.94, bh = h*0.74;
+    c.fillStyle = TRUCKBOX; rr(c, bx, by, bw, bh, 3); c.fill();
+    c.save(); rr(c, bx, by, bw, bh, 3); c.clip();
+    c.fillStyle = 'rgba(242,130,43,.85)';
+    for(let i = -6; i < 14; i++){
+      c.save(); c.translate(bx + i * (bw*0.26), cy); c.rotate(-0.52);
+      c.fillRect(0, -h, bw*0.11, h*2); c.restore();
+    }
+    c.restore();
+    c.strokeStyle = 'rgba(30,36,44,.5)'; c.lineWidth = 1.2;
+    rr(c, bx, by, bw, bh, 3); c.stroke();
+    c.fillStyle = '#2b3440';
+    rr(c, cx - w*0.47, cy + h*0.26, w*0.94, h*0.22, 3); c.fill();
+    c.fillStyle = GLASS;
+    rr(c, cx - w*0.34, cy + h*0.30, w*0.68, h*0.10, 2); c.fill();
+    c.fillStyle = '#e03b2f';
+    c.fillRect(cx - w*0.47, by, w*0.94, Math.max(1.6, h*0.028));
+    if(w >= 26){
+      c.fillStyle = 'rgba(18,22,28,.82)';
+      c.font = '800 ' + Math.round(w*0.52) + 'px sans-serif';
+      c.textAlign = 'center'; c.fillText('危', cx, cy + h*0.03); c.textAlign = 'left';
+    }
+  }
+  function starShape(c, cx, cy, r, cLite, cMain, cDeep){
+    c.globalAlpha = 0.35; c.strokeStyle = cMain; c.lineWidth = 2.4;
+    c.beginPath(); c.arc(cx, cy, r*1.4, 0, 7); c.stroke(); c.globalAlpha = 1;
+    c.beginPath();
+    for(let i = 0; i < 10; i++){
+      const rr2 = (i % 2 === 0) ? r : r*0.44;
+      const a = -Math.PI/2 + i*Math.PI/5;
+      const px = cx + Math.cos(a)*rr2, py = cy + Math.sin(a)*rr2;
+      if(i === 0) c.moveTo(px, py); else c.lineTo(px, py);
+    }
+    c.closePath();
+    const g = c.createLinearGradient(0, cy - r, 0, cy + r);
+    g.addColorStop(0, cLite); g.addColorStop(0.55, cMain); g.addColorStop(1, cDeep);
+    c.fillStyle = g; c.fill();
+    c.strokeStyle = cDeep; c.lineWidth = 1.6; c.stroke();
+    c.fillStyle = 'rgba(255,255,255,.9)';
+    c.beginPath(); c.arc(cx - r*0.16, cy - r*0.20, Math.max(1.6, r*0.13), 0, 7); c.fill();
+  }
+  /** 画一张缩略图（canvas 里 62×92 的 CSS 尺寸，按 DPR 放大） */
+  function drawIcon(cv, kind){
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    const W = 62, H = 92;
+    cv.width = W * dpr; cv.height = H * dpr;
+    const c = cv.getContext('2d');
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, W, H);
+    const cx = W / 2, cy = H / 2;
+    // 路面小片段，衬托比例
+    c.fillStyle = 'rgba(255,255,255,.05)';
+    c.fillRect(0, cy - 18, W, 36);
+    if(kind === 'cone'){
+      const w = 26, h = 40;
+      c.fillStyle = 'rgba(0,0,0,.22)';
+      c.beginPath(); c.ellipse(cx, cy + h*0.44, w*0.60, h*0.10, 0, 0, 7); c.fill();
+      c.fillStyle = '#f2842b';
+      c.beginPath(); c.moveTo(cx, cy - h*0.5); c.lineTo(cx + w*0.42, cy + h*0.30); c.lineTo(cx - w*0.42, cy + h*0.30);
+      c.closePath(); c.fill();
+      c.fillStyle = '#fff'; c.fillRect(cx - w*0.26, cy - h*0.02, w*0.52, h*0.16);
+      c.fillStyle = '#c25f14'; rr(c, cx - w*0.58, cy + h*0.28, w*1.16, h*0.16, 3); c.fill();
+    }else if(kind === 'barrel'){
+      const w = 24, h = 46;
+      c.fillStyle = 'rgba(0,0,0,.22)';
+      c.beginPath(); c.ellipse(cx, cy + h*0.46, w*0.56, h*0.09, 0, 0, 7); c.fill();
+      c.fillStyle = '#eef1f6'; rr(c, cx - w*0.42, cy - h*0.46, w*0.84, h*0.92, w*0.16); c.fill();
+      c.strokeStyle = 'rgba(30,36,44,.45)'; c.lineWidth = 1.2;
+      rr(c, cx - w*0.42, cy - h*0.46, w*0.84, h*0.92, w*0.16); c.stroke();
+      c.fillStyle = '#f2842b';
+      c.fillRect(cx - w*0.42, cy - h*0.18, w*0.84, h*0.14);
+      c.fillRect(cx - w*0.42, cy + h*0.04, w*0.84, h*0.14);
+    }else if(kind === 'fuel' || kind === 'boost'){
+      const isB = kind === 'boost';
+      starShape(c, cx, cy, 21, isB ? '#ff9a8a' : '#8affb0', isB ? '#ff3b30' : '#0ee04a', isB ? '#8f150d' : '#0d7a33');
+    }else{
+      const o = OBJS.filter(x => x.kind === kind)[0];
+      // 尺寸：按游戏里的 wf/hf 相对比例缩放，最大不超过预览框
+      const base = 30;
+      let w = base * (o.wf || 1), h = base * 1.45 * (o.hf || 1);
+      const k = Math.min(1, 46 / Math.max(w, h * 0.62), 78 / h);
+      w *= k; h *= k;
+      if(o.hauler) haulerShape(c, cx, cy, w, h);
+      else carShape(c, cx, cy, w, h, o.color, o.lite, { truck: !!o.truck });
+      if(kind === 'weaver'){         // 转向灯：琥珀箭头
+        c.fillStyle = '#ffb300';
+        c.beginPath();
+        const sx = cx + w*0.52, sy2 = cy - h*0.26;
+        c.moveTo(sx, sy2); c.lineTo(sx + 8, sy2 + 6); c.lineTo(sx, sy2 + 12); c.closePath(); c.fill();
+      }
+    }
+  }
+
+  /* ---------- 数字输入组件 ---------- */
+  function stepper(spec){
+    const wrap = document.createElement('span');
+    wrap.className = 'sp' + (spec.hot ? ' hot' : '') + (spec.mini ? ' mini' : '');
+    const dec = document.createElement('button'); dec.type = 'button'; dec.textContent = '−';
+    const inp = document.createElement('input');
+    inp.type = 'number'; inp.id = spec.id; inp.inputMode = 'decimal';
+    inp.min = spec.min; inp.max = spec.max; inp.step = spec.step;
+    const inc = document.createElement('button'); inc.type = 'button'; inc.textContent = '＋';
+    const clampShow = v => {
+      v = Math.max(spec.min, Math.min(spec.max, v));
+      inp.value = (spec.step < 1) ? (+v).toFixed(1) : Math.round(v);
+    };
+    dec.onclick = () => { clampShow((+inp.value || 0) - spec.step); onChange(); };
+    inc.onclick = () => { clampShow((+inp.value || 0) + spec.step); onChange(); };
+    inp.oninput = onChange;
+    inp.onblur = () => { clampShow(+inp.value || spec.min); onChange(); };
+    wrap.appendChild(dec); wrap.appendChild(inp); wrap.appendChild(inc);
+    return { el: wrap, input: inp, set: clampShow };
+  }
+
+  /* ---------- 渲染 ---------- */
+  const STEPPERS = [];
+  function onChange(){ render(current()); }
+
+  function buildGlobals(c){
+    const box = $('globalBox');
+    const card = document.createElement('div'); card.className = 'card';
+    GLOBALS.forEach(g => {
+      const row = document.createElement('div'); row.className = 'frow';
+      const lb = document.createElement('div'); lb.className = 'lb';
+      lb.innerHTML = g.name + '<small>' + g.sub + '</small>';
+      const u = document.createElement('span'); u.className = 'unit'; u.textContent = g.unit;
+      const st = stepper({ id: g.id, min: g.min, max: g.max, step: g.step, hot: g.hot });
+      st.set(c[g.k]); STEPPERS.push({ k: g.k, st: st, spec: g });
+      row.appendChild(lb); row.appendChild(u); row.appendChild(st.el);
+      card.appendChild(row);
+    });
+    box.appendChild(card);
+  }
+
+  function buildObjs(c){
+    const box = $('objBox');
+    OBJS.forEach(o => {
+      const card = document.createElement('div'); card.className = 'card obj';
+      const cv = document.createElement('canvas');
+      const info = document.createElement('div'); info.className = 'oinfo';
+      const nm = document.createElement('div'); nm.className = 'nm';
+      nm.innerHTML = o.name + (o.danger ? '<span class="tag danger">护盾无效</span>' : '') +
+                     (o.tier === 'block' ? '<span class="tag">路障</span>' : '');
+      const feat = document.createElement('div'); feat.className = 'feat'; feat.innerHTML = o.feat;
+      const meta = document.createElement('div'); meta.className = 'feat';
+      meta.innerHTML = o.size ? ('体型：' + o.size + ' · 静止不动')
+                              : ('车型倍数 宽 ' + o.wf.toFixed(2) + '× 长 ' + o.hf.toFixed(2) + '×');
+      info.appendChild(nm); info.appendChild(feat); info.appendChild(meta);
+
+      const grid = document.createElement('div'); grid.className = 'grid2';
+
+      const dRow = document.createElement('div'); dRow.className = 'frow mini';
+      const dLb = document.createElement('div'); dLb.className = 'lb'; dLb.textContent = '撞上扣血';
+      const dUnit = document.createElement('span'); dUnit.className = 'unit'; dUnit.textContent = '点';
+      const dSt = stepper({ id: 'd_' + o.kind, min: 0, max: 200, step: 5, hot: true, mini: true });
+      dSt.set(c[o.dmg]); STEPPERS.push({ k: o.dmg, st: dSt, spec: { min:0, max:200, step:5 } });
+      dRow.appendChild(dLb); dRow.appendChild(dUnit); dRow.appendChild(dSt.el);
+      grid.appendChild(dRow);
+
+      if(o.spd){
+        const sRow = document.createElement('div'); sRow.className = 'frow mini';
+        const sLb = document.createElement('div'); sLb.className = 'lb'; sLb.textContent = '行驶速度';
+        const sUnit = document.createElement('span'); sUnit.className = 'unit'; sUnit.textContent = 'km/h';
+        const sSt = stepper({ id: 's_' + o.kind, min: 20, max: 600, step: 10, mini: true });
+        sSt.set(c[o.spd]); STEPPERS.push({ k: o.spd, st: sSt, spec: { min:20, max:600, step:10 } });
+        sRow.appendChild(sLb); sRow.appendChild(sUnit); sRow.appendChild(sSt.el);
+        grid.appendChild(sRow);
+      }
+      info.appendChild(grid);
+      card.appendChild(cv); card.appendChild(info);
+      box.appendChild(card);
+      drawIcon(cv, o.kind);
+    });
+  }
+
+  function buildPickups(){
+    const box = $('pickBox');
+    PICKUPS.forEach(p => {
+      const card = document.createElement('div'); card.className = 'card obj';
+      const cv = document.createElement('canvas');
+      const info = document.createElement('div'); info.className = 'oinfo';
+      const nm = document.createElement('div'); nm.className = 'nm';
+      nm.innerHTML = p.name + '<span class="tag eat">可以吃</span>';
+      const feat = document.createElement('div'); feat.className = 'feat';
+      feat.innerHTML = p.feat.replace('{heal}', DEF.healFuel);
+      const hint = document.createElement('div'); hint.className = 'feat';
+      hint.innerHTML = '<b>全场只有这两种颜色可以吃</b>，其余车和路障都会扣血';
+      info.appendChild(nm); info.appendChild(feat); info.appendChild(hint);
+      card.appendChild(cv); card.appendChild(info);
+      box.appendChild(card);
+      drawIcon(cv, p.kind);
+    });
+  }
+
+  /* ---------- 读写 ---------- */
   function read(){
     let c = null;
     try{ const raw = localStorage.getItem(KEY); if(raw) c = JSON.parse(raw); }catch(e){ c = null; }
     const out = Object.assign({}, DEF);
+    // ★ 伤害允许 0（撞了不扣血），所以这里不能再用「假值就跳过」的判断
     if(c) for(const k in DEF) if(c[k] !== undefined && c[k] !== null && c[k] !== '') out[k] = +c[k];
     return { cfg: out, saved: !!c };
   }
-  function fmt(k, v){
-    if(k === 'vMaxKmh' || k === 'boostKmh') return Math.round(v) + '';
-    if(k === 'boostTime') return (+v).toFixed(1);
-    return Math.round(v) + '';
+  function current(){
+    const c = {};
+    STEPPERS.forEach(s => { c[s.k] = +s.st.input.value; });
+    if(c.boostKmh < c.vMaxKmh) c.boostKmh = c.vMaxKmh;      // 红星不能比正常还慢
+    return c;
   }
   function render(c){
-    $('rVmax').value = c.vMaxKmh; $('vVmax').textContent = fmt('vMaxKmh', c.vMaxKmh);
-    $('rTime').value = c.timeStart; $('vTime').textContent = fmt('timeStart', c.timeStart);
-    $('rBonus').value = c.timeBonus; $('vBonus').textContent = fmt('timeBonus', c.timeBonus);
-    $('rBoost').value = c.boostKmh; $('vBoost').textContent = fmt('boostKmh', c.boostKmh);
-    $('rBoostT').value = c.boostTime; $('vBoostT').textContent = fmt('boostTime', c.boostTime);
+    STEPPERS.forEach(s => { if(document.activeElement !== s.st.input) s.st.set(c[s.k]); });
     const vMax = Math.round(c.vMaxKmh / KMH);
-    const mult = (c.boostKmh / (vMax * KMH));
+    const mult = c.boostKmh / (vMax * KMH);
     const boostLogic = Math.round(c.boostKmh / KMH);
-    $('calc').textContent =
-      '正常上限   ' + Math.round(c.vMaxKmh) + ' km/h  →  逻辑速度 ' + vMax + '（V_MAX）\n' +
-      '红星上限   ' + Math.round(c.boostKmh) + ' km/h  →  逻辑速度 ' + boostLogic + '，倍率 ×' + mult.toFixed(2) + '（BOOST_MULT）\n' +
-      '红星持续   ' + (+c.boostTime).toFixed(1) + ' 秒（BOOST_TIME）\n' +
-      '时间       开局 ' + Math.round(c.timeStart) + ' 秒 · 过关加时 ' + Math.round(c.timeBonus) + ' 秒\n' +
-      '加速度不变：提速 300/秒（0→正常上限约 ' + (vMax / 300).toFixed(1) + ' 秒）';
+    const hits = d => d > 0 ? Math.ceil(HP_MAX / d) + ' 次' : '撞不死';
+    const lines = [];
+    lines.push('正常上限   ' + Math.round(c.vMaxKmh) + ' km/h  →  逻辑速度 ' + vMax + '（V_MAX）');
+    lines.push('红星上限   ' + Math.round(c.boostKmh) + ' km/h  →  逻辑速度 ' + boostLogic + '，倍率 ×' + mult.toFixed(2) + '（BOOST_MULT）');
+    lines.push('红星持续   ' + (+c.boostTime).toFixed(1) + ' 秒（BOOST_TIME）');
+    lines.push('时间       开局 ' + Math.round(c.timeStart) + ' 秒 · 过关加时 ' + Math.round(c.timeBonus) + ' 秒');
+    lines.push('');
+    const drainFull = (+c.hpDrain) * 1.35;              // 全速时的系数（0.7 + 0.9×0.72）
+    const drainIdle = (+c.hpDrain) * 0.7;               // 停车时的系数
+    lines.push('生命       上限 ' + HP_MAX + ' · 自然消耗 ' + (+c.hpDrain).toFixed(1) + ' 点/秒');
+    lines.push('           全速约 ' + (drainFull > 0 ? Math.round(HP_MAX / drainFull) + ' 秒耗光' : '不会掉') +
+               ' · 停车约 ' + (drainIdle > 0 ? Math.round(HP_MAX / drainIdle) + ' 秒耗光' : '不会掉'));
+    lines.push('           绿星 +' + c.healFuel + ' · 每过一段 +' + c.stageHeal + '（撞车另算，见下）');
+    lines.push('');
+    lines.push('撞一次扣多少（生命 ' + HP_MAX + '）');
+    OBJS.forEach(o => {
+      const d = c[o.dmg];
+      const tail = o.spd ? ('　速度 ' + Math.round(c[o.spd]) + ' km/h（逻辑 ' + Math.round(c[o.spd] / KMH) + '）')
+                         : '　静止';
+      lines.push('  ' + pad(o.name, 4) + ' −' + pad(String(d), 4) + ' 撞 ' + pad(hits(d), 6) + tail);
+    });
+    lines.push('');
+    lines.push('加速度不变：提速 300/秒（0→正常上限约 ' + (vMax / 300).toFixed(1) + ' 秒）');
+    $('calc').textContent = lines.join('\n');
+  }
+  function pad(s, n){
+    s = String(s);
+    let w = 0;
+    for(const ch of s) w += /[\u4e00-\u9fa5]/.test(ch) ? 2 : 1;
+    return s + ' '.repeat(Math.max(0, n * 2 - w));
   }
   function constants(c){
     const vMax = Math.round(c.vMaxKmh / KMH);
     const mult = c.boostKmh / (vMax * KMH);
-    return 'const V_MAX = ' + vMax + ';            // 正常加速上限（' + Math.round(c.vMaxKmh) + ' km/h）\n' +
-           'const BOOST_MULT = ' + mult.toFixed(2) + ';        // 红星倍率（' + Math.round(c.boostKmh) + ' km/h）\n' +
-           'const BOOST_TIME = ' + (+c.boostTime).toFixed(1) + ';        // 红星持续（秒）\n' +
-           'const TIME_START = ' + Math.round(c.timeStart) + ', TIME_BONUS = ' + Math.round(c.timeBonus) + ';';
-  }
-  function current(){
-    const c = {};
-    c.vMaxKmh = +$('rVmax').value; c.timeStart = +$('rTime').value; c.timeBonus = +$('rBonus').value;
-    c.boostKmh = +$('rBoost').value; c.boostTime = +$('rBoostT').value;
-    return c;
+    const out = ['const V_MAX = ' + vMax + ';            // 正常加速上限（' + Math.round(c.vMaxKmh) + ' km/h）',
+                 'const BOOST_MULT = ' + mult.toFixed(2) + ';        // 红星倍率（' + Math.round(c.boostKmh) + ' km/h）',
+                 'const BOOST_TIME = ' + (+c.boostTime).toFixed(1) + ';        // 红星持续（秒）',
+                 'const TIME_START = ' + Math.round(c.timeStart) + ', TIME_BONUS = ' + Math.round(c.timeBonus) + ';',
+                 'let HP_DRAIN = ' + (+c.hpDrain).toFixed(1) + ', HEAL_FUEL = ' + c.healFuel +
+                   ', STAGE_HEAL = ' + c.stageHeal + ';',
+                 'let DMG_BLOCK = ' + c.dmgCone + ', DMG_CAR = ' + c.dmgSports +
+                   ', DMG_TRUCK = ' + c.dmgTruck + ', DMG_HAULER = ' + c.dmgHauler + ';'];
+    OBJS.forEach(o => {
+      if(o.spd) out.push('ENEMY.' + o.kind + '.v = ' + Math.round(c[o.spd] / KMH) +
+                         ';             // ' + o.name + ' ' + Math.round(c[o.spd]) + ' km/h');
+      out.push('DMG.' + o.kind + ' = ' + c[o.dmg] + ';                  // ' + o.name + ' 撞上扣血');
+    });
+    return out.join('\n');
   }
   function setState(saved){
     const el = $('state');
@@ -168,18 +482,18 @@
     clearTimeout(toast._t); toast._t = setTimeout(() => { f.textContent = ''; }, 2600);
   }
 
-  // 滑块实时联动
-  ['rVmax','rTime','rBonus','rBoost','rBoostT'].forEach(id => {
-    $(id).addEventListener('input', () => {
-      const c = current(); render(c);
-      // 红星上限不能低于正常上限
-      if(c.boostKmh < c.vMaxKmh){ c.boostKmh = c.vMaxKmh; $('rBoost').value = c.boostKmh; render(c); }
-    });
-  });
+  /* ---------- 启动 ---------- */
+  const st = read();
+  buildGlobals(st.cfg);
+  buildObjs(st.cfg);
+  buildPickups();
+  render(st.cfg);
+  setState(st.saved);
+  if(!st.saved) $('foot').textContent = '没调过时火箭车用默认值；改完记得点「保存并试玩」。';
 
   $('btnSave').onclick = () => {
     const c = current();
-    if(c.boostKmh < c.vMaxKmh){ c.boostKmh = c.vMaxKmh; }
+    if(c.boostKmh < c.vMaxKmh) c.boostKmh = c.vMaxKmh;
     try{
       localStorage.setItem(KEY, JSON.stringify(c));
       toast('已保存 ✓ 正在打开火箭车…');
@@ -201,19 +515,16 @@
         done = document.execCommand('copy'); document.body.removeChild(ta);
       }catch(e){ done = false; }
     }
-    toast(done ? '已复制常数代码 ✓ 可直接粘给开发者' : '复制失败，请手动选择下方文本：\n' + txt);
+    toast(done ? '已复制常数代码 ✓ 可直接粘给开发者' : '复制失败，请手动选择下方文本');
     if(!done) $('calc').textContent = txt;
   };
   $('btnReset').onclick = () => {
     try{ localStorage.removeItem(KEY); }catch(e){}
+    STEPPERS.forEach(s => s.st.set(DEF[s.k]));
     render(DEF); setState(false);
     toast('已恢复默认（本机参数已清除）');
   };
   $('btnOpen').onclick = () => { location.href = 'index.html?t=' + Date.now(); };
-
-  const st = read();
-  render(st.cfg); setState(st.saved);
-  if(!st.saved) $('foot').textContent = '没调过时火箭车用默认值；调完记得点「保存并试玩」。';
 })();
 </script>
 </body>
