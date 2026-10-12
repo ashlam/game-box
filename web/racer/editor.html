@@ -58,7 +58,8 @@
 </div>
 
 <p class="hint">拖动下面的滑块调整，点 <b>保存并试玩</b> 即写入本机（localStorage）。
-火箭车下次打开会自动读取这里的参数。<span id="state" class="badge">当前：默认值</span></p>
+火箭车下次打开会自动读取这里的参数。<span id="state" class="badge">当前：默认值</span><br>
+前 5 项是速度与时间；后 4 项是<b>撞车扣多少生命值</b>（生命上限 100，拖到 <b>0</b> = 撞了不扣血）。</p>
 
 <div class="card">
   <div class="row"><label>正常加速上限</label><span class="val"><b id="vVmax">800</b> km/h</span></div>
@@ -96,6 +97,34 @@
 </div>
 
 <div class="card">
+  <div class="row"><label>撞障碍物扣血</label><span class="val hot"><b id="vDmgBlock">30</b> 点</span></div>
+  <input type="range" id="rDmgBlock" class="hot" min="0" max="120" step="5" value="30">
+  <div class="ticks"><span>0</span><span>60</span><span>120</span></div>
+  <div class="sub">锥桶 / 油桶。最轻的一类</div>
+</div>
+
+<div class="card">
+  <div class="row"><label>撞小车扣血</label><span class="val hot"><b id="vDmgCar">40</b> 点</span></div>
+  <input type="range" id="rDmgCar" class="hot" min="0" max="120" step="5" value="40">
+  <div class="ticks"><span>0</span><span>60</span><span>120</span></div>
+  <div class="sub">跑车 / 轿车 / 变道车</div>
+</div>
+
+<div class="card">
+  <div class="row"><label>撞卡车扣血</label><span class="val hot"><b id="vDmgTruck">60</b> 点</span></div>
+  <input type="range" id="rDmgTruck" class="hot" min="0" max="120" step="5" value="60">
+  <div class="ticks"><span>0</span><span>60</span><span>120</span></div>
+  <div class="sub">比小车重，比大货车轻</div>
+</div>
+
+<div class="card">
+  <div class="row"><label>撞大货车扣血</label><span class="val hot"><b id="vDmgHauler">80</b> 点</span></div>
+  <input type="range" id="rDmgHauler" class="hot" min="0" max="120" step="5" value="80">
+  <div class="ticks"><span>0</span><span>60</span><span>120</span></div>
+  <div class="sub">★ 最疼，而且护盾对它无效（撞上护盾和喷火一起没）</div>
+</div>
+
+<div class="card">
   <div class="row"><label>换算结果</label><span class="val">游戏内部数值</span></div>
   <pre id="calc"></pre>
 </div>
@@ -113,13 +142,17 @@
   const $ = id => document.getElementById(id);
   const KEY = 'gracer_cfg';
   const KMH = 1.25;                       // 逻辑速度 → km/h 的换算（与游戏一致）
-  const DEF = { vMaxKmh: 800, timeStart: 55, timeBonus: 32, boostKmh: 1100, boostTime: 8 };
-  const RANGES = { vMaxKmh: [200, 1200], timeStart: [10, 150], timeBonus: [0, 90], boostKmh: [500, 2500], boostTime: [1, 15] };
+  const HP_MAX = 100;                     // 与游戏一致的生命值上限（只用来算"能撞几次"）
+  const DEF = { vMaxKmh: 800, timeStart: 55, timeBonus: 32, boostKmh: 1100, boostTime: 8,
+                dmgBlock: 30, dmgCar: 40, dmgTruck: 60, dmgHauler: 80 };
+  const RANGES = { vMaxKmh: [200, 1200], timeStart: [10, 150], timeBonus: [0, 90], boostKmh: [500, 2500], boostTime: [1, 15],
+                   dmgBlock: [0, 120], dmgCar: [0, 120], dmgTruck: [0, 120], dmgHauler: [0, 120] };
 
   function read(){
     let c = null;
     try{ const raw = localStorage.getItem(KEY); if(raw) c = JSON.parse(raw); }catch(e){ c = null; }
     const out = Object.assign({}, DEF);
+    // ★ 伤害允许 0（撞了不扣血），所以这里不能再用「假值就跳过」的判断
     if(c) for(const k in DEF) if(c[k] !== undefined && c[k] !== null && c[k] !== '') out[k] = +c[k];
     return { cfg: out, saved: !!c };
   }
@@ -134,6 +167,10 @@
     $('rBonus').value = c.timeBonus; $('vBonus').textContent = fmt('timeBonus', c.timeBonus);
     $('rBoost').value = c.boostKmh; $('vBoost').textContent = fmt('boostKmh', c.boostKmh);
     $('rBoostT').value = c.boostTime; $('vBoostT').textContent = fmt('boostTime', c.boostTime);
+    $('rDmgBlock').value = c.dmgBlock;   $('vDmgBlock').textContent = fmt('dmgBlock', c.dmgBlock);
+    $('rDmgCar').value = c.dmgCar;       $('vDmgCar').textContent = fmt('dmgCar', c.dmgCar);
+    $('rDmgTruck').value = c.dmgTruck;   $('vDmgTruck').textContent = fmt('dmgTruck', c.dmgTruck);
+    $('rDmgHauler').value = c.dmgHauler; $('vDmgHauler').textContent = fmt('dmgHauler', c.dmgHauler);
     const vMax = Math.round(c.vMaxKmh / KMH);
     const mult = (c.boostKmh / (vMax * KMH));
     const boostLogic = Math.round(c.boostKmh / KMH);
@@ -142,6 +179,12 @@
       '红星上限   ' + Math.round(c.boostKmh) + ' km/h  →  逻辑速度 ' + boostLogic + '，倍率 ×' + mult.toFixed(2) + '（BOOST_MULT）\n' +
       '红星持续   ' + (+c.boostTime).toFixed(1) + ' 秒（BOOST_TIME）\n' +
       '时间       开局 ' + Math.round(c.timeStart) + ' 秒 · 过关加时 ' + Math.round(c.timeBonus) + ' 秒\n' +
+      '撞一次扣血 路障 ' + Math.round(c.dmgBlock) + ' · 小车 ' + Math.round(c.dmgCar) +
+      ' · 卡车 ' + Math.round(c.dmgTruck) + ' · 大货车 ' + Math.round(c.dmgHauler) + '\n' +
+      '能撞几次   ' + ['路障', '小车', '卡车', '大货车'].map((n, i) => {
+        const d = [c.dmgBlock, c.dmgCar, c.dmgTruck, c.dmgHauler][i];
+        return n + ' ' + (d > 0 ? Math.ceil(HP_MAX / d) + ' 次' : '撞不死');
+      }).join(' · ') + '（生命 ' + HP_MAX + '）\n' +
       '加速度不变：提速 300/秒（0→正常上限约 ' + (vMax / 300).toFixed(1) + ' 秒）';
   }
   function constants(c){
@@ -150,12 +193,16 @@
     return 'const V_MAX = ' + vMax + ';            // 正常加速上限（' + Math.round(c.vMaxKmh) + ' km/h）\n' +
            'const BOOST_MULT = ' + mult.toFixed(2) + ';        // 红星倍率（' + Math.round(c.boostKmh) + ' km/h）\n' +
            'const BOOST_TIME = ' + (+c.boostTime).toFixed(1) + ';        // 红星持续（秒）\n' +
-           'const TIME_START = ' + Math.round(c.timeStart) + ', TIME_BONUS = ' + Math.round(c.timeBonus) + ';';
+           'const TIME_START = ' + Math.round(c.timeStart) + ', TIME_BONUS = ' + Math.round(c.timeBonus) + ';\n' +
+           'let DMG_BLOCK = ' + Math.round(c.dmgBlock) + ', DMG_CAR = ' + Math.round(c.dmgCar) +
+           ', DMG_TRUCK = ' + Math.round(c.dmgTruck) + ', DMG_HAULER = ' + Math.round(c.dmgHauler) + ';';
   }
   function current(){
     const c = {};
     c.vMaxKmh = +$('rVmax').value; c.timeStart = +$('rTime').value; c.timeBonus = +$('rBonus').value;
     c.boostKmh = +$('rBoost').value; c.boostTime = +$('rBoostT').value;
+    c.dmgBlock = +$('rDmgBlock').value; c.dmgCar = +$('rDmgCar').value;
+    c.dmgTruck = +$('rDmgTruck').value; c.dmgHauler = +$('rDmgHauler').value;
     return c;
   }
   function setState(saved){
@@ -169,7 +216,7 @@
   }
 
   // 滑块实时联动
-  ['rVmax','rTime','rBonus','rBoost','rBoostT'].forEach(id => {
+  ['rVmax','rTime','rBonus','rBoost','rBoostT','rDmgBlock','rDmgCar','rDmgTruck','rDmgHauler'].forEach(id => {
     $(id).addEventListener('input', () => {
       const c = current(); render(c);
       // 红星上限不能低于正常上限

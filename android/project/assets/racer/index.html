@@ -87,7 +87,7 @@
   <div class="big" id="overScore">0</div>
   <div class="unit">最远距离（米）</div>
   <p id="overText"></p>
-  <div class="rule">玩法：自动前进 · 左右躲车躲障碍<br>底部区域按住左右滑动转向 · <b>按住 = 油门</b><br>★ 绿星 = 加油 + 回血 · 红星 = 加油 + 限时喷火加速<br>★ 喷火中连吃油箱 → <b>阶段2 护盾</b> / <b>阶段3 撞飞小车</b><br>★ <b>大货车</b>撞上最疼，护盾对它无效<br>撞车按车型扣生命值 · 生命归零或时间到结束</div>
+  <div class="rule">玩法：自动前进 · 左右躲车躲障碍<br>底部区域按住左右滑动转向 · <b>按住 = 油门</b><br>★ 绿星 = 加油 + 回血 · 红星 = 加油 + 限时喷火加速<br>★ 喷火中连吃油箱 → <b>阶段2 护盾</b> / <b>阶段3 撞飞小车</b><br>★ <b>大货车</b>撞上最疼（护盾也挡不住）<br>撞车按类型扣生命值：路障 30 · 小车 40 · 卡车 60 · 大货车 80<br>生命归零或时间到结束（数值可在调参页改）</div>
   <button class="pri" id="overRetry">再来一次</button>
 </div></div>
 
@@ -184,14 +184,23 @@
   const HP_MAX = 100;                            // 生命值上限
   const HEAL_FUEL = 18;                          // ★ 绿色油箱回血量
   let SHIELD_TIME = 6.0;                         // ★ 加速阶段2 的护盾基础时长（秒）
-  /* ★ 各类型伤害表：越「重」的撞上去越疼。大货车最疼，且护盾对它无效 */
-  const DMG = {
-    cone: 8,  barrel: 11,                        // 路障（最轻，撞上去只是"硌一下"）
-    sports: 14, sedan: 18, weaver: 20,           // 小车
-    truck: 26,                                   // 卡车
-    hauler: 42,                                  // ★ 大货车：比一般车扣得多（护盾也挡不住）
-  };
-  const DMG_DEFAULT = 18;                        // 未知类型按轿车算
+  /* ★ 分档伤害（三档：障碍物最轻 / 障碍车中等 / 大车与大货车最疼）
+       这几个值就是 /racer/editor.html 调参页里的默认值，可在调参页拖动并存到本机 */
+  let DMG_BLOCK  = 30;                           // 障碍物：锥桶 / 油桶
+  let DMG_CAR    = 40;                           // 障碍车（小车）：跑车 / 轿车 / 变道车
+  let DMG_TRUCK  = 60;                           // 卡车（比小车重，比大货车轻）
+  let DMG_HAULER = 80;                           // ★ 大货车：最疼，且护盾对它无效
+  const DMG = { cone: 0, barrel: 0, sports: 0, sedan: 0, weaver: 0, truck: 0, hauler: 0 };
+  let DMG_DEFAULT = DMG_CAR;                     // 未知类型按小车算
+  /** 把上面四个分档值展开进 DMG 表（调参覆盖后要重新跑一遍） */
+  function applyDmg(){
+    DMG.cone = DMG.barrel = DMG_BLOCK;
+    DMG.sports = DMG.sedan = DMG.weaver = DMG_CAR;
+    DMG.truck = DMG_TRUCK;
+    DMG.hauler = DMG_HAULER;
+    DMG_DEFAULT = DMG_CAR;
+  }
+  applyDmg();
 
   /* ★ 调参覆盖：/racer/editor.html 保存到本机的参数在这里生效（没调过就用上面的默认值） */
   let cfgActive = false, cfgRaw = null;
@@ -204,9 +213,15 @@
       if(c.timeBonus !== undefined && c.timeBonus !== '' && +c.timeBonus >= 0) TIME_BONUS = +c.timeBonus;
       if(+c.boostKmh > 0) BOOST_MULT = (+c.boostKmh) / (V_MAX * KMH);
       if(+c.boostTime > 0) BOOST_TIME = +c.boostTime;
+      // ★ 伤害分档（0 也是合法值：撞了不扣血，所以用 >= 0 判断）
+      if(+c.dmgBlock  >= 0) DMG_BLOCK  = +c.dmgBlock;
+      if(+c.dmgCar    >= 0) DMG_CAR    = +c.dmgCar;
+      if(+c.dmgTruck  >= 0) DMG_TRUCK  = +c.dmgTruck;
+      if(+c.dmgHauler >= 0) DMG_HAULER = +c.dmgHauler;
       cfgActive = true;
     }
   }catch(e){ cfgActive = false; }
+  applyDmg();                                    // ★ 无论有没有调参，最后都按当前分档值展开一次
 
   /* ---------- 调色板（★ 等照片到了改这里） ---------- */
   const PALETTE = {
@@ -1578,8 +1593,8 @@
     ctx.fillText('卡车最慢 · 轿车中速 · 跑车最快会跑掉', W / 2, cy + 34);
     ctx.fillStyle = '#0a8f3c'; ctx.font = '800 11px ' + FONT;
     ctx.fillText('绿星 = 加油+回血 · 红星 = 加油+加速', W / 2, cy + 50);
-    ctx.fillStyle = '#c05f0d'; ctx.font = '700 11px ' + FONT;
-    ctx.fillText('撞车按车型扣生命值（大货车最疼）', W / 2, cy + 66);
+    ctx.fillStyle = '#c05f0d'; ctx.font = '700 10px ' + FONT;
+    ctx.fillText('扣血 路障' + DMG_BLOCK + ' 小车' + DMG_CAR + ' 卡车' + DMG_TRUCK + ' 大货车' + DMG_HAULER, W / 2, cy + 66);
     ctx.fillStyle = '#5c7186'; ctx.font = '11px ' + FONT;
     ctx.fillText('满速吃红星可撞飞路障（不扣血不减速）', W / 2, cy + 82);
     ctx.fillStyle = '#1a7f96'; ctx.font = '800 11px ' + FONT;
@@ -1762,6 +1777,7 @@
   window.__racer = () => ({
     state, reason, hp, stage, distance, passed, fuel, timeLeft,
     HP_MAX, HEAL_FUEL, SHIELD_TIME, DMG, DMG_DEFAULT,
+    DMG_BLOCK, DMG_CAR, DMG_TRUCK, DMG_HAULER,
     boostStage, shieldT, smashed,
     player: { x: player.x, y: player.y, v: player.v, invuln: player.invuln, boost: player.boost },
     PY, W, H, HUD_H, HFIX, BOTTOM_BAND, TOUCH_TOP, TOUCH_BOTTOM, ZONE_H, FOLLOW, MIN_GAP,
