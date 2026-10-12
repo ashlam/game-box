@@ -87,7 +87,7 @@
   <div class="big" id="overScore">0</div>
   <div class="unit">最远距离（米）</div>
   <p id="overText"></p>
-  <div class="rule">玩法：自动前进 · 左右躲车躲障碍<br>底部区域按住左右滑动转向 · <b>按住 = 油门（最高 500 km/h）</b><br>★ 绿色五角星 = 加油（油箱回满）<br>★ 红色五角星 = 加油 + 限时 4 秒加速到 1000 km/h<br>其余全是敌人 · 到终点加时进下一段</div>
+  <div class="rule">玩法：自动前进 · 左右躲车躲障碍<br>底部区域按住左右滑动转向 · <b>按住 = 油门</b><br>★ 绿星 = 加油 + 回血 · 红星 = 加油 + 限时喷火加速<br>★ 喷火中连吃油箱 → <b>阶段2 护盾</b> / <b>阶段3 撞飞小车</b><br>★ <b>大货车</b>撞上最疼，护盾对它无效<br>撞车按车型扣生命值 · 生命归零或时间到结束</div>
   <button class="pri" id="overRetry">再来一次</button>
 </div></div>
 
@@ -102,7 +102,7 @@
        · 两档速度：常规 / 高速（高速可达 400 km/h，碰撞风险剧增）
        · 燃油系统：燃油耗尽就抛锚；碰到绿色加油车可以回满
        · 倒计时：时间到即结束；抵达终点（过关）加时并进入下一段
-       · 撞车/撞障碍 = 爆炸，掉一条命
+       · 撞车/撞障碍 = 爆炸 + 按车型扣生命值（撞后的减速/无敌照旧）；生命归零才结束
        · 会「冷不丁变道」的车 + 临时施工障碍物
 
      触控映射（★ 这是我自己定的映射，用户若要改一句话就能改）：
@@ -174,7 +174,24 @@
   const FUEL_RATE = 0.0115;                      // 每秒耗油（按速度加权）
   const STAGE_LEN = 3600;                        // 每段距离
   let TIME_START = 55, TIME_BONUS = 32;          // 初始倒计时 / 过关加时
-  const HP_START = 3;
+
+  /* ============================================================
+     ★ 生命值系统（取代原来的「3 条命」）
+       · 撞车/撞障碍 → 按类型扣「生命值」，不是掉一条命
+       · 撞击后的表现（爆炸、减速、短暂无敌）照旧
+       · 归零才结束；绿色油箱可以回血
+     ============================================================ */
+  const HP_MAX = 100;                            // 生命值上限
+  const HEAL_FUEL = 18;                          // ★ 绿色油箱回血量
+  let SHIELD_TIME = 6.0;                         // ★ 加速阶段2 的护盾基础时长（秒）
+  /* ★ 各类型伤害表：越「重」的撞上去越疼。大货车最疼，且护盾对它无效 */
+  const DMG = {
+    cone: 8,  barrel: 11,                        // 路障（最轻，撞上去只是"硌一下"）
+    sports: 14, sedan: 18, weaver: 20,           // 小车
+    truck: 26,                                   // 卡车
+    hauler: 42,                                  // ★ 大货车：比一般车扣得多（护盾也挡不住）
+  };
+  const DMG_DEFAULT = 18;                        // 未知类型按轿车算
 
   /* ★ 调参覆盖：/racer/editor.html 保存到本机的参数在这里生效（没调过就用上面的默认值） */
   let cfgActive = false, cfgRaw = null;
@@ -244,6 +261,9 @@
     sedan:  { name:'轿车',   color:'#7d6a9c', lite:'#a596c0', wf:1.00, hf:1.00, v:150, signal:0,   label:'中速 · 不变道' },
     sports: { name:'跑车',   color:'#c2a545', lite:'#ddc777', wf:1.00, hf:0.87, v:208, signal:0,   label:'最快 · 低矮 · 会跑掉' },
     weaver: { name:'变道车', color:'#c1703a', lite:'#d99a68', wf:1.00, hf:1.00, v:132, signal:0.7, label:'★ 先亮琥珀转向灯再变道' },
+    /* ★ 大货车：全场最重最慢，撞它扣血最多，而且是唯一「护盾无效」的东西 */
+    hauler: { name:'大货车', color:'#6d7b8a', lite:'#98a8b8', wf:1.34, hf:1.95, v:62, signal:0,
+              label:'★ 最重最慢 · 撞它最疼 · 护盾无效' },
   };
   const FUEL_V = 100;                    // 加油车固定速度
   const SIGNAL_T = 0.7;                  // 变道车亮灯时长（秒）
@@ -253,6 +273,8 @@
   const fronts = [];          // 每帧复用的"前车"列表（含玩家）
   let player, objs, input, fuel, timeLeft, hp, stage, distance, passed,
       stageStartY, nextRowY, nextFuelY, nextBoostY, nextObjId, seedRng, fieldSeed;
+  /* ★ 加速连击：boostStage = 1 喷火 / 2 护盾 / 3 撞飞小车不耗盾；shieldT = 护盾剩余秒 */
+  let boostStage = 0, shieldT = 0;
   let effects, floats, shake, skid, glowT, warnT, reason, best, overTimer, lastTs, raf;
   let soundOn = true, engineOsc = null, engineGain = null, engineSub = null;
   let hintOn = true;
@@ -277,7 +299,8 @@
     objs = [];
     input = { left: false, right: false, gas: false, touching: false, targetX: null };
     active.clear();
-    fuel = 1; timeLeft = TIME_START; hp = HP_START;
+    fuel = 1; timeLeft = TIME_START; hp = HP_MAX;
+    boostStage = 0; shieldT = 0;
     stage = 1; distance = 0; passed = 0;
     stageStartY = 0; nextRowY = 900; nextFuelY = 1900; nextBoostY = 3400;
     nextObjId = 1;
@@ -294,7 +317,9 @@
   /* ---------- 交通生成（★ 公平性：每排必留至少一条空车道） ---------- */
   /** 按难度加权选车型：越往后跑车/变道车越多、卡车越少（可预判的难度曲线） */
   function pickType(diff){
-    const w = { truck: 22 - 10 * diff, sedan: 38 - 8 * diff, sports: 20 + 10 * diff, weaver: 20 + 8 * diff };
+    // ★ 大货车：开局几乎不出现，越往后越多（它是"高风险重物"，不该一上来就铺满）
+    const w = { truck: 22 - 10 * diff, sedan: 38 - 8 * diff, sports: 20 + 10 * diff, weaver: 20 + 8 * diff,
+                hauler: 5 + 13 * diff };
     let total = 0; for(const k in w) total += w[k];
     let r = rng() * total;
     for(const k in w){ r -= w[k]; if(r <= 0) return k; }
@@ -482,6 +507,10 @@
   function sndWarn(){ tone(880, 0.09, { type:'square', gain:0.07 }); }
   function sndBoost(){ tone(320, 0.5, { type:'sawtooth', to: 1100, gain:0.13 });
                        noiseBurst(0.35, { type:'highpass', freq: 600, gain: 0.07, decay: 1.6 }); }
+  /** ★ 护盾生成：清亮上扬的两声（和加速的"轰"区分开） */
+  function sndShield(){ tone(660, 0.16, { type:'triangle', gain:0.1 });
+                        tone(1040, 0.26, { type:'sine', gain:0.09, at:0.09 });
+                        tone(1560, 0.2, { type:'sine', gain:0.05, at:0.16 }); }
   function sndSkid(){ noiseBurst(0.18, { type:'bandpass', freq:900, to:200, gain:0.06, decay:2.5 }); }
 
   /* ============================================================
@@ -583,6 +612,8 @@
      *   吃到红星 → boost 计时开始，这段时间上限 = V_MAX × BOOST_MULT（800 逻辑 = 1000 km/h），
      *   靠正常加速度"逐渐"升上去；时间耗尽后自动回落到 V_MAX（500 km/h）。 */
     if(player.boost > 0) player.boost = Math.max(0, player.boost - dt);
+    else { boostStage = 0; shieldT = 0; }          // ★ 喷火结束 → 连击阶段与护盾一起失效
+    if(shieldT > 0) shieldT = Math.max(0, shieldT - dt);
     const vCap = player.boost > 0 ? V_MAX * BOOST_MULT : V_MAX;
     let tv = gasOn ? vCap : 0;              // ★ 不踩油门 → 减速停下（开局静止、按住才逐渐加速）
     // ★ 脱路代价加强：原来只压到 0.6×V_BASE（≈108 km/h），配合每段 +32 秒时间奖励，
@@ -718,28 +749,27 @@
       if(o.dead || (o.kind !== 'fuel' && o.kind !== 'boost')) continue;
       if(Math.abs(o.x - player.x) < (o.w + CAR_W) / 2 + 8 &&
          Math.abs(o.y - player.y) < (o.h + CAR_H) / 2 + 10){
-        o.dead = true; fuel = 1; reason = '';        // 两种星都加油
-        if(o.kind === 'boost'){
-          player.boost = BOOST_TIME;                 // ★ 红星：额外触发限时高速（= 二段上限 800 km/h）
-          glowT = 1; sndBoost();
-          floats.push({ x: o.x, y: PY - 40, t: 0,
-                        txt: '加速！' + Math.round(V_MAX * BOOST_MULT * KMH) + ' km/h', color: '#ff6b5b' });
-          addBurst(o.x, o.y, 18, '#ff3b30');
-        }else{
-          sndFuel();
-          floats.push({ x: o.x, y: PY - 40, t: 0, txt:'+满油', color:'#7dffa0' });
-          addBurst(o.x, o.y, 12, '#7dffa0');
-        }
+        takeTank(o);                               // ★ 统一走 takeTank（加油 / 回血 / 连击推进）
       }
     }
     if(player.invuln <= 0){
       for(const o of objs){
-        if(o.dead || o.kind === 'fuel' || o.kind === 'boost') continue;
-        if(overlap(o)){
-          // ★ 满速吃红星状态：路障直接撞飞（不扣血不减速），撞车仍然照撞
-          if(smashReady() && isRoadblock(o)){ smashObstacle(o); continue; }
-          crash(o); break;
+        if(o.dead || isPickup(o)) continue;
+        if(!overlap(o)) continue;
+        /* ① ★ 护盾（加速阶段2/3）：把障碍物和小车撞飞，不扣生命值
+         *      —— 但遇到大货车护盾无效：护盾和喷火一起消失，按正常撞车处理 */
+        if(shieldT > 0){
+          if(isBigTruck(o)){
+            shieldT = 0; player.boost = 0; boostStage = 0;
+            crash(o); break;
+          }
+          smashObject(o, boostStage >= 3);        // ★ 阶段3：撞飞小车也不消耗护盾
+          continue;
         }
+        /* ② 满速（还没护盾时）撞飞路障 —— 原有机制保留 */
+        if(smashReady() && isRoadblock(o)){ smashObject(o, false); continue; }
+        /* ③ 正常碰撞：按类型扣生命值（撞击后的减速 / 无敌照旧） */
+        crash(o); break;
       }
     }
 
@@ -769,34 +799,103 @@
   let smashed = 0;                               // ★ 撞飞路障计数
   const SMASH_TOL = 0.98;                        // ★ 满速判定：达到红星上限的 98% 即算"到达并保持满速"
 
+  /* ★ 分类判定（连击/护盾/伤害都靠这几个谓词，改车型只动这里） */
+  const isPickup    = o => o.kind === 'fuel' || o.kind === 'boost';
+  const isRoadblock = o => o.kind === 'cone' || o.kind === 'barrel';
+  const isBigTruck  = o => o.kind === 'hauler';                  // ★ 唯一「护盾无效」的车型
+  const dmgOf       = o => (DMG[o.kind] === undefined ? DMG_DEFAULT : DMG[o.kind]);
+
+  /** ★ 撞车/撞障碍：扣的是「生命值」，扣多少看撞到的是什么；爆炸/减速/无敌照旧 */
   function crash(o){
     o.dead = true;
-    hp--;
+    const d = dmgOf(o);
+    hp = Math.max(0, hp - d);
     player.invuln = 2.2;
     player.v = Math.min(player.v, V_BASE * 0.45);
     shake = 1; sndCrash();
     addBurst(player.x, player.y, 22, '#ffb03a');
     addBurst(o.x, o.y, 14, '#ff6a3a');
+    floats.push({ x: player.x, y: PY - 58, t: 0, txt: '-' + d, color: '#ff6b5b' });
+    if(isBigTruck(o)) floats.push({ x: player.x, y: PY - 34, t: 0, txt: '大货车！护盾无效', color: '#ff8a3a' });
     if(hp <= 0){ finish('撞毁'); }
   }
+
   /* ============================================================
-     ★ 满速撞飞路障：吃到红星 + 已到并保持满速（上限 98% 以上）时，
-       锥桶/油桶直接撞飞 —— 不扣血、不减速；撞车照旧扣血减速。
+     ★ 油箱连击（加速阶段）
+       阶段1：吃到红五角星 → 喷火加速（原有机制）
+       阶段2：喷火中再吃到任意油箱 → 出现护盾，撞障碍物/小车直接撞飞且不扣血，
+              撞飞后护盾消失
+       阶段3：再吃一个 → 小车也能像路障一样撞飞，且【不消耗护盾】
+       阶段4+：加速与护盾各延长「正常时长的 1/3」
+       大货车：三个阶段都无效 —— 阶段2/3 撞上它护盾和喷火一起没，按正常撞车扣血
+     ============================================================ */
+  function advanceStage(){
+    if(boostStage <= 0){ boostStage = 1; player.boost = BOOST_TIME; return 1; }
+    boostStage++;
+    if(boostStage === 2){
+      shieldT = SHIELD_TIME;                      // ★ 阶段2：护盾出现
+    }else if(boostStage === 3){
+      shieldT = SHIELD_TIME;                      // ★ 阶段3：护盾刷新（撞飞小车不再消耗它）
+    }else{
+      player.boost += BOOST_TIME / 3;             // ★ 阶段3 之后再吃：各延长 1/3 正常时长
+      shieldT += SHIELD_TIME / 3;
+    }
+    return boostStage;
+  }
+
+  /** 吃到油箱（绿星 = 加油 + 回血；红星 = 加油 + 喷火；喷火中再吃 → 连击 +1） */
+  function takeTank(o){
+    o.dead = true;
+    fuel = 1; reason = '';
+    const isRed = (o.kind === 'boost');
+    if(o.kind === 'fuel'){                        // ★ 绿星：回血
+      const before = hp;
+      hp = Math.min(HP_MAX, hp + HEAL_FUEL);
+      sndFuel();
+      addBurst(o.x, o.y, 12, '#7dffa0');
+      floats.push({ x: o.x, y: PY - (isRed ? 40 : 58), t: 0,
+                    txt: (hp > before) ? ('+' + (hp - before) + ' 生命') : '+满油', color: '#7dffa0' });
+    }
+    if(isRed || boostStage >= 1){                 // ★ 连击推进
+      const s = advanceStage();
+      glowT = 1; sndBoost();
+      if(s === 1){
+        floats.push({ x: o.x, y: PY - 40, t: 0,
+                      txt: '加速！' + Math.round(V_MAX * BOOST_MULT * KMH) + ' km/h', color: '#ff6b5b' });
+      }else{
+        sndShield();
+        const t3 = s >= 3;
+        floats.push({ x: o.x, y: PY - 40, t: 0,
+                      txt: s === 2 ? '阶段2 · 护盾！' : (s === 3 ? '阶段3 · 撞飞小车！' : ('阶段' + s + ' · 延长！')),
+                      color: t3 ? '#ffd166' : '#7de8ff' });
+      }
+      addBurst(o.x, o.y, isRed ? 18 : 14, isRed ? '#ff3b30' : '#7de8ff');
+    }
+  }
+
+  /* ============================================================
+     ★ 满速撞飞路障（原有机制）+ 护盾撞飞（新增）
      ============================================================ */
   const boostCap = () => V_MAX * BOOST_MULT;
-  const isRoadblock = o => o.kind === 'cone' || o.kind === 'barrel';
   function smashReady(){ return player.boost > 0 && player.v >= boostCap() * SMASH_TOL; }
-  function smashObstacle(o){
+  /** keepShield = true 表示撞飞后护盾保留（只有加速阶段3 享受） */
+  function smashObject(o, keepShield){
     o.dead = true;
     smashed++;
+    if(!keepShield) shieldT = 0;                  // ★ 阶段2 撞飞后护盾消失
     sndSmash();
-    addBurst(o.x, o.y, 10, o.kind === 'cone' ? '#ffd166' : '#ffb14d');
+    const E2 = ENEMY[o.kind];
+    addBurst(o.x, o.y, 10, isRoadblock(o) ? (o.kind === 'cone' ? '#ffd166' : '#ffb14d') : '#9fd8ff');
     const side = (o.x < player.x) ? -1 : (o.x > player.x ? 1 : (Math.random() < 0.5 ? -1 : 1));
     flies.push({ x: o.x, y: toScreenY(o.y), vx: side * (80 + Math.random() * 90),
                  vy: -140 - Math.random() * 80, back: player.v * 0.55,
                  rot: 0, spin: side * (9 + Math.random() * 7),
-                 t: 0, life: 0.6, kind: o.kind, size: Math.max(o.w, o.h) * 0.5 });
-    floats.push({ x: o.x, y: PY - 34, t: 0, txt: '撞飞！', color: '#ffe066' });
+                 t: 0, life: 0.6, kind: o.kind,
+                 w: o.w, h: o.h,
+                 color: E2 ? E2.color : '#b9c2cc', lite: E2 ? E2.lite : '#d8dee6',
+                 size: Math.max(o.w, o.h) * 0.5 });
+    floats.push({ x: o.x, y: PY - 34, t: 0,
+                  txt: keepShield ? '撞飞！护盾保持' : '撞飞！', color: '#ffe066' });
   }
   function sndSmash(){
     noiseBurst(0.22, { type:'bandpass', freq: 900, to: 260, gain: 0.16, decay: 1.4 });
@@ -956,6 +1055,53 @@
     }
   }
 
+  /** ★ 大货车：超长货箱 + 橙黑危险条纹 + 双后轴 + 「危」字
+   *    —— 玩家一眼就能认出「这玩意撞上去最疼，而且护盾挡不住」 */
+  function drawHauler(cx, cy, w, h){
+    // 双后轴轮胎（比一般车多一组，显得重）
+    ctx.fillStyle = PALETTE.tire;
+    const tw = w * 0.15, th = h * 0.11;
+    for(const fx of [-0.5, 0.5]) for(const fy of [-0.33, -0.17, 0.28, 0.40]){
+      roundRect(cx + fx * w - tw / 2, cy + fy * h, tw, th, 2); ctx.fill();
+    }
+    // 底盘
+    ctx.fillStyle = '#39424e';
+    roundRect(cx - w / 2, cy - h / 2, w, h, 4); ctx.fill();
+    // 货箱 + 橙色危险斜条纹
+    const bx = cx - w * 0.47, by = cy - h * 0.48, bw = w * 0.94, bh = h * 0.74;
+    ctx.fillStyle = PALETTE.truckBox;
+    roundRect(bx, by, bw, bh, 3); ctx.fill();
+    ctx.save();
+    roundRect(bx, by, bw, bh, 3); ctx.clip();
+    ctx.fillStyle = 'rgba(242,130,43,.85)';
+    for(let i = -6; i < 14; i++){
+      ctx.save();
+      ctx.translate(bx + i * (bw * 0.26), cy);
+      ctx.rotate(-0.52);
+      ctx.fillRect(0, -h, bw * 0.11, h * 2);
+      ctx.restore();
+    }
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(30,36,44,.5)'; ctx.lineWidth = 1.2;
+    roundRect(bx, by, bw, bh, 3); ctx.stroke();
+    // 驾驶室（在下方 = 靠近玩家的一侧，与卡车一致）
+    ctx.fillStyle = '#2b3440';
+    roundRect(cx - w * 0.47, cy + h * 0.26, w * 0.94, h * 0.22, 3); ctx.fill();
+    ctx.fillStyle = PALETTE.glass;
+    roundRect(cx - w * 0.34, cy + h * 0.30, w * 0.68, h * 0.10, 2); ctx.fill();
+    // 前后红色警示条
+    ctx.fillStyle = '#e03b2f';
+    ctx.fillRect(cx - w * 0.47, by, w * 0.94, Math.max(1.6, h * 0.028));
+    // 「危」字标（车够宽才画，免得糊成一团）
+    if(w >= 26){
+      ctx.fillStyle = 'rgba(18,22,28,.82)';
+      ctx.font = '800 ' + Math.round(w * 0.52) + 'px ' + FONT;
+      ctx.textAlign = 'center';
+      ctx.fillText('危', cx, cy + h * 0.03);
+      ctx.textAlign = 'left';
+    }
+  }
+
   /** ★ 拾取道具五角星：绿色 = 加油；红色 = 加油 + 限时高速（缓慢自转 + 脉动光环） */
   function drawPickupStar(x, y, w, h, isBoost){
     const pulse = 0.5 + 0.5 * Math.sin(tGlobal * 5);
@@ -1034,6 +1180,8 @@
         ctx.fillRect(o.x - bw * 0.42, sy + bh * 0.04, bw * 0.84, bh * 0.14);
             }else if(o.kind === 'fuel' || o.kind === 'boost'){
         drawPickupStar(o.x, sy, o.w, o.h, o.kind === 'boost');
+      }else if(o.kind === 'hauler'){
+        drawHauler(o.x, sy, o.w, o.h);             // ★ 大货车：专属画法（更长/有危险条纹/"危"字）
       }else if(o.kind === 'weaver'){
         const E2 = ENEMY.weaver;
         drawCarShape(o.x, sy, o.w, o.h, E2.color, E2.lite, { toy: true });
@@ -1051,6 +1199,49 @@
     const on = smashReady();
     const pulse = 0.5 + 0.5 * Math.sin(tGlobal * 8.5);
     return { on: on, pulse: pulse, alpha: on ? 0.45 + 0.35 * pulse : 0 };
+  }
+
+  /* ============================================================
+     ★ 护盾视觉（纯函数，便于测试）：
+       阶段2 = 青色能量罩；阶段3 = 金色、更粗、转速更快（表示"撞飞不耗盾"）
+       剩余 <1.6s 时急促闪烁，提示快没了
+     ============================================================ */
+  function shieldFx(){
+    if(shieldT <= 0) return null;
+    const lvl3 = boostStage >= 3;
+    const pulse = 0.5 + 0.5 * Math.sin(tGlobal * (lvl3 ? 9 : 6.5));
+    const blink = shieldT < 1.6 ? (Math.floor(tGlobal * 13) % 2 === 0 ? 0.4 : 1) : 1;
+    return { on: true, lvl3: lvl3, pulse: pulse,
+             rgb: lvl3 ? '255,205,90' : '110,225,255',
+             alpha: (0.6 + 0.4 * pulse) * blink };
+  }
+  function drawShield(cx, cy){
+    const s = shieldFx(); if(!s) return;
+    const R = Math.max(CAR_W, CAR_H) * (s.lvl3 ? 1.02 : 0.95) + 7 * s.pulse;
+    ctx.save();
+    // 内部柔光
+    const rg = ctx.createRadialGradient(cx, cy, R * 0.2, cx, cy, R);
+    rg.addColorStop(0.00, 'rgba(' + s.rgb + ',0)');
+    rg.addColorStop(0.70, 'rgba(' + s.rgb + ',' + (s.alpha * 0.18).toFixed(3) + ')');
+    rg.addColorStop(1.00, 'rgba(' + s.rgb + ',' + (s.alpha * 0.52).toFixed(3) + ')');
+    ctx.fillStyle = rg;
+    ctx.beginPath(); ctx.ellipse(cx, cy, R * 0.84, R * 1.04, 0, 0, 7); ctx.fill();
+    // 能量环（旋转虚线）
+    ctx.strokeStyle = 'rgba(' + s.rgb + ',' + s.alpha.toFixed(3) + ')';
+    ctx.lineWidth = s.lvl3 ? 3.6 : 2.6;
+    ctx.setLineDash([9, 7]);
+    ctx.lineDashOffset = -tGlobal * (s.lvl3 ? 70 : 46);
+    ctx.beginPath(); ctx.ellipse(cx, cy, R * 0.84, R * 1.04, 0, 0, 7); ctx.stroke();
+    ctx.setLineDash([]);
+    // 环绕光点
+    for(let i = 0; i < 5; i++){
+      const a = tGlobal * (s.lvl3 ? 3.2 : 2.2) + i * (Math.PI * 2 / 5);
+      ctx.fillStyle = 'rgba(' + s.rgb + ',' + (s.alpha * 0.9).toFixed(3) + ')';
+      ctx.beginPath();
+      ctx.arc(cx + Math.cos(a) * R * 0.84, cy + Math.sin(a) * R * 1.04, s.lvl3 ? 2.8 : 2.1, 0, 7);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   function drawPlayer(){
@@ -1080,6 +1271,7 @@
     }
     drawCarShape(cx, PY, CAR_W, CAR_H, PALETTE.player, PALETTE.playerLite, { toy: true });
     ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
+    drawShield(cx, PY);                            // ★ 护盾：画在车身上层 → 一眼看得见的能量罩
     /* ★ 满速红光：车尾两束跳动火焰 */
     if(fx.on){
       for(let s = -1; s <= 1; s += 2){
@@ -1126,10 +1318,22 @@
         ctx.beginPath(); ctx.moveTo(0, -s * 1.0); ctx.lineTo(s * 0.5, s * 0.45); ctx.lineTo(-s * 0.5, s * 0.45);
         ctx.closePath(); ctx.fill();
         ctx.fillStyle = '#fff'; ctx.fillRect(-s * 0.34, -s * 0.06, s * 0.68, s * 0.2);
-      }else{
+      }else if(f.kind === 'barrel'){
         ctx.fillStyle = PALETTE.barrel;
         roundRect(-s * 0.45, -s * 0.55, s * 0.9, s * 1.1, s * 0.2); ctx.fill();
         ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.fillRect(-s * 0.45, -s * 0.1, s * 0.9, s * 0.16);
+      }else{
+        /* ★ 被撞飞的小车（护盾撞飞的）：按原车色画个简笔车身 */
+        const cw2 = f.w || s * 0.9, ch2 = f.h || s * 1.1;
+        const rr = Math.min(5, cw2 * 0.22);
+        ctx.fillStyle = f.color || PALETTE.barrel;
+        roundRect(-cw2 * 0.5, -ch2 * 0.5, cw2, ch2, rr); ctx.fill();
+        ctx.strokeStyle = 'rgba(30,36,44,.4)'; ctx.lineWidth = 1.2;
+        roundRect(-cw2 * 0.5, -ch2 * 0.5, cw2, ch2, rr); ctx.stroke();
+        ctx.fillStyle = PALETTE.glass;
+        roundRect(-cw2 * 0.33, -ch2 * 0.30, cw2 * 0.66, ch2 * 0.18, 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,.32)';
+        roundRect(-cw2 * 0.40, -ch2 * 0.06, cw2 * 0.22, ch2 * 0.30, 2); ctx.fill();
       }
       ctx.restore();
     }
@@ -1187,10 +1391,10 @@
     ctx.fillStyle = fg;
     roundRect(fx, fy, Math.max(2, fw * fuel), fh, 5); ctx.fill();
     ctx.fillStyle = '#93a4bd'; ctx.font = '600 9.5px ' + FONT;
-    ctx.fillText('燃油', fx, fy + 24);
+    ctx.fillText('燃油', fx, fy + 22);
     ctx.fillStyle = fuel < 0.25 ? '#ff8b7d' : '#cfd8e6';
     ctx.font = '700 11px ' + FONT;
-    ctx.fillText(Math.round(fuel * 100) + '%', fx + 26, fy + 24);
+    ctx.fillText(Math.round(fuel * 100) + '%', fx + 26, fy + 22);
 
     // 中：段落 + 进度
     const px = 172, py = 16, pw = 62, ph = 8;
@@ -1220,14 +1424,52 @@
       ctx.textAlign = 'right';
     }
 
-    // 命（小车身图标）
-    for(let i = 0; i < hp; i++){
-      const hx = W - 20 - i * 18, hy = 54;
-      ctx.fillStyle = PALETTE.player;
-      roundRect(hx - 6, hy - 5, 12, 10, 3); ctx.fill();
-      ctx.fillStyle = PALETTE.glass;
-      roundRect(hx - 3.5, hy - 3.5, 7, 3, 1.5); ctx.fill();
+    /* ★ 生命值条（取代原来的「三条命」小车身图标） */
+    const hx0 = 44, hy0 = HUD_H - 19, hw0 = Math.max(70, W - hx0 - 52), hh0 = 11;
+    ctx.fillStyle = 'rgba(0,0,0,.4)';
+    roundRect(hx0, hy0, hw0, hh0, 5.5); ctx.fill();
+    const hr = clamp(hp / HP_MAX, 0, 1);
+    const hColA = hr > 0.55 ? '#3ddc84' : (hr > 0.3 ? '#ffd166' : '#ff5b4d');
+    const hColB = hr > 0.55 ? '#7dffa0' : (hr > 0.3 ? '#ffb14d' : '#c0392b');
+    if(hr <= 0.3) ctx.globalAlpha = 0.5 + 0.5 * (0.5 + 0.5 * Math.sin(tGlobal * 8));   // 残血闪烁
+    const hg2 = ctx.createLinearGradient(hx0, 0, hx0 + hw0, 0);
+    hg2.addColorStop(0, hColB); hg2.addColorStop(1, hColA);
+    ctx.fillStyle = hg2;
+    roundRect(hx0, hy0, Math.max(3, hw0 * hr), hh0, 5.5); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.font = '800 8.5px ' + FONT; ctx.textAlign = 'left';
+    ctx.lineWidth = 2.6; ctx.strokeStyle = 'rgba(10,14,20,.75)';
+    const htxt = Math.round(hp) + '/' + HP_MAX;
+    ctx.strokeText(htxt, hx0 + 6, hy0 + 8.4);
+    ctx.fillStyle = '#ffffff'; ctx.fillText(htxt, hx0 + 6, hy0 + 8.4);
+  }
+
+  /** ★ 连击状态条：画在仪表台下沿（加速阶段 + 护盾剩余时间），阶段2 起才出现 */
+  function drawComboChips(){
+    if(boostStage < 2) return;
+    const y = HUD_H + 14, ch = 17;
+    const lvl3 = boostStage >= 3;
+    let x = 8;
+    const cw = 42;
+    ctx.fillStyle = lvl3 ? 'rgba(255,205,90,.95)' : 'rgba(110,225,255,.95)';
+    roundRect(x, y, cw, ch, 6); ctx.fill();
+    ctx.fillStyle = '#0b1a22'; ctx.font = '800 10.5px ' + FONT; ctx.textAlign = 'center';
+    ctx.fillText('阶段' + boostStage, x + cw / 2, y + 12);
+    x += cw + 5;
+    if(shieldT > 0){
+      const sw = 66;
+      ctx.fillStyle = lvl3 ? 'rgba(255,205,90,.8)' : 'rgba(110,225,255,.8)';
+      roundRect(x, y, sw, ch, 6); ctx.fill();
+      ctx.fillStyle = '#0b1a22';
+      ctx.fillText('护盾 ' + shieldT.toFixed(1) + 's', x + sw / 2, y + 12);
+      x += sw + 5;
     }
+    ctx.font = '700 9.5px ' + FONT; ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(10,14,20,.55)';
+    roundRect(6, y + ch + 3, lvl3 ? 148 : 132, 13, 6); ctx.fill();
+    ctx.fillStyle = '#dfe9f5';
+    ctx.fillText(lvl3 ? '撞飞小车不耗盾 · 大货车除外' : '护盾可撞飞小车 · 大货车除外', 11, y + ch + 12.5);
+    ctx.textAlign = 'left';
   }
 
   /* ---------- 玩具外框（★ 等照片调色） ---------- */
@@ -1317,12 +1559,12 @@
     }
   }
   function drawHint(){
-    const cy = H * 0.42;
+    const cy = H * 0.38;                       // ★ 上移一点，给新增的玩法说明腾地方
     const hw = Math.min(126, (W - 20) / 2);
     ctx.save();
     ctx.fillStyle = 'rgba(255,247,238,.96)';
     ctx.strokeStyle = PALETTE.frame; ctx.lineWidth = 2.5;
-    roundRect(W / 2 - hw, cy - 66, hw * 2, 180, 14); ctx.fill(); ctx.stroke();
+    roundRect(W / 2 - hw, cy - 66, hw * 2, 224, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = PALETTE.grip; ctx.font = '800 22px ' + FONT;
     ctx.fillText('火箭车', W / 2, cy - 38);
@@ -1333,15 +1575,21 @@
     ctx.strokeStyle = 'rgba(242,130,32,.35)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(W / 2 - hw + 16, cy + 18); ctx.lineTo(W / 2 + hw - 16, cy + 18); ctx.stroke();
     ctx.fillStyle = '#5c7186'; ctx.font = '11px ' + FONT;
-    ctx.fillText('卡车最慢 · 轿车中速 · 跑车最快会跑掉', W / 2, cy + 36);
-    ctx.fillStyle = '#0a8f3c'; ctx.font = '800 11.5px ' + FONT;
-    ctx.fillText('绿星 = 加油 · 红星 = 加油+1000km/h', W / 2, cy + 54);
+    ctx.fillText('卡车最慢 · 轿车中速 · 跑车最快会跑掉', W / 2, cy + 34);
+    ctx.fillStyle = '#0a8f3c'; ctx.font = '800 11px ' + FONT;
+    ctx.fillText('绿星 = 加油+回血 · 红星 = 加油+加速', W / 2, cy + 50);
     ctx.fillStyle = '#c05f0d'; ctx.font = '700 11px ' + FONT;
-      ctx.fillText('橙色车亮灯会变道 · 撞上就掉命', W / 2, cy + 70);
+    ctx.fillText('撞车按车型扣生命值（大货车最疼）', W / 2, cy + 66);
     ctx.fillStyle = '#5c7186'; ctx.font = '11px ' + FONT;
-      ctx.fillText('满速吃到红星时，可撞飞路障（不扣血不减速）', W / 2, cy + 86);
+    ctx.fillText('满速吃红星可撞飞路障（不扣血不减速）', W / 2, cy + 82);
+    ctx.fillStyle = '#1a7f96'; ctx.font = '800 11px ' + FONT;
+    ctx.fillText('喷火中再吃油箱 → 阶段2 护盾', W / 2, cy + 98);
+    ctx.fillStyle = '#a06a00'; ctx.font = '800 11px ' + FONT;
+    ctx.fillText('阶段3 撞飞小车且不耗护盾', W / 2, cy + 114);
     ctx.fillStyle = '#c0392b'; ctx.font = '700 11px ' + FONT;
-    ctx.fillText('到终点加时进下一段 · 时间到/撞光三条命结束', W / 2, cy + 104);
+    ctx.fillText('大货车：护盾无效，撞上盾和加速都没', W / 2, cy + 130);
+    ctx.fillStyle = '#c0392b'; ctx.font = '700 11px ' + FONT;
+    ctx.fillText('到终点加时进下一段 · 生命归零/时间到结束', W / 2, cy + 146);
     ctx.restore();
     ctx.textAlign = 'left';
   }
@@ -1364,6 +1612,7 @@
     drawTouchZone();
     drawFrame();
     drawDash();
+    drawComboChips();                       // ★ 连击阶段 / 护盾剩余时间
     if(hintOn && state === 'play') drawHint();
   }
 
@@ -1435,7 +1684,8 @@
       '画布css=' + cv.style.width + '×' + cv.style.height + '  物理=' + cv.width + '×' + cv.height,
       '逻辑=' + W + '×' + Math.round(H) + ' scale=' + S.toFixed(3) + ' 玩家屏y=' + Math.round(PY) + ' 仪表高=' + HUD_H,
       '页面总高=' + document.documentElement.scrollHeight + '/' + window.innerHeight,
-      '状态=' + state + ' 原因=' + (reason || '—') + ' 段=' + stage + ' 命=' + hp,
+      '状态=' + state + ' 原因=' + (reason || '—') + ' 段=' + stage + ' 生命=' + hp + '/' + HP_MAX +
+        ' 加速阶段=' + boostStage + ' 护盾=' + shieldT.toFixed(1) + 's 撞飞=' + smashed,
       '速度=' + Math.round(player ? player.v : 0) + '（' + Math.round((player ? player.v : 0) * KMH) + 'km/h） 车速比=' +
         (player ? (player.v / V_MAX).toFixed(2) : '—') + ' 红星加速剩余=' +
         (player ? player.boost.toFixed(1) + 's' : '—') + ' 档位=' +
@@ -1451,7 +1701,7 @@
       '路面=' + Math.round(ROAD_L) + '..' + Math.round(ROAD_R) + '（宽 ' + Math.round(ROAD_R - ROAD_L) + '，占屏 ' +
         ((ROAD_R - ROAD_L) / W * 100).toFixed(0) + '%） 车道=' + LANE_W.toFixed(1) + ' 车身=' + CAR_W + '×' + CAR_H +
         '（占道 ' + (CAR_W / LANE_W * 100).toFixed(0) + '%，相邻车道缝 ' + (LANE_W - CAR_W).toFixed(0) + ' < 车宽 → 穿不过去）',
-      '场上道具/车型=' + (objs ? (['truck','sedan','sports','weaver','fuel','boost','cone','barrel']
+      '场上道具/车型=' + (objs ? (['truck','sedan','sports','weaver','hauler','fuel','boost','cone','barrel']
         .map(k => { const n = objs.filter(o => !o.dead && o.kind === k).length; return n ? (ENEMY[k] ? ENEMY[k].name : k) + n : null; })
         .filter(Boolean).join(' ') || '—') : '—'),
       '输入=' + JSON.stringify(input) + '  种子=' + fieldSeed,
@@ -1511,10 +1761,12 @@
   //   每帧 ReferenceError，而 Node 测试不跑 draw() 所以漏了 —— 现已加绘制冒烟测试）
   window.__racer = () => ({
     state, reason, hp, stage, distance, passed, fuel, timeLeft,
+    HP_MAX, HEAL_FUEL, SHIELD_TIME, DMG, DMG_DEFAULT,
+    boostStage, shieldT, smashed,
     player: { x: player.x, y: player.y, v: player.v, invuln: player.invuln, boost: player.boost },
     PY, W, H, HUD_H, HFIX, BOTTOM_BAND, TOUCH_TOP, TOUCH_BOTTOM, ZONE_H, FOLLOW, MIN_GAP,
     ROAD_L, ROAD_R, LANES, LANE_W,
-    V_BASE, V_MAX, KMH, BOOST_MULT, BOOST_TIME, STAGE_LEN, TIME_START, TIME_BONUS, HP_START, FUEL_RATE,
+    V_BASE, V_MAX, KMH, BOOST_MULT, BOOST_TIME, STAGE_LEN, TIME_START, TIME_BONUS, FUEL_RATE,
     CAR_W, CAR_H,
     objs: objs.map(o => ({ id:o.id, kind:o.kind, lane:o.lane, x:o.x, y:o.y, v:o.v, w:o.w, h:o.h,
                            dead:o.dead, drift:o.drift, changeT:o.changeT, targetX:o.targetX,
@@ -1529,6 +1781,12 @@
   window.__racerReset = seed => { engineStop(); reset(seed); };
   window.__racerInput = o => { if('left' in o) input.left = !!o.left; if('right' in o) input.right = !!o.right; if('gas' in o) input.gas = !!o.gas; };
   window.__racerFx = () => speedFx();
+  window.__racerShield = () => ({ stage: boostStage, t: +shieldT.toFixed(3), boost: +player.boost.toFixed(3),
+                                  on: shieldT > 0, fx: shieldFx() });
+  // 测试钩子：直接推进连击阶段（等价于"喷火中又吃到一个油箱"）
+  window.__racerAdvance = () => advanceStage();
+  // 测试钩子：按伤害表取某个 kind 的伤害
+  window.__racerDmg = kind => dmgOf({ kind: kind });
   window.__racerSmash = () => ({ ready: smashReady(), count: smashed, flies: flies.length,
                                  boost: +player.boost.toFixed(2), v: +player.v.toFixed(1),
                                  cap: +boostCap().toFixed(1), need: +(boostCap() * SMASH_TOL).toFixed(1) });
@@ -1541,7 +1799,7 @@
     objs.push(o);
     return o.id;
   };
-  window.__racerSetPlayer = o => { if('x' in o) player.x = o.x; if('y' in o) player.y = o.y; if('v' in o) player.v = o.v; if('boost' in o) player.boost = o.boost; if('fuel' in o) fuel = o.fuel; if('timeLeft' in o) timeLeft = o.timeLeft; if('hp' in o) hp = o.hp; if('invuln' in o) player.invuln = o.invuln; };
+  window.__racerSetPlayer = o => { if('x' in o) player.x = o.x; if('y' in o) player.y = o.y; if('v' in o) player.v = o.v; if('boost' in o) player.boost = o.boost; if('fuel' in o) fuel = o.fuel; if('timeLeft' in o) timeLeft = o.timeLeft; if('hp' in o) hp = o.hp; if('invuln' in o) player.invuln = o.invuln; if('shield' in o) shieldT = o.shield; if('boostStage' in o) boostStage = o.boostStage; };
   window.__racerClearObjs = () => { objs.length = 0; };
   window.__racerNoSpawn = v => { spawnOff = !!v; };   // 测试钩子
   // 测试钩子：按逻辑坐标模拟触点（走真实的 pointer 换算路径）
