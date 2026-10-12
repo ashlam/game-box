@@ -122,6 +122,8 @@ function ok(cond, name, detail) {
   else { fail++; failures.push(name + (detail ? ' → ' + detail : '')); console.log('  ✗ ' + name + (detail ? '  → ' + detail : '')); }
 }
 function section(t) { console.log('\n== ' + t + ' =='); }
+/** ★ 生命会随时间自然掉，所以「扣血多少」的断言统一按容差比较（默认 ±0.35） */
+function near(a, b, tol) { return Math.abs(a - b) <= (tol === undefined ? 0.35 : tol); }
 
 /* ================= 1) 自动前进 + 两档速度 ================= */
 section('1) ★ 静止起步 · 按住油门才逐渐加速（按用户要求）');
@@ -186,7 +188,10 @@ section('2) 左右转向 · 冲出路面掉速（不掉命）');
   input({ left: false });
   run(120);
   ok(R().player.x >= R().ROAD_L + R().CAR_W / 2 - 0.6, '★ 长时间顶住左路肩，车身仍完整在路面内');
-  ok(R().hp === R().HP_MAX, '★ 蹭路肩不掉生命值（' + R().hp + '/' + R().HP_MAX + '）');
+  // ★ 生命每时每刻都在自然消耗（本节累计约 7 秒、约 19 点），所以这里看的是"有没有被额外扣一次撞击伤害"：
+  //   真被判定撞上至少扣 30（路障）以上，血量会明显跌破 70
+  ok(R().hp > 70 && R().state === 'play',
+     '★ 蹭路肩不额外扣生命值（' + R().hp.toFixed(1) + '/' + R().HP_MAX + '，少的那点只是自然消耗）');
   // 回到路中央后速度恢复（★ 现在左右都有硬挡，不会停在草地上）
   input({ right: false });
   setP({ x: (R().ROAD_L + R().ROAD_R) / 2 });
@@ -194,24 +199,39 @@ section('2) 左右转向 · 冲出路面掉速（不掉命）');
   ok(R().player.v > R().V_BASE * 0.9, '回到路面速度恢复（v=' + R().player.v.toFixed(0) + '）');
 }
 
-/* ================= 3) 燃油 / 加油车 ================= */
-section('3) 燃油消耗 · 碰加油车回满');
+/* ================= 3) 生命自然消耗（取代燃油）/ 绿星 ================= */
+section('3) ★ 生命随行驶自然消耗 · 碰绿星回血');
 {
   reset(2);
   clearObjs();
-  noSpawn(true);                              // ★ 关掉交通：本节只测"加油车本身无害"
+  noSpawn(true);                              // ★ 关掉交通：本节只看生命本身
+  const hp0 = R().hp;
   run(300);                                   // 5 秒
-  const f = R().fuel;
-  ok(f < 1 && f > 0.85, '燃油随时间消耗（5 秒后 ' + (f * 100).toFixed(1) + '%）');
+  const s = R();
+  const drop = hp0 - s.hp;
+  ok(drop > 0.5 && drop < 22,
+     '★ 生命随时间自然消耗（5 秒掉了 ' + drop.toFixed(2) + '，速率 ' + s.HP_DRAIN + ' 点/秒×速度系数）');
+  ok(s.hp > 0 && s.state === 'play', '短时间消耗不会直接结束（剩 ' + s.hp.toFixed(1) + '）');
 
-  // 把加油车放到玩家正前方同车道，等它被撞上（相对速度 = 玩家 − 油车）
+  // 全速比停车掉得快（★ 各跑 2 秒，不能跑满一段——否则会触发过关补生命，把消耗盖过去）
+  reset(2); quiet(); input({ gas: true }); run(120);
+  const hpFast0 = R().hp; run(120);
+  const fastDrop = hpFast0 - R().hp;
+  reset(2); quiet(); input({ gas: false }); run(120);
+  const hpSlow0 = R().hp; run(120);
+  const slowDrop = hpSlow0 - R().hp;
+  ok(fastDrop > slowDrop,
+     '★ 跑得越快掉得越快（2 秒全速掉 ' + fastDrop.toFixed(2) + ' > 停车掉 ' + slowDrop.toFixed(2) + '）');
+
+  // 绿星：回血，且不扣血
+  reset(2); clearObjs(); noSpawn(true);
   const p = R();
+  setP({ hp: 50 });
   putObj({ kind: 'fuel', lane: 0, x: p.player.x, y: p.player.y + 120, v: 70, w: 34, h: 76 });
   let picked = false;
   for (let i = 0; i < 240 && !picked; i++) { step(DT); picked = R().objs.some(o => o.kind === 'fuel' && o.dead); }
-  const fuelAtPick = R().fuel;
-  ok(picked && fuelAtPick > 0.95, '★ 碰到绿色加油车 → 回满油（吃到的瞬间 ' + (fuelAtPick * 100).toFixed(0) + '%，之后继续消耗属正常）');
-  ok(R().hp === R().HP_MAX, '加油车不扣生命值');
+  ok(picked && R().hp > 60,
+     '★ 吃到绿星回血（50 → ' + R().hp.toFixed(1) + '，+' + R().HEAL_FUEL + '）');
 }
 
 /* ================= 4) 倒计时 / 过关 ================= */
@@ -243,13 +263,13 @@ section('5) ★ 生命值：按车型扣血 · 无敌帧 · 归零结束');
   quiet();
   run(2);
   const HPM = R().HP_MAX;
-  ok(R().hp === HPM, '★ 开局满生命值（' + HPM + '）');
+  ok(near(R().hp, HPM, 0.3), '★ 开局满生命值（' + R().hp.toFixed(2) + '/' + HPM + '）');
   const n0 = sndNodes;
   putObj({ kind: 'car', lane: 0, x: R().player.x, y: R().player.y, v: 0 });
   run(2);
   const a = R();
-  ok(a.hp === HPM - R().DMG_DEFAULT,
-     '★ 撞车 → 扣的是生命值不是命（' + HPM + ' → ' + a.hp + '，扣 ' + (HPM - a.hp) + '）');
+  ok(near(a.hp, HPM - R().DMG_DEFAULT, 0.5),
+     '★ 撞车 → 扣的是生命值不是命（' + HPM + ' → ' + a.hp.toFixed(2) + '，扣 ' + (HPM - a.hp).toFixed(2) + '）');
   ok(a.player.invuln > 0, '撞后进入无敌（' + a.player.invuln.toFixed(1) + 's）');
   ok(a.player.v < R().V_BASE * 0.6, '★ 撞车后的减速表现照旧（v=' + a.player.v.toFixed(0) + '）');
   ok(sndNodes > n0, '撞车有爆破音（+' + (sndNodes - n0) + '）');
@@ -258,7 +278,7 @@ section('5) ★ 生命值：按车型扣血 · 无敌帧 · 归零结束');
   // 无敌期内不再扣血
   putObj({ kind: 'car', lane: 0, x: R().player.x, y: R().player.y + 10, v: 0 });
   run(10);
-  ok(R().hp === a.hp, '无敌期内撞车不再扣血');
+  ok(near(R().hp, a.hp, 0.5), '无敌期内撞车不再扣血（' + a.hp.toFixed(2) + ' → ' + R().hp.toFixed(2) + '）');
 
   // ★ 伤害表：越重越疼，大货车最疼
   const dCone = win.__racerDmg('cone'), dSedan = win.__racerDmg('sedan'),
@@ -276,9 +296,9 @@ section('5) ★ 生命值：按车型扣血 · 无敌帧 · 归零结束');
     run(2);
     return R().HP_MAX - R().hp;
   };
-  ok(hit('cone') === dCone, '★ 撞锥桶实扣 ' + dCone + '（最轻）');
-  ok(hit('sedan') === dSedan, '★ 撞轿车实扣 ' + dSedan);
-  ok(hit('hauler') === dHauler, '★ 撞大货车实扣 ' + dHauler + '（比轿车疼 ' + (dHauler - dSedan) + '）');
+  ok(near(hit('cone'), dCone, 0.5), '★ 撞锥桶实扣 ' + dCone + '（最轻，实测 ' + hit('cone').toFixed(2) + '）');
+  ok(near(hit('sedan'), dSedan, 0.5), '★ 撞轿车实扣 ' + dSedan + '（实测 ' + hit('sedan').toFixed(2) + '）');
+  ok(near(hit('hauler'), dHauler, 0.5), '★ 撞大货车实扣 ' + dHauler + '（比轿车疼 ' + (dHauler - dSedan) + '）');
 
   // 生命值归零 → 结束
   reset(5); quiet(); run(2);
@@ -295,11 +315,11 @@ section('5) ★ 生命值：按车型扣血 · 无敌帧 · 归零结束');
   ok(R().hp === HPM && R().state === 'play', '重开回到满生命值');
 }
 
-/* ================= 5b) ★ 绿色油箱回血 ================= */
-section('5b) ★ 绿色油箱：补充燃料 + 恢复生命值');
+/* ================= 5b) ★ 绿星回血 ================= */
+section('5b) ★ 绿星：恢复生命值（没有燃油了）');
 {
   reset(51); quiet();
-  setP({ hp: 40, fuel: 0.2 });
+  setP({ hp: 40 });
   run(2);
   const hp0 = R().hp;
   putObj({ kind: 'fuel', lane: 0, x: R().player.x, y: R().player.y + 60, v: 0,
@@ -307,9 +327,8 @@ section('5b) ★ 绿色油箱：补充燃料 + 恢复生命值');
   let eaten = false;
   for (let i = 0; i < 120 && !eaten; i++) { step(DT); eaten = R().objs.some(o => o.kind === 'fuel' && o.dead); }
   const s = R();
-  ok(eaten && s.fuel > 0.9, '★ 绿星补充燃料（' + (s.fuel * 100).toFixed(0) + '%）');
-  ok(s.hp === hp0 + R().HEAL_FUEL,
-     '★ 绿星同时恢复生命值（' + hp0 + ' → ' + s.hp + '，+' + R().HEAL_FUEL + '）');
+  ok(eaten && near(s.hp, hp0 + R().HEAL_FUEL, 0.6),
+     '★ 绿星恢复生命值（' + hp0.toFixed(1) + ' → ' + s.hp.toFixed(1) + '，+' + R().HEAL_FUEL + '）');
 
   // 满血时不会超过上限
   reset(52); quiet(); run(2);
@@ -425,10 +444,10 @@ section('9) 三种结束原因都能正常收尾');
   reset(21); setP({ timeLeft: 0.3 }); run(40); reasons.push(R().reason);
   reset(22); quiet(); run(2); for (let k = 0; k < 40 && R().state === 'play'; k++) { setP({ invuln: 0 }); putObj({ kind: 'car', lane: 0, x: R().player.x, y: R().player.y, v: 0 }); run(3); }
   reasons.push(R().reason);
-  reset(23); setP({ fuel: 0, v: 30 }); run(60);
-  ok(reasons[0] === '时间到' && reasons[1] === '撞毁', '时间到 / 撞毁 两条路径都正常（' + reasons.join(' / ') + '）');
-  ok(R().state === 'play' || R().state === 'over', '状态始终合法（' + R().state + '）');
-  ok(R().fuel === 0 && R().player.v <= 50, '油尽时车速被压到低速（' + R().player.v.toFixed(0) + '）—— 还能挣扎到加油车');
+  reset(23); quiet(); setP({ hp: 0.2, invuln: 99999 }); run(60); reasons.push(R().reason);
+  ok(reasons[0] === '时间到' && reasons[1] === '撞毁' && reasons[2] === '力竭',
+     '★ 三条结束路径：时间到 / 撞毁 / 力竭（' + reasons.join(' / ') + '）');
+  ok(R().state === 'over', '生命被耗光 → 结束（' + R().state + '）');
 }
 
 /* ================= 10) ★ 滑屏触控（底部触控区） ================= */
@@ -779,16 +798,16 @@ section('14) ★ 可辨识性：唯一能被吃的东西必须"视觉上跳出�
   reset(73); noSpawn(true); clearObjs();
   {
     const s0 = R(), py0 = s0.player.y, cx = s0.ROAD_L + s0.LANE_W * 1.5;
-    setP({ x: cx, invuln: 99999, fuel: 0.5 });
+    setP({ x: cx, invuln: 99999, hp: 50 });
     const off = (Math.round(s0.CAR_W * 0.95) + s0.CAR_W) / 2 + 5;    // 横向差 5 个单位：盒子不相交
     putObj({ kind: 'fuel', lane: 1, x: cx + off, y: py0, v: 0, vWant: 0, pickup: true,
              w: Math.round(s0.CAR_W * 0.95), h: Math.round(s0.CAR_H * 1.05),
              signal: 0, signalSide: 0, drift: 0, targetX: cx + off });
     run(3);
     const o = R().objs.find(q => q.kind === 'fuel');
-    ok(o && o.dead && R().fuel > 0.9,
-       '★ 擦边碰到油桶也算吃到（旧判定下会漏吃 → 表现为"吃到了桶却不消失"）',
-       o ? ('dead=' + o.dead + ' fuel=' + R().fuel.toFixed(2)) : '桶不见了');
+    ok(o && o.dead && R().hp > 55,
+       '★ 擦边碰到绿星也算吃到（旧判定下会漏吃 → 表现为"吃到了却不消失"）',
+       o ? ('dead=' + o.dead + ' hp=' + R().hp.toFixed(1)) : '星不见了');
   }
 
   reset(71); noSpawn(false); setP({ invuln: 99999 });
@@ -813,7 +832,7 @@ section('14) ★ 可辨识性：唯一能被吃的东西必须"视觉上跳出�
            signal: 0, signalSide: 0, drift: 0, targetX: px });
   let eaten = false;
   for (let i = 0; i < 200 && !eaten; i++) { step(DT); eaten = R().objs.some(o => o.kind === 'fuel' && o.dead); }
-  ok(eaten && R().fuel > 0.9 && R().hp === R().HP_MAX, '★ 吃到加油车：油回满且不掉血（符合"能吃的"定位）');
+  ok(eaten && R().hp > R().HP_MAX - 2, '★ 撞上绿星不掉血还回血（符合"能吃的"定位，hp ' + R().hp.toFixed(1) + '）');
 }
 
 /* ================= 15) ★ 刷新空间：竖向要留出机动余量 ================= */
@@ -910,9 +929,9 @@ section('16) ★ 车身体积与判定盒：无处可钻');
     putObj({ kind: 'sedan', lane: 1, x: cx - dx, y: s.player.y + 150, v: 0, vWant: 0,
              w: s.CAR_W, h: s.CAR_H, signal: 0, signalSide: 0, drift: 0, targetX: cx - dx });
     run(90);                                      // 1.5 秒，足够开 150 距离
-    ok(R().hp === R().HP_MAX - R().DMG.sedan,
+    ok(R().hp < R().HP_MAX - R().DMG.sedan + 3,
        '★ 判定盒与画面严格一致：横向仅重叠 0.5 单位也判定撞车（旧的 -4 宽容会让它穿过去）',
-       'hp=' + R().hp);
+       'hp=' + R().hp.toFixed(1));
   }
 
   // ③b ★ 路障尺寸与敌车大致一致（原来只有车的一半，用户反馈不成比例）
@@ -933,13 +952,13 @@ section('16) ★ 车身体积与判定盒：无处可钻');
   {
     const s = R();
     const cx = s.ROAD_L + s.LANE_W * 1.5;
-    setP({ x: cx, invuln: 99999, fuel: 0.4 });
+    setP({ x: cx, invuln: 99999, hp: 40 });
     const drillW = Math.round(s.CAR_W * 0.62);
     putObj({ kind: 'fuel', lane: 1, x: cx + (drillW + s.CAR_W) / 2 + 5, y: s.player.y, v: 0, vWant: 0,
              w: drillW, h: Math.round(s.CAR_H * 0.80), signal: 0, signalSide: 0, drift: 0, targetX: cx });
     run(3);
     const o = R().objs.find(q => q.kind === 'fuel');
-    ok(o && o.dead && R().fuel > 0.9, '★ 油桶仍是"擦到就算吃到"（拾取物故意宽容）');
+    ok(o && o.dead && R().hp > 45, '★ 绿星仍是"擦到就算吃到"（拾取物故意宽容，hp ' + R().hp.toFixed(1) + '）');
   }
 }
 
@@ -964,13 +983,13 @@ section('17) ★ 红色五角星：加油 + 限时高速（上限 = 原二段 80
   // 吃到红星
   {
     const p = R().player;
-    setP({ invuln: 99999, fuel: 0.4 });
+    setP({ invuln: 99999 });
     putObj({ kind: 'boost', lane: 1, x: p.x, y: p.y + 150, v: 0, vWant: 0, pickup: true,
              w: Math.round(s0.CAR_W * 0.98), h: Math.round(s0.CAR_H * 0.62) });
     let hitAt = -1;
     for(let i = 0; i < 150; i++){ run(1); if(R().player.boost > 0){ hitAt = i; break; } }
     ok(hitAt >= 0, '★ 吃到红色五角星 → 触发限时高速');
-    ok(R().fuel > 0.99, '★ 红星同时把油加满（' + Math.round(R().fuel * 100) + '%）');
+    ok(R().hp <= R().HP_MAX, '★ 红星只管加速，不回血也不超上限（hp ' + R().hp.toFixed(1) + '）');
     ok(R().player.boost > 0 && R().player.boost <= s0.BOOST_TIME,
        '加速计时开始（剩余 ' + R().player.boost.toFixed(1) + 's）');
   }
@@ -1046,7 +1065,7 @@ win.__racerPutRoadblock((st.player || st.p).x, (st.player || st.p).y, 'cone');
   run(2);
   S = win.__racerSmash(); st = R();
   ok(S.count === cnt0 + 1, '★ 路障被撞飞（撞飞计数 +1）');
-  ok(st.hp === hp0, '★ 撞飞路障不扣血（hp 保持 ' + hp0 + '）');
+  ok(near(st.hp, hp0, 0.3), '★ 撞飞路障不扣血（hp ' + hp0.toFixed(2) + ' → ' + st.hp.toFixed(2) + '）');
   ok(Math.abs(st.player.v - v0) < 1, '★ 撞飞路障不减速（速度 ' + v0.toFixed(1) + ' → ' + st.player.v.toFixed(1) + '）');
   ok((win.__racerObjs().find(o => o.id === coneId) || {}).dead === true, '被撞飞的那一个路障已从路上移除');
   ok(S.flies >= 1, '生成了"路障被撞飞"的画面效果');
@@ -1056,7 +1075,7 @@ win.__racerPutRoadblock((st.player || st.p).x, (st.player || st.p).y, 'cone');
   st = R(); const hp1 = st.hp;
   win.__racerPutRoadblock(st.player.x, st.player.y + 30, 'barrel');
   run(2);
-  ok(R().hp === hp1 && win.__racerSmash().count >= 2, '★ 油桶同样能撞飞（同样不扣血）');
+  ok(near(R().hp, hp1, 0.3) && win.__racerSmash().count >= 2, '★ 油桶同样能撞飞（同样不扣血）');
 
   // ⑥ ★ 撞车照旧：满速状态下撞车仍然扣血 + 掉速
   setP({ boost: 5, v: cap, invuln: 0 }); run(1);
@@ -1064,7 +1083,7 @@ win.__racerPutRoadblock((st.player || st.p).x, (st.player || st.p).y, 'cone');
   win.__racerPutRoadblock(st.player.x, st.player.y + 30, 'car');
   run(3);
   st = R();
-  ok(st.hp === hp2 - R().DMG_DEFAULT, '★ 满速撞车照旧扣生命值（hp ' + hp2 + ' → ' + st.hp + '）');
+  ok(near(st.hp, hp2 - R().DMG_DEFAULT, 0.5), '★ 满速撞车照旧扣生命值（hp ' + hp2.toFixed(2) + ' → ' + st.hp.toFixed(2) + '）');
   ok(st.player.v < v2 * 0.6, '★ 满速撞车照旧掉速（' + v2.toFixed(1) + ' → ' + st.player.v.toFixed(1) + '）');
 
   // ⑥.5 ★ 满速红光特效：只在"红星 + 满速"时点亮
@@ -1095,7 +1114,7 @@ win.__racerPutRoadblock((st.player || st.p).x, (st.player || st.p).y, 'cone');
   st = R(); const hp3 = st.hp;
   win.__racerPutRoadblock(st.player.x, st.player.y + 30, 'cone');
   run(3);
-  ok(R().hp === hp3 - win.__racerDmg('cone'), '★ 没有红星（即使速度高）撞路障照旧扣血（' + hp3 + ' → ' + R().hp + '）');
+  ok(near(R().hp, hp3 - win.__racerDmg('cone'), 0.5), '★ 没有红星（即使速度高）撞路障照旧扣血（' + hp3.toFixed(2) + ' → ' + R().hp.toFixed(2) + '）');
 
   // ⑧ 红星在爬升途中撞路障 → 照旧扣血
   reset(9); noSpawn(true); clearObjs();
@@ -1103,7 +1122,7 @@ win.__racerPutRoadblock((st.player || st.p).x, (st.player || st.p).y, 'cone');
   st = R(); const hp4 = st.hp;
   win.__racerPutRoadblock(st.player.x, st.player.y + 30, 'cone');
   run(3);
-  ok(R().hp === hp4 - win.__racerDmg('cone'), '★ 红星已生效但还没到满速时撞路障，照旧扣血（' + hp4 + ' → ' + R().hp + '）');
+  ok(near(R().hp, hp4 - win.__racerDmg('cone'), 0.5), '★ 红星已生效但还没到满速时撞路障，照旧扣血（' + hp4.toFixed(2) + ' → ' + R().hp.toFixed(2) + '）');
 
   // ⑨ 撞飞物会自己消失（不留垃圾）
   setP({ boost: 5, v: cap, invuln: 0 }); run(1);
@@ -1139,7 +1158,7 @@ section('19) ★ 路肩硬挡（开不出路边）+ 4→5 车道等比缩小');
   ok(s.player.x >= s.ROAD_L + s.CAR_W / 2 - 0.6,
      '★ 持续按左 5 秒：x=' + s.player.x.toFixed(1) + ' ≥ 左路肩 ' + (s.ROAD_L + s.CAR_W / 2).toFixed(1) + '（开不出去）');
   ok(s.player.v > s.V_BASE * 1.5, '★ 顶住路肩速度不受影响（' + (s.player.v * s.KMH).toFixed(0) + ' km/h）');
-  ok(s.hp === s.HP_MAX, '★ 蹭路肩不掉生命值（' + s.hp + '/' + s.HP_MAX + '）');
+  ok(s.hp > 70, '★ 蹭路肩不额外扣生命值（' + s.hp.toFixed(1) + '/' + s.HP_MAX + '，少的那点只是自然消耗）');
   win.__racerInput({ gas: true, left: false, right: true });
   run(300);
   s = R();
@@ -1209,9 +1228,11 @@ section('21) ★ 加速连击阶段（阶段2 护盾 / 阶段3 撞飞小车 / �
     putObj(Object.assign({ lane: 0, x: s.player.x, y: s.player.y + 150, v: 0, vWant: 0,
                            w: s.CAR_W, h: s.CAR_H }, o));
     const hp0 = R().hp, cnt0 = win.__racerSmash().count;
-    for (let i = 0; i < 120 && R().hp === hp0 && win.__racerSmash().count === cnt0; i++) step(DT);
+    // ★ 生命每帧都在自然消耗（约 2.7 点/秒），"没撞到"的判据要给 3 点容差（真正的撞击 ≥30）
+    for (let i = 0; i < 120 && R().hp > hp0 - 3 && win.__racerSmash().count === cnt0; i++) step(DT);
     return { hp0: hp0, cnt0: cnt0 };
   };
+  const notHurt = r => R().hp > r.hp0 - 3.5;      // ★ 只掉自然消耗 = 没被扣血
 
   reset(31); quiet(); run(2);
   const BT = R().BOOST_TIME, ST = R().SHIELD_TIME;
@@ -1227,7 +1248,7 @@ section('21) ★ 加速连击阶段（阶段2 护盾 / 阶段3 撞飞小车 / �
   sh = win.__racerShield();
   ok(sh.stage === 2 && sh.t > 0, '★ 喷火中再吃油箱（绿星）→ 阶段2 护盾出现（' + sh.t + 's）');
   ok(Math.abs(sh.t - ST) < 0.6, '★ 护盾时长 = 基础时长 ' + ST + 's（实测 ' + sh.t + '）');
-  ok(R().fuel > 0.9, '连击用的油箱同样把油加满');
+  ok(R().hp <= R().HP_MAX, '连击用的绿星不会把生命顶破上限（hp ' + R().hp.toFixed(1) + '）');
 
   eatTank('boost');                               // ★ 红星同样能推进连击
   sh = win.__racerShield();
@@ -1249,7 +1270,7 @@ section('21) ★ 加速连击阶段（阶段2 护盾 / 阶段3 撞飞小车 / �
   eatTank('boost'); eatTank('fuel');
   ok(win.__racerShield().stage === 2 && win.__racerShield().t > 0, '（准备）阶段2 + 护盾');
   let r = driveInto({ kind: 'cone' });
-  ok(R().hp === r.hp0, '★ 阶段2 护盾撞路障：不扣生命值（' + R().hp + '）');
+  ok(notHurt(r), '★ 阶段2 护盾撞路障：不扣生命值（' + r.hp0.toFixed(1) + ' → ' + R().hp.toFixed(1) + '）');
   ok(win.__racerSmash().count === r.cnt0 + 1, '★ 路障被撞飞');
   ok(win.__racerShield().t === 0, '★ 阶段2 撞飞后护盾消失');
   ok(win.__racerShield().stage === 2, '★ 护盾没了但喷火继续（阶段仍 2）');
@@ -1258,7 +1279,7 @@ section('21) ★ 加速连击阶段（阶段2 护盾 / 阶段3 撞飞小车 / �
   reset(33); quiet(); run(2);
   eatTank('boost'); eatTank('fuel');
   r = driveInto({ kind: 'sedan' });
-  ok(R().hp === r.hp0, '★ 阶段2 护盾撞小车：不扣生命值（' + R().hp + '）');
+  ok(notHurt(r), '★ 阶段2 护盾撞小车：不扣生命值（' + r.hp0.toFixed(1) + ' → ' + R().hp.toFixed(1) + '）');
   ok(win.__racerSmash().count === r.cnt0 + 1, '★ 阶段2 就能把小车撞飞');
   ok(win.__racerShield().t === 0, '★ 阶段2 撞飞小车后护盾消失');
 
@@ -1268,7 +1289,7 @@ section('21) ★ 加速连击阶段（阶段2 护盾 / 阶段3 撞飞小车 / �
   ok(win.__racerShield().stage === 3, '（准备）阶段3');
   const tBefore = win.__racerShield().t;
   r = driveInto({ kind: 'sedan' });
-  ok(R().hp === r.hp0, '★ 阶段3 撞小车：不扣生命值');
+  ok(notHurt(r), '★ 阶段3 撞小车：不扣生命值（' + r.hp0.toFixed(1) + ' → ' + R().hp.toFixed(1) + '）');
   ok(win.__racerSmash().count === r.cnt0 + 1, '★ 阶段3 把小车像障碍物一样撞飞');
   const tAfter = win.__racerShield().t;
   ok(tAfter > 0 && tAfter <= tBefore,
@@ -1287,8 +1308,8 @@ section('21) ★ 加速连击阶段（阶段2 护盾 / 阶段3 撞飞小车 / �
   };
   let h2 = haulerHit(2);
   ok(!h2.bad, '（准备）阶段2 撞大货车', h2.bad || '');
-  ok(h2.hp === h2.hp0 - win.__racerDmg('hauler'),
-     '★ 阶段2 撞大货车：护盾无效，按伤害表扣血（' + h2.hp0 + ' → ' + h2.hp + '，扣 ' + (h2.hp0 - h2.hp) + '）');
+  ok(near(h2.hp, h2.hp0 - win.__racerDmg('hauler'), 1.2),
+     '★ 阶段2 撞大货车：护盾无效，按伤害表扣血（' + h2.hp0.toFixed(1) + ' → ' + h2.hp.toFixed(1) + '，扣 ' + (h2.hp0 - h2.hp).toFixed(1) + '）');
   ok(h2.sh.t === 0 && h2.sh.stage === 0, '★ 撞大货车：护盾和加速状态一起消失');
   ok(h2.sh.boost === 0, '★ 撞大货车后喷火结束（boost=0）');
   ok(h2.v < R().V_BASE * 0.6, '★ 撞大货车后的减速表现照旧（v=' + h2.v.toFixed(0) + '）');
@@ -1297,8 +1318,8 @@ section('21) ★ 加速连击阶段（阶段2 护盾 / 阶段3 撞飞小车 / �
 
   let h3 = haulerHit(3);
   ok(!h3.bad, '（准备）阶段3 撞大货车', h3.bad || '');
-  ok(h3.hp === h3.hp0 - win.__racerDmg('hauler') && h3.sh.stage === 0,
-     '★ 阶段3 撞大货车同样无效（扣 ' + (h3.hp0 - h3.hp) + '，阶段归零）');
+  ok(near(h3.hp, h3.hp0 - win.__racerDmg('hauler'), 1.2) && h3.sh.stage === 0,
+     '★ 阶段3 撞大货车同样无效（扣 ' + (h3.hp0 - h3.hp).toFixed(1) + '，阶段归零）');
 
   /* ── ⑥ 护盾可见性：阶段2 青色 / 阶段3 金色 ── */
   reset(36); quiet(); run(2);

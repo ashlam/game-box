@@ -77,7 +77,8 @@
 </div>
 
 <p class="hint">直接点数字修改（也可以按 <b>− ＋</b> 微调），点 <b>保存并试玩</b> 写入本机。
-火箭车下次打开会自动读取这里的参数。<span id="state" class="badge">当前：默认值</span></p>
+火箭车下次打开会自动读取这里的参数。<span id="state" class="badge">当前：默认值</span><br>
+★ 没有燃油了：<b>生命值既是血也是燃料</b> —— 跑着就掉、掉光就结束，绿星回血、每过一段补一次。</p>
 
 <div class="sec">一、速度与时间</div>
 <div id="globalBox"></div>
@@ -117,6 +118,9 @@
     { k:'timeBonus', id:'rBonus',  name:'过关加时',     unit:'秒',   min:0,   max:90,   step:2,   sub:'跑满一段（3600 距离）奖励的时间' },
     { k:'boostKmh',  id:'rBoost',  name:'红星加速上限', unit:'km/h', min:500, max:2500, step:25,  sub:'吃到红五角星后的最高速度', hot:true },
     { k:'boostTime', id:'rBoostT', name:'红星持续时间', unit:'秒',   min:1,   max:15,   step:0.5, sub:'吃到红星后高速维持多久', hot:true },
+    { k:'hpDrain',   id:'rHpDrain',  name:'生命自然消耗', unit:'点/秒', min:0, max:5, step:0.1, sub:'跑得越快掉得越快（停车也慢慢掉）；0 = 完全不掉', hot:true },
+    { k:'healFuel',  id:'rHealFuel', name:'绿星回血',     unit:'点',    min:0, max:100, step:5,  sub:'吃到绿色五角星恢复的生命' },
+    { k:'stageHeal', id:'rStageHeal',name:'每过一段补',   unit:'点',    min:0, max:100, step:5,  sub:'跑完一段"发工资"补多少；默认 15 与全速跑完一段的消耗打平' },
   ];
 
   /* ---------- 二、路上的东西（与游戏 ENEMY / 伤害表一一对应） ----------
@@ -140,13 +144,14 @@
 
   /* ---------- 三、能吃的（只读，帮助分清敌我） ---------- */
   const PICKUPS = [
-    { kind:'fuel',  name:'绿色油箱', feat:'加油回满 + <b>恢复 18 生命</b>' },
-    { kind:'boost', name:'红色油箱', feat:'加油回满 + <b>喷火加速</b>；喷火中再吃 → 阶段2 护盾 / 阶段3 撞飞小车' },
+    { kind:'fuel',  name:'绿色五角星', feat:'<b>恢复 {heal} 生命</b>（生命既是血也是燃料，没有单独的油箱了）' },
+    { kind:'boost', name:'红色五角星', feat:'<b>喷火加速</b>（不回血）；喷火中再吃 → 阶段2 护盾 / 阶段3 撞飞小车' },
   ];
 
   /* ---------- 默认值（游戏里的默认 = 这里的值） ---------- */
   const DEF = {};
-  GLOBALS.forEach(g => { DEF[g.k] = { vMaxKmh:800, timeStart:55, timeBonus:32, boostKmh:1100, boostTime:8 }[g.k]; });
+  GLOBALS.forEach(g => { DEF[g.k] = { vMaxKmh:800, timeStart:55, timeBonus:32, boostKmh:1100, boostTime:8,
+                                      hpDrain:2.0, healFuel:20, stageHeal:15 }[g.k]; });
   OBJS.forEach(o => {
     if(o.dmg) DEF[o.dmg] = { block:30, car:40, truck:60, hauler:80 }[o.tier];
     if(o.spd) DEF[o.spd] = Math.round(o.v * KMH);
@@ -387,8 +392,9 @@
       const info = document.createElement('div'); info.className = 'oinfo';
       const nm = document.createElement('div'); nm.className = 'nm';
       nm.innerHTML = p.name + '<span class="tag eat">可以吃</span>';
-      const feat = document.createElement('div'); feat.className = 'feat'; feat.innerHTML = p.feat;
-      const hint = document.createElement('div'); feat.className = 'feat';
+      const feat = document.createElement('div'); feat.className = 'feat';
+      feat.innerHTML = p.feat.replace('{heal}', DEF.healFuel);
+      const hint = document.createElement('div'); hint.className = 'feat';
       hint.innerHTML = '<b>全场只有这两种颜色可以吃</b>，其余车和路障都会扣血';
       info.appendChild(nm); info.appendChild(feat); info.appendChild(hint);
       card.appendChild(cv); card.appendChild(info);
@@ -424,6 +430,13 @@
     lines.push('红星持续   ' + (+c.boostTime).toFixed(1) + ' 秒（BOOST_TIME）');
     lines.push('时间       开局 ' + Math.round(c.timeStart) + ' 秒 · 过关加时 ' + Math.round(c.timeBonus) + ' 秒');
     lines.push('');
+    const drainFull = (+c.hpDrain) * 1.35;              // 全速时的系数（0.7 + 0.9×0.72）
+    const drainIdle = (+c.hpDrain) * 0.7;               // 停车时的系数
+    lines.push('生命       上限 ' + HP_MAX + ' · 自然消耗 ' + (+c.hpDrain).toFixed(1) + ' 点/秒');
+    lines.push('           全速约 ' + (drainFull > 0 ? Math.round(HP_MAX / drainFull) + ' 秒耗光' : '不会掉') +
+               ' · 停车约 ' + (drainIdle > 0 ? Math.round(HP_MAX / drainIdle) + ' 秒耗光' : '不会掉'));
+    lines.push('           绿星 +' + c.healFuel + ' · 每过一段 +' + c.stageHeal + '（撞车另算，见下）');
+    lines.push('');
     lines.push('撞一次扣多少（生命 ' + HP_MAX + '）');
     OBJS.forEach(o => {
       const d = c[o.dmg];
@@ -448,6 +461,8 @@
                  'const BOOST_MULT = ' + mult.toFixed(2) + ';        // 红星倍率（' + Math.round(c.boostKmh) + ' km/h）',
                  'const BOOST_TIME = ' + (+c.boostTime).toFixed(1) + ';        // 红星持续（秒）',
                  'const TIME_START = ' + Math.round(c.timeStart) + ', TIME_BONUS = ' + Math.round(c.timeBonus) + ';',
+                 'let HP_DRAIN = ' + (+c.hpDrain).toFixed(1) + ', HEAL_FUEL = ' + c.healFuel +
+                   ', STAGE_HEAL = ' + c.stageHeal + ';',
                  'let DMG_BLOCK = ' + c.dmgCone + ', DMG_CAR = ' + c.dmgSports +
                    ', DMG_TRUCK = ' + c.dmgTruck + ', DMG_HAULER = ' + c.dmgHauler + ';'];
     OBJS.forEach(o => {

@@ -87,7 +87,7 @@
   <div class="big" id="overScore">0</div>
   <div class="unit">最远距离（米）</div>
   <p id="overText"></p>
-  <div class="rule">玩法：自动前进 · 左右躲车躲障碍<br>底部区域按住左右滑动转向 · <b>按住 = 油门</b><br>★ 绿星 = 加油 + 回血 · 红星 = 加油 + 限时喷火加速<br>★ 喷火中连吃油箱 → <b>阶段2 护盾</b> / <b>阶段3 撞飞小车</b><br>★ <b>大货车</b>撞上最疼（护盾也挡不住）<br><span id="ruleDmg">撞车按类型扣生命值</span><br>生命归零或时间到结束（调参页可逐个形象改）</div>
+  <div class="rule">玩法：自动前进 · 左右躲车躲障碍<br>底部区域按住左右滑动转向 · <b>按住 = 油门</b><br>★ 绿星 = 回血 · 红星 = 限时喷火加速<br>★ 喷火中连吃星 → <b>阶段2 护盾</b> / <b>阶段3 撞飞小车</b><br>★ <b>大货车</b>撞上最疼（护盾也挡不住）<br><span id="ruleDmg">撞车按类型扣生命值</span><br>★ 生命值既是血也是燃料：跑得越快掉得越快，每过一段补一次<br>生命归零（撞光或耗光）或时间到结束</div>
   <button class="pri" id="overRetry">再来一次</button>
 </div></div>
 
@@ -100,9 +100,10 @@
      玩法参考：Konami《Road Fighter》(FC 1984，中文名「火箭车」)
        · 车辆自动前进，屏幕纵向滚动，玩家在后方视角躲前方车辆
        · 两档速度：常规 / 高速（高速可达 400 km/h，碰撞风险剧增）
-       · 燃油系统：燃油耗尽就抛锚；碰到绿色加油车可以回满
-       · 倒计时：时间到即结束；抵达终点（过关）加时并进入下一段
-       · 撞车/撞障碍 = 爆炸 + 按车型扣生命值（撞后的减速/无敌照旧）；生命归零才结束
+       · ★ 生命值 = 血 + 燃料（原燃油系统已并入）：随行驶自然消耗，跑得越快掉越快
+       · 倒计时：时间到即结束；抵达终点（过关）加时、补一次生命并进入下一段
+       · 撞车/撞障碍 = 爆炸 + 按车型扣生命值（撞后的减速/无敌照旧）
+       · 吃绿色五角星回血；生命归零才结束（撞光 = 撞毁，耗光 = 力竭）
        · 会「冷不丁变道」的车 + 临时施工障碍物
 
      触控映射（★ 这是我自己定的映射，用户若要改一句话就能改）：
@@ -171,18 +172,24 @@
   const ACC = 300, DEC = 560;                    // 提速/回落速率（两档手感）
   const STEER = 196;                             // 键盘横向速度
   const FOLLOW = 620;                            // ★ 滑屏跟手的最大横向速度（66 宽车道约 0.11s 到位）
-  const FUEL_RATE = 0.0115;                      // 每秒耗油（按速度加权）
   const STAGE_LEN = 3600;                        // 每段距离
   let TIME_START = 55, TIME_BONUS = 32;          // 初始倒计时 / 过关加时
 
   /* ============================================================
-     ★ 生命值系统（取代原来的「3 条命」）
+     ★ 生命值系统（同时取代原来的「3 条命」和「燃油」）
        · 撞车/撞障碍 → 按类型扣「生命值」，不是掉一条命
        · 撞击后的表现（爆炸、减速、短暂无敌）照旧
-       · 归零才结束；绿色油箱可以回血
+       · ★ 没有燃油了：生命会随行驶自然消耗 —— 跑得越快掉得越快，
+         停车也慢慢掉；吃绿色五角星回血，每跑完一段「发工资」补一次
+       · 归零才结束（撞光 = 撞毁，被耗光 = 力竭）
      ============================================================ */
   const HP_MAX = 100;                            // 生命值上限
-  const HEAL_FUEL = 18;                          // ★ 绿色油箱回血量
+  /* ★ 配平说明：全速跑完一段（3600 距离）约 5.6 秒，按 2.0 点/秒×1.35 ≈ 15 点，
+       正好和「每过一段补 15」打平 —— 冲得快刚好回本，磨蹭就净亏，撞一次（40+）要跑两段才补回来。
+       想更宽松/更凶，到调参页改「生命自然消耗」和「每过一段补」即可。 */
+  let HP_DRAIN = 2.0;                            // ★ 生命自然消耗：点/秒，按速度加权（0.7~1.6 倍）
+  let HEAL_FUEL = 20;                            // ★ 绿色五角星回血量
+  let STAGE_HEAL = 15;                           // ★ 每跑完一段补的生命（"发工资"）
   let SHIELD_TIME = 6.0;                         // ★ 加速阶段2 的护盾基础时长（秒）
   /* ★ 伤害：先按「档位」给默认值，再允许某个具体形象单独覆盖
        —— 这样既保留「路障轻 / 小车中 / 大车重」的整体手感，
@@ -219,6 +226,10 @@
       if(c.timeBonus !== undefined && c.timeBonus !== '' && +c.timeBonus >= 0) TIME_BONUS = +c.timeBonus;
       if(+c.boostKmh > 0) BOOST_MULT = (+c.boostKmh) / (V_MAX * KMH);
       if(+c.boostTime > 0) BOOST_TIME = +c.boostTime;
+      // ★ 生命：自然消耗速率 / 绿星回血 / 过关补多少（0 也是合法值）
+      if(+c.hpDrain   >= 0) HP_DRAIN   = +c.hpDrain;
+      if(+c.healFuel  >= 0) HEAL_FUEL  = +c.healFuel;
+      if(+c.stageHeal >= 0) STAGE_HEAL = +c.stageHeal;
       // ★ 伤害：逐类型覆盖（调参页里每种形象单独填的，优先于档位）
       //   0 也是合法值（撞了不扣血），所以用 >= 0 而不是「真值」判断
       for(const k of DMG_KINDS){
@@ -304,7 +315,7 @@
   let state = 'ready';        // ready | play | over
   let spawnOff = false;       // 测试钩子：关掉刷车（测速/测转向时排除交通干扰）
   const fronts = [];          // 每帧复用的"前车"列表（含玩家）
-  let player, objs, input, fuel, timeLeft, hp, stage, distance, passed,
+  let player, objs, input, timeLeft, hp, stage, distance, passed,
       stageStartY, nextRowY, nextFuelY, nextBoostY, nextObjId, seedRng, fieldSeed;
   /* ★ 加速连击：boostStage = 1 喷火 / 2 护盾 / 3 撞飞小车不耗盾；shieldT = 护盾剩余秒 */
   let boostStage = 0, shieldT = 0;
@@ -332,7 +343,7 @@
     objs = [];
     input = { left: false, right: false, gas: false, touching: false, targetX: null };
     active.clear();
-    fuel = 1; timeLeft = TIME_START; hp = HP_MAX;
+    timeLeft = TIME_START; hp = HP_MAX;
     boostStage = 0; shieldT = 0;
     stage = 1; distance = 0; passed = 0;
     stageStartY = 0; nextRowY = 900; nextFuelY = 1900; nextBoostY = 3400;
@@ -653,7 +664,6 @@
     //   贴着草地龟速跑反而成了「极慢但极安全」的稳定打法 → 现压到 0.22×V_BASE（≈40 km/h），
     //   时间奖励根本补不回来，脱路不再是可行策略
     if(offRoad) tv = Math.min(tv, V_BASE * 0.22);
-    if(fuel <= 0) tv = Math.min(tv, 46);
     const prevV = player.v;
     player.v += clamp(tv - player.v, -DEC * dt, ACC * dt);
     const ratio = clamp(player.v / (V_MAX * BOOST_MULT), 0, 1);   // ★ 按绝对速度，吃到红星后还会继续升高
@@ -681,15 +691,16 @@
     player.x = clamp(player.x, ROAD_L + halfW, ROAD_R - halfW);
     if(player.x !== px0 && player.v > 60 && rng() < dt * 8){ sndSkid(); skid = 0.2; }   // 蹭到路肩的反馈
 
-    /* ---- 燃油 / 倒计时 ---- */
-    fuel = Math.max(0, fuel - dt * FUEL_RATE * (0.7 + 0.9 * ratio));
+    /* ---- ★ 生命自然消耗（取代燃油）/ 倒计时 ---- */
+    hp = Math.max(0, hp - dt * HP_DRAIN * (0.7 + 0.9 * ratio));
     timeLeft = Math.max(0, timeLeft - dt);
-    if(timeLeft <= 10){
+    // 时间快到 / 生命见底 → 滴滴警告
+    if(timeLeft <= 10 || hp <= 20){
       warnT += dt;
       if(warnT >= 1){ warnT = 0; sndWarn(); }
     }
+    if(hp <= 0){ finish('力竭'); return; }        // ★ 被耗光（不是撞的）
     if(timeLeft <= 0){ finish('时间到'); return; }
-    if(fuel <= 0 && player.v <= 50 && !reason){ reason = '油尽'; floats.push({ x: W/2, y: H*0.42, t: 0, txt:'油尽！找加油车', color:'#ffd166' }); }
 
     /* ---- 交通对象 ---- */
     // 玩家也算一个"前车"，让后方快车排队而不是穿过去
@@ -811,6 +822,12 @@
       stageStartY = player.y; stage++; timeLeft = Math.min(99, timeLeft + TIME_BONUS);
       sndStage(); glowT = 1;
       floats.push({ x: W/2, y: H*0.4, t: 0, txt:'第 ' + stage + ' 段！+'+TIME_BONUS+'秒', color:'#ffe066' });
+      // ★ 「发工资」：每跑完一段补一次生命（原来这一段是补燃油的）
+      const before = hp;
+      hp = Math.min(HP_MAX, hp + STAGE_HEAL);
+      if(hp > before){
+        floats.push({ x: W/2, y: H*0.4 + 26, t: 0, txt:'+' + Math.round(hp - before) + ' 生命', color:'#7dffa0' });
+      }
     }
 
     /* ---- 特效 ---- */
@@ -876,18 +893,17 @@
     return boostStage;
   }
 
-  /** 吃到油箱（绿星 = 加油 + 回血；红星 = 加油 + 喷火；喷火中再吃 → 连击 +1） */
+  /** 吃到五角星（绿星 = 回血；红星 = 喷火加速；喷火中再吃 → 连击 +1） */
   function takeTank(o){
     o.dead = true;
-    fuel = 1; reason = '';
     const isRed = (o.kind === 'boost');
-    if(o.kind === 'fuel'){                        // ★ 绿星：回血
+    if(o.kind === 'fuel'){                        // ★ 绿星：回血（不再有"加油"这回事）
       const before = hp;
       hp = Math.min(HP_MAX, hp + HEAL_FUEL);
       sndFuel();
       addBurst(o.x, o.y, 12, '#7dffa0');
       floats.push({ x: o.x, y: PY - (isRed ? 40 : 58), t: 0,
-                    txt: (hp > before) ? ('+' + (hp - before) + ' 生命') : '+满油', color: '#7dffa0' });
+                    txt: (hp > before) ? ('+' + Math.round(hp - before) + ' 生命') : '生命已满', color: '#7dffa0' });
     }
     if(isRed || boostStage >= 1){                 // ★ 连击推进
       const s = advanceStage();
@@ -1414,20 +1430,24 @@
     ctx.fillStyle = '#93a4bd'; ctx.font = '600 9.5px ' + FONT;
     ctx.fillText('时间', 12, 48);
 
-    // 燃油条
-    const fx = 64, fy = 18, fw = 96, fh = 10;
+    /* ★ 生命条（原「燃油条」的位置 —— 燃油概念已并入生命值）
+         生命既是血也是"燃料"：撞车扣、跑着也在掉 */
+    const fx = 64, fy = 18, fw = 104, fh = 11;
+    const hr0 = clamp(hp / HP_MAX, 0, 1);
     ctx.fillStyle = 'rgba(0,0,0,.35)';
     roundRect(fx, fy, fw, fh, 5); ctx.fill();
+    if(hr0 <= 0.25) ctx.globalAlpha = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(tGlobal * 8));   // 见底闪烁
     const fg = ctx.createLinearGradient(fx, 0, fx + fw, 0);
-    fg.addColorStop(0, fuel < 0.25 ? '#ff5b4d' : '#ffd166');
-    fg.addColorStop(1, fuel < 0.25 ? '#c0392b' : '#7dffa0');
+    fg.addColorStop(0, hr0 > 0.3 ? '#7dffa0' : '#ff8b7d');
+    fg.addColorStop(1, hr0 > 0.3 ? '#3ddc84' : '#c0392b');
     ctx.fillStyle = fg;
-    roundRect(fx, fy, Math.max(2, fw * fuel), fh, 5); ctx.fill();
+    roundRect(fx, fy, Math.max(2, fw * hr0), fh, 5); ctx.fill();
+    ctx.globalAlpha = 1;
     ctx.fillStyle = '#93a4bd'; ctx.font = '600 9.5px ' + FONT;
-    ctx.fillText('燃油', fx, fy + 22);
-    ctx.fillStyle = fuel < 0.25 ? '#ff8b7d' : '#cfd8e6';
+    ctx.fillText('生命', fx, fy + 22);
+    ctx.fillStyle = hr0 <= 0.25 ? '#ff8b7d' : '#cfd8e6';
     ctx.font = '700 11px ' + FONT;
-    ctx.fillText(Math.round(fuel * 100) + '%', fx + 26, fy + 22);
+    ctx.fillText(Math.ceil(hp) + '/' + HP_MAX, fx + 26, fy + 22);
 
     // 中：段落 + 进度
     const px = 172, py = 16, pw = 62, ph = 8;
@@ -1457,24 +1477,7 @@
       ctx.textAlign = 'right';
     }
 
-    /* ★ 生命值条（取代原来的「三条命」小车身图标） */
-    const hx0 = 44, hy0 = HUD_H - 19, hw0 = Math.max(70, W - hx0 - 52), hh0 = 11;
-    ctx.fillStyle = 'rgba(0,0,0,.4)';
-    roundRect(hx0, hy0, hw0, hh0, 5.5); ctx.fill();
-    const hr = clamp(hp / HP_MAX, 0, 1);
-    const hColA = hr > 0.55 ? '#3ddc84' : (hr > 0.3 ? '#ffd166' : '#ff5b4d');
-    const hColB = hr > 0.55 ? '#7dffa0' : (hr > 0.3 ? '#ffb14d' : '#c0392b');
-    if(hr <= 0.3) ctx.globalAlpha = 0.5 + 0.5 * (0.5 + 0.5 * Math.sin(tGlobal * 8));   // 残血闪烁
-    const hg2 = ctx.createLinearGradient(hx0, 0, hx0 + hw0, 0);
-    hg2.addColorStop(0, hColB); hg2.addColorStop(1, hColA);
-    ctx.fillStyle = hg2;
-    roundRect(hx0, hy0, Math.max(3, hw0 * hr), hh0, 5.5); ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.font = '800 8.5px ' + FONT; ctx.textAlign = 'left';
-    ctx.lineWidth = 2.6; ctx.strokeStyle = 'rgba(10,14,20,.75)';
-    const htxt = Math.round(hp) + '/' + HP_MAX;
-    ctx.strokeText(htxt, hx0 + 6, hy0 + 8.4);
-    ctx.fillStyle = '#ffffff'; ctx.fillText(htxt, hx0 + 6, hy0 + 8.4);
+    /* ★ 生命条统一放在左上角（原燃油条位置），这里不再重复画一条 */
   }
 
   /** ★ 连击状态条：画在仪表台下沿（加速阶段 + 护盾剩余时间），阶段2 起才出现 */
@@ -1597,7 +1600,7 @@
     ctx.save();
     ctx.fillStyle = 'rgba(255,247,238,.96)';
     ctx.strokeStyle = PALETTE.frame; ctx.lineWidth = 2.5;
-    roundRect(W / 2 - hw, cy - 66, hw * 2, 224, 14); ctx.fill(); ctx.stroke();
+    roundRect(W / 2 - hw, cy - 66, hw * 2, 244, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = PALETTE.grip; ctx.font = '800 22px ' + FONT;
     ctx.fillText('火箭车', W / 2, cy - 38);
@@ -1610,19 +1613,21 @@
     ctx.fillStyle = '#5c7186'; ctx.font = '11px ' + FONT;
     ctx.fillText('卡车最慢 · 轿车中速 · 跑车最快会跑掉', W / 2, cy + 34);
     ctx.fillStyle = '#0a8f3c'; ctx.font = '800 11px ' + FONT;
-    ctx.fillText('绿星 = 加油+回血 · 红星 = 加油+加速', W / 2, cy + 50);
+    ctx.fillText('绿星 = 回血 · 红星 = 加速', W / 2, cy + 50);
     ctx.fillStyle = '#c05f0d'; ctx.font = '700 10px ' + FONT;
     ctx.fillText('扣血 路障' + DMG.cone + ' 小车' + DMG.sedan + ' 卡车' + DMG.truck + ' 大货车' + DMG.hauler, W / 2, cy + 66);
     ctx.fillStyle = '#5c7186'; ctx.font = '11px ' + FONT;
     ctx.fillText('满速吃红星可撞飞路障（不扣血不减速）', W / 2, cy + 82);
+    ctx.fillStyle = '#0a8f3c'; ctx.font = '800 11px ' + FONT;
+    ctx.fillText('生命一直掉（越快掉越快）· 每过一段补 ' + STAGE_HEAL, W / 2, cy + 98);
     ctx.fillStyle = '#1a7f96'; ctx.font = '800 11px ' + FONT;
-    ctx.fillText('喷火中再吃油箱 → 阶段2 护盾', W / 2, cy + 98);
+    ctx.fillText('喷火中再吃星 → 阶段2 护盾', W / 2, cy + 114);
     ctx.fillStyle = '#a06a00'; ctx.font = '800 11px ' + FONT;
-    ctx.fillText('阶段3 撞飞小车且不耗护盾', W / 2, cy + 114);
+    ctx.fillText('阶段3 撞飞小车且不耗护盾', W / 2, cy + 130);
     ctx.fillStyle = '#c0392b'; ctx.font = '700 11px ' + FONT;
-    ctx.fillText('大货车：护盾无效，撞上盾和加速都没', W / 2, cy + 130);
+    ctx.fillText('大货车：护盾无效，撞上盾和加速都没', W / 2, cy + 146);
     ctx.fillStyle = '#c0392b'; ctx.font = '700 11px ' + FONT;
-    ctx.fillText('到终点加时进下一段 · 生命归零/时间到结束', W / 2, cy + 146);
+    ctx.fillText('生命归零（撞光/耗光）或时间到结束', W / 2, cy + 162);
     ctx.restore();
     ctx.textAlign = 'left';
   }
@@ -1728,7 +1733,7 @@
         ' 目标x=' + (input.targetX === null ? '—' : input.targetX.toFixed(0)),
       '横向x=' + (player ? player.x.toFixed(0) : '—') + '（路面 ' + ROAD_L + '~' + ROAD_R + '，车道宽 ' + LANE_W.toFixed(0) + '）',
       '距离=' + Math.floor(distance) + '米 本段进度=' + (player ? ((player.y - stageStartY) / STAGE_LEN * 100).toFixed(0) : '0') + '%',
-      '油=' + Math.round(fuel * 100) + '%  时间=' + timeLeft.toFixed(1) + 's  超越=' + passed + '  场上对象=' + (objs ? objs.length : 0),
+      '生命=' + Math.ceil(hp) + '  时间=' + timeLeft.toFixed(1) + 's  超越=' + passed + '  场上对象=' + (objs ? objs.length : 0),
       '操作区=' + TOUCH_TOP + '..' + TOUCH_BOTTOM + '（高 ' + ZONE_H + '，按住=高速，已无高低速分界）' +
         ' 车屏y=' + Math.round(PY) + ' 滑动增益=' + TOUCH_GAIN + ' 红星时长=' + BOOST_TIME + 's 加速倍率=' + BOOST_MULT,
       '路面=' + Math.round(ROAD_L) + '..' + Math.round(ROAD_R) + '（宽 ' + Math.round(ROAD_R - ROAD_L) + '，占屏 ' +
@@ -1799,8 +1804,8 @@
   // ★ 教训：删 UI 元素后必须 grep 其常量（BTN 曾被 RACING CAR 牌定位残留引用，
   //   每帧 ReferenceError，而 Node 测试不跑 draw() 所以漏了 —— 现已加绘制冒烟测试）
   window.__racer = () => ({
-    state, reason, hp, stage, distance, passed, fuel, timeLeft,
-    HP_MAX, HEAL_FUEL, SHIELD_TIME, DMG, DMG_DEFAULT,
+    state, reason, hp, stage, distance, passed, timeLeft,
+    HP_MAX, HP_DRAIN, HEAL_FUEL, STAGE_HEAL, SHIELD_TIME, DMG, DMG_DEFAULT,
     DMG_BLOCK, DMG_CAR, DMG_TRUCK, DMG_HAULER, DMG_OVER,
     ENEMY: Object.keys(ENEMY).reduce((a, k) => {
       a[k] = { name: ENEMY[k].name, v: ENEMY[k].v, wf: ENEMY[k].wf, hf: ENEMY[k].hf,
@@ -1811,7 +1816,7 @@
     player: { x: player.x, y: player.y, v: player.v, invuln: player.invuln, boost: player.boost },
     PY, W, H, HUD_H, HFIX, BOTTOM_BAND, TOUCH_TOP, TOUCH_BOTTOM, ZONE_H, FOLLOW, MIN_GAP,
     ROAD_L, ROAD_R, LANES, LANE_W,
-    V_BASE, V_MAX, KMH, BOOST_MULT, BOOST_TIME, STAGE_LEN, TIME_START, TIME_BONUS, FUEL_RATE,
+    V_BASE, V_MAX, KMH, BOOST_MULT, BOOST_TIME, STAGE_LEN, TIME_START, TIME_BONUS,
     CAR_W, CAR_H,
     objs: objs.map(o => ({ id:o.id, kind:o.kind, lane:o.lane, x:o.x, y:o.y, v:o.v, w:o.w, h:o.h,
                            dead:o.dead, drift:o.drift, changeT:o.changeT, targetX:o.targetX,
@@ -1844,7 +1849,7 @@
     objs.push(o);
     return o.id;
   };
-  window.__racerSetPlayer = o => { if('x' in o) player.x = o.x; if('y' in o) player.y = o.y; if('v' in o) player.v = o.v; if('boost' in o) player.boost = o.boost; if('fuel' in o) fuel = o.fuel; if('timeLeft' in o) timeLeft = o.timeLeft; if('hp' in o) hp = o.hp; if('invuln' in o) player.invuln = o.invuln; if('shield' in o) shieldT = o.shield; if('boostStage' in o) boostStage = o.boostStage; };
+  window.__racerSetPlayer = o => { if('x' in o) player.x = o.x; if('y' in o) player.y = o.y; if('v' in o) player.v = o.v; if('boost' in o) player.boost = o.boost; if('timeLeft' in o) timeLeft = o.timeLeft; if('hp' in o) hp = o.hp; if('invuln' in o) player.invuln = o.invuln; if('shield' in o) shieldT = o.shield; if('boostStage' in o) boostStage = o.boostStage; };
   window.__racerClearObjs = () => { objs.length = 0; };
   window.__racerNoSpawn = v => { spawnOff = !!v; };   // 测试钩子
   // 测试钩子：按逻辑坐标模拟触点（走真实的 pointer 换算路径）

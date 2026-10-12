@@ -213,8 +213,8 @@ section('6) 调参页：每种形象都有缩略图 + 独立数值');
   ok(/block:30, car:40, truck:60, hauler:80/.test(editorHtml),
      '★ 默认值按档位给：路障 30 / 小车 40 / 卡车 60 / 大货车 80');
   ok(/护盾无效/.test(o) && /危/.test(o), '大货车条目标了「护盾无效」与「危」字（和游戏里一致）');
-  ok(/绿色油箱/.test(editorHtml) && /红色油箱/.test(editorHtml) && /class="tag eat"/.test(editorHtml),
-     '另有「能吃的」分区：绿色 / 红色油箱，标了可吃');
+  ok(/绿色五角星/.test(editorHtml) && /红色五角星/.test(editorHtml) && /class="tag eat"/.test(editorHtml),
+     '另有「能吃的」分区：绿色（回血）/ 红色（加速）五角星，标了可吃');
   ok(/applyDmg/.test(gameHtml) && /DMG_BLOCK/.test(gameHtml),
      '游戏侧有分档变量 + 展开函数（调参后能重建伤害表）');
   ok(/DMG_OVER/.test(gameHtml) && /dmg'\s*\+/.test(gameHtml),
@@ -300,6 +300,37 @@ section('8) 调参页脚本真的能跑起来（假 DOM 里执行一遍）');
     ok(s.DMG.hauler === 80 && s.DMG.cone === 30 && s.ENEMY.hauler.v === 62,
        '★ 游戏读到这份存档后确实生效（大货车扣 80 · 锥桶 30 · 大货车速度 62）');
   }
+}
+
+/* ================= 9) 生命参数 ================= */
+section('9) ★ 生命参数：自然消耗 / 绿星回血 / 过关补生命');
+{
+  const w = load({ gracer_cfg: JSON.stringify({ hpDrain: 2, healFuel: 35, stageHeal: 50 }) });
+  const s = w.__racer();
+  ok(s.HP_DRAIN === 2 && s.HEAL_FUEL === 35 && s.STAGE_HEAL === 50,
+     '★ 三个生命参数都读进来了（消耗 2 / 绿星 35 / 过关 50）');
+  w.__racerNoSpawn(true); w.__racerClearObjs(); w.__racerInput({ gas: true });
+  const hp0 = w.__racer().hp;
+  for (let i = 0; i < 120; i++) w.__racerStep(DT);
+  const drop = hp0 - w.__racer().hp;
+  ok(drop > 0.5, '★ 自然消耗生效（2 秒掉了 ' + drop.toFixed(2) + '）');
+
+  const w2 = load({ gracer_cfg: JSON.stringify({ hpDrain: 0 }) });
+  w2.__racerNoSpawn(true); w2.__racerClearObjs(); w2.__racerInput({ gas: true });
+  const h0 = w2.__racer().hp;
+  for (let i = 0; i < 180; i++) w2.__racerStep(DT);
+  ok(w2.__racer().hp === h0,
+     '★ 消耗调成 0 → 完全不掉（想当纯血条玩也行）');
+
+  const w3 = load({ gracer_cfg: JSON.stringify({ hpDrain: 0, stageHeal: 40 }) });
+  w3.__racerNoSpawn(true); w3.__racerClearObjs(); w3.__racerInput({ gas: true });
+  w3.__racerSetPlayer({ hp: 30, y: 3500 });
+  const st0 = w3.__racer().stage;
+  for (let i = 0; i < 180 && w3.__racer().stage === st0; i++) w3.__racerStep(DT);
+  const s3 = w3.__racer();
+  ok(s3.stage === st0 + 1 && s3.hp >= 69,
+     '★ 跑完一段「发工资」补 40（30 → ' + s3.hp.toFixed(1) + '）');
+  ok(s3.hp <= s3.HP_MAX, '补完不会超过上限（' + s3.hp.toFixed(1) + '/' + s3.HP_MAX + '）');
 }
 
 console.log('\n' + '='.repeat(60));
