@@ -87,7 +87,7 @@
   <div class="big" id="overScore">0</div>
   <div class="unit">最远距离（米）</div>
   <p id="overText"></p>
-  <div class="rule">玩法：自动前进 · 左右躲车躲障碍<br>底部区域按住左右滑动转向 · <b>按住 = 油门</b><br>★ 绿星 = 加油 + 回血 · 红星 = 加油 + 限时喷火加速<br>★ 喷火中连吃油箱 → <b>阶段2 护盾</b> / <b>阶段3 撞飞小车</b><br>★ <b>大货车</b>撞上最疼（护盾也挡不住）<br>撞车按类型扣生命值：路障 30 · 小车 40 · 卡车 60 · 大货车 80<br>生命归零或时间到结束（数值可在调参页改）</div>
+  <div class="rule">玩法：自动前进 · 左右躲车躲障碍<br>底部区域按住左右滑动转向 · <b>按住 = 油门</b><br>★ 绿星 = 加油 + 回血 · 红星 = 加油 + 限时喷火加速<br>★ 喷火中连吃油箱 → <b>阶段2 护盾</b> / <b>阶段3 撞飞小车</b><br>★ <b>大货车</b>撞上最疼（护盾也挡不住）<br><span id="ruleDmg">撞车按类型扣生命值</span><br>生命归零或时间到结束（调参页可逐个形象改）</div>
   <button class="pri" id="overRetry">再来一次</button>
 </div></div>
 
@@ -184,21 +184,27 @@
   const HP_MAX = 100;                            // 生命值上限
   const HEAL_FUEL = 18;                          // ★ 绿色油箱回血量
   let SHIELD_TIME = 6.0;                         // ★ 加速阶段2 的护盾基础时长（秒）
-  /* ★ 分档伤害（三档：障碍物最轻 / 障碍车中等 / 大车与大货车最疼）
-       这几个值就是 /racer/editor.html 调参页里的默认值，可在调参页拖动并存到本机 */
-  let DMG_BLOCK  = 30;                           // 障碍物：锥桶 / 油桶
-  let DMG_CAR    = 40;                           // 障碍车（小车）：跑车 / 轿车 / 变道车
+  /* ★ 伤害：先按「档位」给默认值，再允许某个具体形象单独覆盖
+       —— 这样既保留「路障轻 / 小车中 / 大车重」的整体手感，
+          以后想让「油桶比锥桶疼」「跑车比轿车轻」也只要覆盖一种即可。
+       四个档位值 = /racer/editor.html 调参页里的默认值 */
+  let DMG_BLOCK  = 30;                           // 障碍物档：锥桶 / 油桶
+  let DMG_CAR    = 40;                           // 小车档：跑车 / 轿车 / 变道车
   let DMG_TRUCK  = 60;                           // 卡车（比小车重，比大货车轻）
   let DMG_HAULER = 80;                           // ★ 大货车：最疼，且护盾对它无效
-  const DMG = { cone: 0, barrel: 0, sports: 0, sedan: 0, weaver: 0, truck: 0, hauler: 0 };
+  const DMG_KINDS = ['cone','barrel','sports','sedan','weaver','truck','hauler'];
+  const DMG_TIER  = { cone:'block', barrel:'block', sports:'car', sedan:'car',
+                      weaver:'car', truck:'truck', hauler:'hauler' };
+  const DMG_OVER  = Object.create(null);         // 逐类型覆盖；没设就跟随档位
+  const DMG = {};
   let DMG_DEFAULT = DMG_CAR;                     // 未知类型按小车算
-  /** 把上面四个分档值展开进 DMG 表（调参覆盖后要重新跑一遍） */
+  const tierVal = t => t === 'block' ? DMG_BLOCK : t === 'car' ? DMG_CAR : t === 'truck' ? DMG_TRUCK : DMG_HAULER;
+  /** 把档位值 + 逐类型覆盖展开进 DMG 表（调参加载后要重新跑一遍） */
   function applyDmg(){
-    DMG.cone = DMG.barrel = DMG_BLOCK;
-    DMG.sports = DMG.sedan = DMG.weaver = DMG_CAR;
-    DMG.truck = DMG_TRUCK;
-    DMG.hauler = DMG_HAULER;
-    DMG_DEFAULT = DMG_CAR;
+    for(const k of DMG_KINDS){
+      DMG[k] = (DMG_OVER[k] === undefined || DMG_OVER[k] === null) ? tierVal(DMG_TIER[k]) : DMG_OVER[k];
+    }
+    DMG_DEFAULT = DMG.sedan;
   }
   applyDmg();
 
@@ -213,11 +219,12 @@
       if(c.timeBonus !== undefined && c.timeBonus !== '' && +c.timeBonus >= 0) TIME_BONUS = +c.timeBonus;
       if(+c.boostKmh > 0) BOOST_MULT = (+c.boostKmh) / (V_MAX * KMH);
       if(+c.boostTime > 0) BOOST_TIME = +c.boostTime;
-      // ★ 伤害分档（0 也是合法值：撞了不扣血，所以用 >= 0 判断）
-      if(+c.dmgBlock  >= 0) DMG_BLOCK  = +c.dmgBlock;
-      if(+c.dmgCar    >= 0) DMG_CAR    = +c.dmgCar;
-      if(+c.dmgTruck  >= 0) DMG_TRUCK  = +c.dmgTruck;
-      if(+c.dmgHauler >= 0) DMG_HAULER = +c.dmgHauler;
+      // ★ 伤害：逐类型覆盖（调参页里每种形象单独填的，优先于档位）
+      //   0 也是合法值（撞了不扣血），所以用 >= 0 而不是「真值」判断
+      for(const k of DMG_KINDS){
+        const v = c['dmg' + k.charAt(0).toUpperCase() + k.slice(1)];
+        if(v !== undefined && v !== null && v !== '' && +v >= 0) DMG_OVER[k] = +v;
+      }
       cfgActive = true;
     }
   }catch(e){ cfgActive = false; }
@@ -282,6 +289,17 @@
   };
   const FUEL_V = 100;                    // 加油车固定速度
   const SIGNAL_T = 0.7;                  // 变道车亮灯时长（秒）
+  /* ★ 车型速度调参：必须写在 ENEMY 之后（要改的就是它）
+       调参页填的是 km/h，这里换算回逻辑速度；已生成的新车立即用新速度 */
+  try{
+    if(cfgRaw){
+      const c2 = JSON.parse(cfgRaw);
+      for(const k in ENEMY){
+        const v = c2['spd' + k.charAt(0).toUpperCase() + k.slice(1)];
+        if(+v > 0) ENEMY[k].v = Math.round(+v / KMH);
+      }
+    }
+  }catch(e){ /* 坏数据就当没调过 */ }
   /* ---------- 状态 ---------- */
   let state = 'ready';        // ready | play | over
   let spawnOff = false;       // 测试钩子：关掉刷车（测速/测转向时排除交通干扰）
@@ -1594,7 +1612,7 @@
     ctx.fillStyle = '#0a8f3c'; ctx.font = '800 11px ' + FONT;
     ctx.fillText('绿星 = 加油+回血 · 红星 = 加油+加速', W / 2, cy + 50);
     ctx.fillStyle = '#c05f0d'; ctx.font = '700 10px ' + FONT;
-    ctx.fillText('扣血 路障' + DMG_BLOCK + ' 小车' + DMG_CAR + ' 卡车' + DMG_TRUCK + ' 大货车' + DMG_HAULER, W / 2, cy + 66);
+    ctx.fillText('扣血 路障' + DMG.cone + ' 小车' + DMG.sedan + ' 卡车' + DMG.truck + ' 大货车' + DMG.hauler, W / 2, cy + 66);
     ctx.fillStyle = '#5c7186'; ctx.font = '11px ' + FONT;
     ctx.fillText('满速吃红星可撞飞路障（不扣血不减速）', W / 2, cy + 82);
     ctx.fillStyle = '#1a7f96'; ctx.font = '800 11px ' + FONT;
@@ -1766,6 +1784,12 @@
   setSoundLabel();
   layout();
   reset(1);
+  /* ★ 结算页的扣血说明按当前伤害表生成（调参页改过之后这里同步） */
+  (function(){
+    const el = document.getElementById('ruleDmg');
+    if(el) el.textContent = '撞车扣血：路障 ' + DMG.cone + ' · 小车 ' + DMG.sedan +
+                            ' · 卡车 ' + DMG.truck + ' · 大货车 ' + DMG.hauler;
+  })();
   audio(); engineStart();                 // 桌面首次点击前 AudioContext 可能是 suspended，引擎音在 step 里会继续更新
   window.addEventListener('resize', layout);
   window.addEventListener('orientationchange', () => setTimeout(layout, 250));
@@ -1777,7 +1801,12 @@
   window.__racer = () => ({
     state, reason, hp, stage, distance, passed, fuel, timeLeft,
     HP_MAX, HEAL_FUEL, SHIELD_TIME, DMG, DMG_DEFAULT,
-    DMG_BLOCK, DMG_CAR, DMG_TRUCK, DMG_HAULER,
+    DMG_BLOCK, DMG_CAR, DMG_TRUCK, DMG_HAULER, DMG_OVER,
+    ENEMY: Object.keys(ENEMY).reduce((a, k) => {
+      a[k] = { name: ENEMY[k].name, v: ENEMY[k].v, wf: ENEMY[k].wf, hf: ENEMY[k].hf,
+               color: ENEMY[k].color, lite: ENEMY[k].lite, label: ENEMY[k].label };
+      return a;
+    }, {}),
     boostStage, shieldT, smashed,
     player: { x: player.x, y: player.y, v: player.v, invuln: player.invuln, boost: player.boost },
     PY, W, H, HUD_H, HFIX, BOTTOM_BAND, TOUCH_TOP, TOUCH_BOTTOM, ZONE_H, FOLLOW, MIN_GAP,
