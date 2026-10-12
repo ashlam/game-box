@@ -27,10 +27,15 @@ const script = fs.readFileSync(HTML, 'utf8').match(/<script>([\s\S]*?)<\/script>
 
 /* ---------------- 桩 ---------------- */
 const gradient = { addColorStop() {} };
+const drawn = [];                       // ★ 画布上画过的文字（用来断言"大字真的画出来了"）
 function mkCtx() {
   return new Proxy({}, {
     get(t, k) {
       if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => gradient;
+      if (k === 'fillText' || k === 'strokeText') return s => {
+        if (drawn.length > 4000) drawn.length = 0;
+        drawn.push(String(s));
+      };
       if (k in t) return t[k];
       return () => {};
     },
@@ -1359,6 +1364,95 @@ section('21) ★ 加速连击阶段（阶段2 护盾 / 阶段3 撞飞小车 / �
      '★ 喷火结束 → 阶段归零、护盾消失');
 
   noSpawn(true); reset(39);
+}
+
+/* ================= 22) ★ 死亡演出（结束不立刻弹窗） ================= */
+section('22) ★ 死亡演出：先看清「怎么没的」，演完才弹结算窗');
+{
+  /* ── ① 撞毁：爆炸 / 残骸翻滚 / 慢放 / 大字，最后才弹窗 ── */
+  reset(61); quiet(); run(90);                       // 先跑起来（有速度才有"滑行减速"）
+  setP({ hp: 1, invuln: 0 });
+  putObj({ kind: 'sedan', lane: 0, x: R().player.x, y: R().player.y, v: 0 });
+  run(3);
+  const d0 = R();
+  ok(d0.state === 'over' && d0.reason === '撞毁', '（准备）撞到生命归零 → 结束（' + d0.reason + '）');
+  ok(d0.death && d0.death.kind === '撞毁', '★ 进入死亡演出（不是直接结算）');
+  ok(d0.overShown === false, '★ 结束的这一瞬间【不弹窗】（原来 0.7 秒后就糊脸上）');
+  ok(!!d0.death.wreck, '★ 撞毁有翻滚的残骸（不再是车身凭空消失）');
+  const mFrozen = Math.floor(d0.distance);
+  const v0 = d0.player.v;
+
+  run(30);                                          // 0.5 秒
+  const d1 = R();
+  ok(d1.overShown === false, '★ 0.5 秒后仍在演出中（爆炸还没演完就不打扰）');
+  ok(d1.death.t > 0.4, '演出计时在走（t=' + d1.death.t + 's）');
+  ok(d1.player.v < v0 && d1.player.v > 0,
+     '★ 世界不是瞬间冻住：车还在减速滑行（' + v0.toFixed(0) + ' → ' + d1.player.v.toFixed(0) + '）');
+  ok(Math.floor(d1.distance) === mFrozen, '★ 成绩在结束那一刻就冻结（演出滑行不算分：' + mFrozen + ' 米）');
+
+  run(30);                                          // 累计 1.0 秒
+  const d2 = R();
+  ok(d2.death.banner === true, '★ 约 0.85 秒后画布浮出大字（先看清爆炸，再读到"结束了"）');
+  ok(d2.overShown === false, '大字出来了也还没弹窗');
+
+  let drew = 'ok';
+  try { win.__racerDraw(); } catch (e) { drew = String(e); }
+  ok(drew === 'ok', '★ 演出期间绘制不报错（残骸/暗角/大字/烟）', drew);
+  drawn.length = 0;
+  win.__racerDraw();
+  ok(drawn.some(s => /撞\s*毁\s*了/.test(s)),
+     '★ 画布上真的画出了「撞 毁 了」大字（不用等弹窗就知道结束了）', drawn.slice(-6).join('|'));
+  ok(drawn.some(s => /本局结束/.test(s) && new RegExp('·\\s*' + mFrozen + '\\s*米').test(s)),
+     '★ 大字下面带「本局结束 · ' + mFrozen + ' 米 · 第 N 段」，成绩当场可见');
+
+  const dur = d2.death.dur;
+  run(Math.ceil((dur + 0.3) * 60));
+  const d3 = R();
+  ok(d3.overShown === true, '★ 演出跑完（' + dur + ' 秒）才弹结算窗');
+  ok(d3.death.wreck && d3.death.rest, '★ 残骸最终趴在路面上（弹几下后停住）');
+  ok(d3.player.v === 0, '★ 世界已完全停住（车速 ' + d3.player.v + '）');
+  ok(Math.floor(d3.distance) === mFrozen, '结算时成绩仍是结束那一刻的（' + mFrozen + ' 米）');
+
+  /* ── ② 力竭：不炸，熄火滑停 + 抛锚双闪 ── */
+  reset(62); quiet(); run(90);
+  setP({ hp: 0.05 });
+  run(4);
+  const e0 = R();
+  ok(e0.state === 'over' && e0.reason === '力竭', '（准备）生命耗尽 → 力竭');
+  ok(e0.death && e0.death.kind === '力竭' && !e0.death.wreck,
+     '★ 力竭没有残骸（车是停下的，不是炸掉的）');
+  ok(e0.overShown === false, '★ 力竭同样不立刻弹窗');
+  run(60);
+  ok(R().overShown === false && R().death.t > 0.9, '★ 力竭也有 1 秒以上的熄火滑行演出');
+  run(Math.ceil((R().death.dur + 0.3) * 60));
+  ok(R().overShown === true && R().player.v === 0, '★ 力竭演完：车停稳后才弹窗');
+
+  /* ── ③ 时间到 ── */
+  reset(63); quiet(); run(60);
+  setP({ timeLeft: 0.02 });
+  run(4);
+  const t0 = R();
+  ok(t0.state === 'over' && t0.reason === '时间到', '（准备）倒计时归零 → 时间到');
+  ok(t0.death && t0.death.kind === '时间到' && t0.overShown === false, '★ 时间到同样先演出、不立刻弹窗');
+  run(Math.ceil((t0.death.dur + 0.3) * 60));
+  ok(R().overShown === true, '★ 时间到演完才弹窗');
+
+  /* ── ④ 看懂了可以点一下跳过（不必干等演出） ── */
+  reset(65); quiet(); run(90);
+  setP({ hp: 1, invuln: 0 });
+  putObj({ kind: 'sedan', lane: 0, x: R().player.x, y: R().player.y, v: 0 });
+  run(3);
+  ok(R().state === 'over' && R().overShown === false, '（准备）又一次撞毁，未弹窗');
+  win.__racerSkip();                                  // 相当于手指点一下（此时还太早，不该跳过）
+  run(6);
+  ok(R().overShown === false, '★ 演出刚开始时点了也不跳过（爆炸还没看清）');
+  run(Math.ceil(R().DEATH_BANNER_AT * 60) + 4);       // 等到大字出来之后
+  ok(R().overShown === true, '★ 大字出来后再点 → 直接进结算（不用干等 ' + R().death.dur + ' 秒）');
+
+  /* ── ⑤ 重开清干净 ── */
+  reset(64);
+  ok(R().death === null && R().overShown === false, '★ 重开后演出状态清空（不会带着残骸开新局）');
+  ok(R().state === 'play', '重开回到 play');
 }
 
 /* ================= 汇总 ================= */

@@ -191,6 +191,13 @@
   let HEAL_FUEL = 20;                            // ★ 绿色五角星回血量
   let STAGE_HEAL = 15;                           // ★ 每跑完一段补的生命（"发工资"）
   let SHIELD_TIME = 6.0;                         // ★ 加速阶段2 的护盾基础时长（秒）
+
+  /* ★ 死亡演出：结束后不再立刻弹窗，先让玩家看清「车是怎么没的」，再弹结算
+       DEATH_TIME = 每种结束原因的演出时长（秒），演完才弹窗 */
+  const DEATH_TIME = { '撞毁': 2.9, '力竭': 2.6, '时间到': 2.6 };
+  const DEATH_FALLBACK = 2.5;                    // 兜底：没设过的结束原因用这个
+  const DEATH_BANNER_AT = 0.85;                  // 演出进行到这个时刻，画布上浮出大字「X 了」
+  const HITSTOP = 0.5;                           // 撞毁瞬间的子弹时间（前 0.5 秒世界慢放）
   /* ★ 伤害：先按「档位」给默认值，再允许某个具体形象单独覆盖
        —— 这样既保留「路障轻 / 小车中 / 大车重」的整体手感，
           以后想让「油桶比锥桶疼」「跑车比轿车轻」也只要覆盖一种即可。
@@ -320,6 +327,8 @@
   /* ★ 加速连击：boostStage = 1 喷火 / 2 护盾 / 3 撞飞小车不耗盾；shieldT = 护盾剩余秒 */
   let boostStage = 0, shieldT = 0;
   let effects, floats, shake, skid, glowT, warnT, reason, best, overTimer, lastTs, raf;
+  /* ★ 死亡演出：death = { kind, t, dur, slow, wreck, smokeT, banner, finalM, isNew } */
+  let death = null, overShown = false, deathSkip = false;
   let soundOn = true, engineOsc = null, engineGain = null, engineSub = null;
   let hintOn = true;
 
@@ -353,6 +362,7 @@
     spawnOff = false;                            // 新的一局恢复正常刷车
     if(soundOn){ audio(); engineStart(); }      // ★ 重开也要把引擎音接回来（否则重开一局是哑的）
     clearTimeout(overTimer); overTimer = null;
+    death = null; overShown = false; deathSkip = false;
     $('over').classList.remove('on');
     // 开局先清出一段空路，别一上来就撞
     for(let y = 260; y < 900; y += 300) spawnRow(y, true);
@@ -590,6 +600,7 @@
     const x = (cx - r.left) / (r.width / W);
     const y = (cy - r.top) / (r.height / H);
     if(kind === 'down'){
+      if(state === 'over'){ deathSkip = true; }  // ★ 死亡演出中点一下 = 跳过演出，直接看结算
       if(y < TOUCH_TOP) return;                 // 只在底部触控区生效
       if(hintOn) hintOn = false;
       audio();
@@ -623,6 +634,7 @@
 
   // 键盘（桌面调试）
   document.addEventListener('keydown', e => {
+    if(state === 'over') deathSkip = true;
     if(e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A'){ input.left = true; if(hintOn) hintOn = false; }
     if(e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D'){ input.right = true; if(hintOn) hintOn = false; }
     if(e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.code === 'Space'){ input.gas = true; if(hintOn) hintOn = false; }
@@ -643,6 +655,7 @@
     if(shake > 0) shake = Math.max(0, shake - dt * 2.6);
     if(glowT > 0) glowT = Math.max(0, glowT - dt * 2);
 
+    if(state === 'over'){ stepDeath(dt); return; }   // ★ 死亡演出：世界继续滑停、碎片继续飞
     if(state !== 'play'){
       for(let i = effects.length - 1; i >= 0; i--){ effects[i].t += dt; if(effects[i].t > effects[i].life) effects.splice(i, 1); }
       return;
@@ -772,17 +785,6 @@
     }
     refill();
 
-    /* ---- 撞飞的路障：向上弹 + 甩向身后 + 自转 ---- */
-    for(let i = flies.length - 1; i >= 0; i--){
-      const f = flies[i];
-      f.t += dt;
-      if(f.t >= f.life){ flies.splice(i, 1); continue; }
-      f.x += f.vx * dt;
-      f.y += (f.vy + f.back) * dt;
-      f.vy += 900 * dt;
-      f.rot += f.spin * dt;
-    }
-
     /* ---- 碰撞 ---- */
     // ★ 判定盒子 = 画出来的盒子（原来横向 -4 / 纵向 -6 的宽容量，会让"看着撞上了却没撞"）
     const overlap = o => Math.abs(o.x - player.x) < (o.w + CAR_W) / 2 &&
@@ -831,11 +833,29 @@
     }
 
     /* ---- 特效 ---- */
+    tickFx(dt);
+  }
+
+  /** ★ 特效推进（玩的时候和「死亡演出」期间都要跑，抽出来共用） */
+  function tickFx(dt){
+    for(let i = flies.length - 1; i >= 0; i--){
+      const f = flies[i];
+      f.t += dt;
+      if(f.t >= f.life){ flies.splice(i, 1); continue; }
+      f.x += f.vx * dt;
+      f.y += (f.vy + f.back) * dt;
+      f.vy += 900 * dt;
+      f.rot += f.spin * dt;
+    }
     for(let i = effects.length - 1; i >= 0; i--){
       const e = effects[i];
       e.t += dt;
       if(e.kind === 'spark' || e.kind === 'debris'){
         e.x += e.vx * dt; e.y += e.vy * dt; e.vy += 420 * dt;
+      }else if(e.kind === 'smoke'){                 // ★ 烟：往上飘、边飘边散、速度衰减
+        e.x += e.vx * dt; e.y += e.vy * dt;
+        e.vy -= 26 * dt; e.vx += (Math.random() - 0.5) * 40 * dt;
+        e.r += 22 * dt;
       }
       if(e.t > e.life) effects.splice(i, 1);
     }
@@ -951,20 +971,129 @@
     tone(220, 0.14, { type:'square', to: 96, gain: 0.1 });
     tone(900, 0.1, { type:'triangle', gain: 0.07, at: 0.02 });
   }
+  /** ★ 结算弹窗（与演出解耦：演出跑完才调；兜底定时器也会调到，用 overShown 保证只弹一次） */
+  function showOver(){
+    if(overShown) return;
+    overShown = true;
+    clearTimeout(overTimer); overTimer = null;
+    const d = death || { kind: reason, finalM: Math.floor(distance), isNew: false };
+    const m = d.finalM, isNew = d.isNew;
+    $('overTitle').textContent = isNew ? '新纪录' : (d.kind === '时间到' ? '时间到' : (d.kind === '力竭' ? '力竭抛锚' : '撞毁了'));
+    $('overScore').textContent = m;
+    $('overText').textContent = '第 ' + stage + ' 段 · 超越 ' + passed + ' 辆 · 最高 ' + best + ' 米' +
+      (isNew ? '' : ' · 差 ' + (best - m) + ' 米');
+    $('overText').className = isNew ? 'rec' : '';
+    $('over').classList.add('on');
+  }
+
   function finish(why){
+    if(state === 'over') return;                 // 幂等：一局只结算一次
     state = 'over'; reason = why;
-    engineStop(); sndOver();
+    engineStop();
+    player.boost = 0; boostStage = 0; shieldT = 0;   // ★ 演出期间不再喷火/罩盾
+
     const m = Math.floor(distance);
     const isNew = m > best;
-    if(isNew){ best = m; try{ localStorage.setItem('racer_best', String(best)); }catch(e){} sndRecord(); }
-    overTimer = setTimeout(() => {
-      $('overTitle').textContent = isNew ? '新纪录' : (why === '时间到' ? '时间到' : (why === '油尽' ? '油尽抛锚' : '撞毁了'));
-      $('overScore').textContent = m;
-      $('overText').textContent = '第 ' + stage + ' 段 · 超越 ' + passed + ' 辆 · 最高 ' + best + ' 米' +
-        (isNew ? '' : ' · 差 ' + (best - m) + ' 米');
-      $('overText').className = isNew ? 'rec' : '';
-      $('over').classList.add('on');
-    }, 700);
+    if(isNew){ best = m; try{ localStorage.setItem('racer_best', String(best)); }catch(e){} }
+
+    /* ★ 开场：撞毁是「爆炸 + 翻滚的残骸」，力竭/时间到是「熄火滑行 + 抛锚双闪 + 冒烟」 */
+    const isCrash = (why === '撞毁');
+    death = { kind: why, t: 0, dur: DEATH_TIME[why] || DEATH_FALLBACK,
+              kindCrash: isCrash, wreck: null, smokeT: 0, bannerT: 0,
+              finalM: m, isNew: isNew, sndAt: 0 };
+    if(isCrash){
+      shake = 1.8;
+      death.wreck = { x: player.x, y: PY + CAR_H * 0.08,
+                      vx: (Math.random() < 0.5 ? -1 : 1) * (55 + Math.random() * 85),
+                      vy: -250 - Math.random() * 110,
+                      rot: 0, spin: (Math.random() < 0.5 ? -1 : 1) * (7 + Math.random() * 5),
+                      bounce: 0, rest: false, sc: 1 };
+      sndExplode();                                   // 第一声爆炸
+      addBurst(player.x, player.y, 34, '#ffd166');
+      addBurst(player.x, player.y, 24, '#ff5b3a');
+      floats.push({ x: player.x, y: PY - 62, t: 0, txt: '撞毁！', color: '#ff6b5b' });
+      death.smokeT = 0.05;
+    }else{
+      sndStall();
+      floats.push({ x: player.x, y: PY - 62, t: 0,
+                    txt: why === '力竭' ? '力竭！' : '时间到！', color: '#ffd166' });
+      death.smokeT = 0.5;                             // 滑一段才开始冒烟
+    }
+    // 兜底：万一标签页被挂起（rAF 停了），到点也把结算弹出来
+    clearTimeout(overTimer);
+    overTimer = setTimeout(showOver, Math.round((death.dur + 1.5) * 1000));
+  }
+
+  function sndExplode(){
+    noiseBurst(0.9, { type:'lowpass', freq: 1400, to: 120, gain: 0.3, decay: 1.1 });
+    tone(160, 0.7, { type:'sawtooth', to: 40, gain: 0.16 });
+    tone(90, 0.9, { type:'sine', to: 30, gain: 0.14, at: 0.05 });
+  }
+  /** ★ 熄火：两声咳嗽 + 一声长叹（力竭 / 时间到） */
+  function sndStall(){
+    tone(210, 0.13, { type:'square', to: 120, gain: 0.09 });
+    tone(150, 0.18, { type:'square', to: 70, gain: 0.08, at: 0.22 });
+    noiseBurst(0.5, { type:'lowpass', freq: 500, to: 90, gain: 0.06, decay: 1.6, at: 0.45 });
+  }
+
+  /* ★ 死亡演出推进：世界继续滑行并减速到停、碎片继续飞、残骸翻滚、冒烟 */
+  function stepDeath(dt){
+    if(!death){ tickFx(dt); return; }
+    death.t += dt;
+    // 撞毁的前 0.5 秒慢放（子弹时间），让爆炸看得清；之后回到常速
+    const slow = death.kindCrash ? clamp(1 - death.t / HITSTOP, 0, 1) : 0;
+    const sdt = dt * (0.22 + 0.78 * (1 - slow));
+    // ★ 世界继续往前滑一段再停（原来是瞬间冻住，爆炸刚开头画面就死了）
+    //   撞毁：被撞后已减速，再滑约 0.6 秒趴窝；力竭/时间到：从当前速度慢慢停，约 1.4 秒
+    const dec = death.kindCrash ? 150 : 620;
+    player.v = Math.max(0, player.v - dec * sdt);
+    player.y += player.v * sdt;
+    if(shake > 0) shake = Math.max(0, shake - dt * 2.2);
+
+    tickFx(sdt);
+    if(death.wreck) stepWreck(sdt);
+
+    // 冒烟：撞毁的残骸一直冒，力竭/时间到滑停后从引擎盖冒
+    death.smokeT -= sdt;
+    if(death.smokeT <= 0){
+      death.smokeT = 0.11;
+      const wx = death.wreck ? death.wreck.x : player.x + (Math.random() - 0.5) * CAR_W * 0.4;
+      const wy = death.wreck ? (player.y - 4) : (player.y - CAR_H * 0.42);
+      effects.push({ kind: 'smoke', x: wx, y: wy,
+                     vx: (Math.random() - 0.5) * 26, vy: 34 + Math.random() * 26,   // ★ 世界 y 越大越靠上 = 烟往上飘
+                     t: 0, life: 1.1 + Math.random() * 0.7,
+                     color: death.kindCrash ? '#5b5752' : '#8d949c', r: 3 + Math.random() * 3 });
+    }
+    /* 演出节点：0.35s 二次爆燃（撞毁才有） · 0.85s 浮出大字 · 结束 → 弹结算 */
+    if(death.kindCrash && death.sndAt < 1 && death.t >= 0.35){
+      death.sndAt = 1; sndExplode();
+      addBurst(death.wreck ? death.wreck.x : player.x, player.y, 22, '#ff8b3a');
+    }
+    if(!death.bannerT && death.t >= DEATH_BANNER_AT){
+      death.bannerT = death.t;
+      if(death.isNew) sndRecord(); else sndOver();
+    }
+    if(death.t >= death.dur || (deathSkip && death.t >= DEATH_BANNER_AT)) showOver();   // ★ 看懂了可以点一下跳过
+  }
+
+  /** ★ 残骸翻滚：向上抛 → 落地弹两下 → 趴窝（同时跟着路面向后飘） */
+  function stepWreck(dt){
+    const w = death.wreck;
+    if(w.rest){ w.spin *= 0.85; w.rot += w.spin * dt; return; }
+    w.vy += 1450 * dt;
+    w.x += w.vx * dt;
+    w.y += w.vy * dt + player.v * dt;               // 路面还在往后退 → 残骸跟着飘
+    w.rot += w.spin * dt;
+    const ground = PY + CAR_H * 0.5;
+    if(w.y >= ground){
+      w.y = ground; w.bounce++;
+      if(w.bounce >= 3 || Math.abs(w.vy) < 70){ w.rest = true; w.vy = 0; w.vx = 0; w.spin *= 0.3; return; }
+      w.vy = -Math.abs(w.vy) * 0.36;
+      w.vx *= 0.55; w.spin *= 0.5;
+      addBurst(w.x, player.y, 6, '#c9c2b6');
+    }
+    // 别飘出路面
+    w.x = clamp(w.x, ROAD_L + CAR_W * 0.4, ROAD_R - CAR_W * 0.4);
   }
   function addBurst(x, y, n, color){
     for(let i = 0; i < n; i++){
@@ -1294,7 +1423,7 @@
   }
 
   function drawPlayer(){
-    if(state === 'over' && reason === '撞毁') return;
+    if(death && death.wreck) return;                 // ★ 撞毁：车身已变成翻滚残骸（由 drawWreck 画）
     const blink = player.invuln > 0 && (Math.floor(tGlobal * 12) % 2 === 0);
     if(blink) return;                              // 无敌闪烁
     const shakeX = shake > 0 ? (Math.random() - 0.5) * 4 * shake : 0;
@@ -1338,6 +1467,108 @@
         ctx.closePath(); ctx.fill();
       }
     }
+    /* ★ 抛锚双闪：力竭 / 时间到时车停住、双闪跳动 —— 一眼看出"这局完了" */
+    if(death && !death.wreck && death.t > 0.35){
+      const on = Math.floor(death.t * 4) % 2 === 0;
+      if(on){
+        ctx.fillStyle = '#ffb03a';
+        for(const s of [-1, 1]){
+          ctx.beginPath();
+          ctx.arc(cx + s * CAR_W * 0.31, PY + CAR_H * 0.34, 2.6, 0, 7); ctx.fill();
+        }
+        ctx.globalAlpha = 0.28;
+        ctx.fillStyle = '#ffb03a';
+        ctx.beginPath(); ctx.arc(cx, PY + CAR_H * 0.34, CAR_W * 0.95, 0, 7); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+    ctx.restore();
+  }
+
+  /** ★ 撞毁后的残骸：熏黑 + 变形的车身，翻滚后趴在路面上 */
+  function drawWreck(){
+    const w = death.wreck;
+    if(!w) return;
+    ctx.save();
+    ctx.translate(w.x, w.y);
+    ctx.rotate(w.rot);
+    ctx.globalAlpha = 0.96;
+    drawCarShape(0, 0, CAR_W * w.sc, CAR_H * w.sc, '#4a4038', '#6d6055', { toy: true });
+    // 熏黑：斜着盖两道焦痕
+    ctx.fillStyle = 'rgba(24,20,18,.55)';
+    ctx.save(); ctx.rotate(0.5);
+    ctx.fillRect(-CAR_W * 0.5, -CAR_H * 0.28, CAR_W, CAR_H * 0.18);
+    ctx.fillRect(-CAR_W * 0.34, CAR_H * 0.04, CAR_W * 0.7, CAR_H * 0.14);
+    ctx.restore();
+    // 碎掉的风挡
+    ctx.fillStyle = 'rgba(200,215,235,.35)';
+    roundRect(-CAR_W * 0.30, -CAR_H * 0.30, CAR_W * 0.6, CAR_H * 0.18, 3); ctx.fill();
+    ctx.restore();
+    // 落地后地面留一滩焦痕
+    if(w.rest){
+      ctx.save();
+      ctx.globalAlpha = 0.32; ctx.fillStyle = '#1b1714';
+      ctx.beginPath(); ctx.ellipse(w.x, PY + CAR_H * 0.5, CAR_W * 0.62, 5.5, 0, 0, 7); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  /** ★ 结束演出：闪白 → 慢放 → 暗角 → 画布上浮出大字，最后才由 showOver() 弹结算窗 */
+  function drawDeathOverlay(){
+    if(!death) return;
+    const t = death.t;
+    ctx.save();
+    // ① 撞毁瞬间的爆闪
+    if(death.kindCrash && t < 0.22){
+      ctx.fillStyle = 'rgba(255,236,200,' + (0.85 * (1 - t / 0.22)).toFixed(3) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+    // ② 暗角：撞毁偏红、其余偏冷，逐渐压暗（把注意力收到中间那辆车上）
+    const vg = clamp(t / 0.9, 0, 1) * 0.72;
+    if(vg > 0.01){
+      const g = ctx.createRadialGradient(W / 2, H * 0.52, Math.min(W, H) * 0.16,
+                                         W / 2, H * 0.52, Math.max(W, H) * 0.72);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, death.kindCrash ? 'rgba(60,10,6,' + vg.toFixed(3) + ')'
+                                        : 'rgba(8,14,24,' + (vg * 0.9).toFixed(3) + ')');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    }
+    // ③ 大字：演出过半才浮出，先看清爆炸，再读到"结束了"
+    const bt = t - DEATH_BANNER_AT;
+    if(bt > 0){
+      const k = clamp(bt / 0.45, 0, 1);
+      const ease = 1 - Math.pow(1 - k, 3);
+      const sc = 1.34 - 0.34 * ease;
+      const title = death.kind === '撞毁' ? '撞 毁 了' : (death.kind === '力竭' ? '力 竭 了' : '时 间 到');
+      ctx.textAlign = 'center';
+      ctx.globalAlpha = ease;
+      ctx.translate(W / 2, H * 0.40); ctx.scale(sc, sc);
+      ctx.font = '800 34px ' + FONT;
+      ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(12,16,22,.85)';
+      ctx.strokeText(title, 0, 0);
+      const bg = ctx.createLinearGradient(0, -22, 0, 10);
+      bg.addColorStop(0, '#fff1d6'); bg.addColorStop(1, death.kindCrash ? '#ff8a3a' : '#ffc94d');
+      ctx.fillStyle = bg;
+      ctx.fillText(title, 0, 0);
+      ctx.setTransform(S * dprNow, 0, 0, S * dprNow, 0, 0);   // 复位后再画副标题
+      ctx.globalAlpha = ease * 0.95;
+      ctx.font = '700 12.5px ' + FONT;
+      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(12,16,22,.8)';
+      const sub = '本局结束 · ' + death.finalM + ' 米 · 第 ' + stage + ' 段';
+      ctx.strokeText(sub, W / 2, H * 0.40 + 30);
+      ctx.fillStyle = '#ffe9c9';
+      ctx.fillText(sub, W / 2, H * 0.40 + 30);
+      // 已经看懂了就不必干等：提示可以点一下直接看结算
+      ctx.globalAlpha = ease * 0.7;
+      ctx.font = '600 10.5px ' + FONT;
+      const tip = '轻点跳过';
+      ctx.strokeText(tip, W / 2, H * 0.40 + 52);
+      ctx.fillStyle = '#cfd8e6';
+      ctx.fillText(tip, W / 2, H * 0.40 + 52);
+      ctx.textAlign = 'left';
+    }
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
 
@@ -1388,7 +1619,11 @@
     }
     for(const e of effects){
       const k = e.t / e.life;
-      if(e.kind === 'spark'){
+      if(e.kind === 'smoke'){                      // ★ 烟团：越飘越大越淡
+        ctx.globalAlpha = clamp((1 - k) * 0.5, 0, 1);
+        ctx.fillStyle = e.color;
+        ctx.beginPath(); ctx.arc(e.x, toScreenY(e.y), e.r * (1 + k * 1.5), 0, 7); ctx.fill();
+      }else if(e.kind === 'spark'){
         ctx.globalAlpha = 1 - k;
         ctx.fillStyle = e.color;
         ctx.beginPath(); ctx.arc(e.x, toScreenY(e.y), e.r * (1 - k * 0.5), 0, 7); ctx.fill();
@@ -1644,6 +1879,7 @@
     drawRoad();
     drawSpeedLines();
     drawObjects();
+    if(death && death.wreck) drawWreck();        // ★ 残骸压在被撞飞的东西上层
     drawPlayer();
     drawEffects();
     ctx.restore();
@@ -1651,6 +1887,7 @@
     drawFrame();
     drawDash();
     drawComboChips();                       // ★ 连击阶段 / 护盾剩余时间
+    if(state === 'over') drawDeathOverlay();  // ★ 死亡演出：暗角 + 大字（结算窗要等演出跑完）
     if(hintOn && state === 'play') drawHint();
   }
 
@@ -1734,6 +1971,8 @@
       '横向x=' + (player ? player.x.toFixed(0) : '—') + '（路面 ' + ROAD_L + '~' + ROAD_R + '，车道宽 ' + LANE_W.toFixed(0) + '）',
       '距离=' + Math.floor(distance) + '米 本段进度=' + (player ? ((player.y - stageStartY) / STAGE_LEN * 100).toFixed(0) : '0') + '%',
       '生命=' + Math.ceil(hp) + '  时间=' + timeLeft.toFixed(1) + 's  超越=' + passed + '  场上对象=' + (objs ? objs.length : 0),
+      '结束演出=' + (death ? (death.kind + ' ' + death.t.toFixed(2) + '/' + death.dur + 's 残骸=' + (death.wreck ? '有' : '无') +
+                     ' 弹窗=' + (overShown ? '已弹' : '未弹')) : '—'),
       '操作区=' + TOUCH_TOP + '..' + TOUCH_BOTTOM + '（高 ' + ZONE_H + '，按住=高速，已无高低速分界）' +
         ' 车屏y=' + Math.round(PY) + ' 滑动增益=' + TOUCH_GAIN + ' 红星时长=' + BOOST_TIME + 's 加速倍率=' + BOOST_MULT,
       '路面=' + Math.round(ROAD_L) + '..' + Math.round(ROAD_R) + '（宽 ' + Math.round(ROAD_R - ROAD_L) + '，占屏 ' +
@@ -1805,6 +2044,10 @@
   //   每帧 ReferenceError，而 Node 测试不跑 draw() 所以漏了 —— 现已加绘制冒烟测试）
   window.__racer = () => ({
     state, reason, hp, stage, distance, passed, timeLeft,
+    death: death ? { kind: death.kind, t: +death.t.toFixed(3), dur: death.dur,
+                     wreck: !!death.wreck, banner: !!death.bannerT,
+                     rest: !!(death.wreck && death.wreck.rest) } : null,
+    overShown, DEATH_TIME, DEATH_BANNER_AT,
     HP_MAX, HP_DRAIN, HEAL_FUEL, STAGE_HEAL, SHIELD_TIME, DMG, DMG_DEFAULT,
     DMG_BLOCK, DMG_CAR, DMG_TRUCK, DMG_HAULER, DMG_OVER,
     ENEMY: Object.keys(ENEMY).reduce((a, k) => {
@@ -1831,6 +2074,8 @@
   window.__racerReset = seed => { engineStop(); reset(seed); };
   window.__racerInput = o => { if('left' in o) input.left = !!o.left; if('right' in o) input.right = !!o.right; if('gas' in o) input.gas = !!o.gas; };
   window.__racerFx = () => speedFx();
+  window.__racerOver = () => ({ shown: overShown, death: death ? death.kind : null, t: death ? +death.t.toFixed(3) : 0 });
+  window.__racerSkip = () => { deathSkip = true; };   // 测试钩子：模拟"点一下跳过演出"
   window.__racerShield = () => ({ stage: boostStage, t: +shieldT.toFixed(3), boost: +player.boost.toFixed(3),
                                   on: shieldT > 0, fx: shieldFx() });
   // 测试钩子：直接推进连击阶段（等价于"喷火中又吃到一个油箱"）
