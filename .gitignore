@@ -8,6 +8,9 @@ android/output/
 # 签名密钥：不进版本库，必须单独备份（丢了就无法覆盖安装升级）
 private/
 
+# 本地工作笔记（WorkBuddy 用的项目记忆，不进版本库）
+.workbuddy/
+
 # Python / 编辑器 / 系统
 __pycache__/
 *.pyc
