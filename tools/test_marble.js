@@ -423,6 +423,329 @@ section('★ 转屏（竖屏↔横屏）关卡布局不变');
   win.__marbleSetStage(768, 1024);
 }
 
+/* ================= 9) 方向控制（与发射键分离） ================= */
+section('9) ★ 炮口方向控制：◀▶ 调角度，与蓄力/发射互不干扰');
+{
+  reset(9);
+  ok(M().aim === 0, '开局炮口朝正下方（aim=0）');
+  ok(win.__marbleSetAim(0.5) === 0.5, '可以设置炮口角度');
+  ok(win.__marbleSetAim(99) === M().AIM_MAX, '★ 角度被夹在 ±AIM_MAX 内（' + M().AIM_MAX.toFixed(2) + ' rad）');
+  ok(win.__marbleSetAim(-99) === -M().AIM_MAX, '反向同样夹紧');
+
+  // 左转：按住方向键 → 角度连续变化，但【不会发射】
+  reset(9);
+  win.__marbleSetAim(0);
+  win.__marbleAimDir(-1);
+  run(30);
+  ok(M().aim < 0, '★ 按住 ◀ 炮口持续左转（aim=' + M().aim.toFixed(3) + '）');
+  ok(M().state === 'ready' && M().balls === 5 && M().launched === 0,
+     '★ 转方向期间不会误发射（state=' + M().state + ' 已发=' + M().launched + '）');
+  win.__marbleAimDir(0);
+  const aimHeld = M().aim;
+  run(30);
+  ok(M().aim === aimHeld, '松开方向键后角度停住（不再自己转）');
+
+  // 转完方向后，发射键照常可用
+  press(); setCharge(0.6); release();
+  ok(M().state === 'play' && M().launched === 1, '★ 调完角度，发射键照常可用（转方向没占用发射时机）');
+  const fb = M().ball;
+  ok(fb && fb.vx !== 0, '★ 带角度发射：出膛带横向速度（vx=' + (fb ? fb.vx.toFixed(0) : '—') + '）');
+  ok(fb && Math.abs(Math.atan2(fb.vx, fb.vy) - aimHeld) < 0.02,
+     '★ 出膛方向 = 炮口角度（偏差 ' + (fb ? Math.abs(Math.atan2(fb.vx, fb.vy) - aimHeld).toFixed(4) : '?') + ' rad）');
+
+  // 右转发射 → 横向速度反号
+  reset(9);
+  win.__marbleSetAim(0.5);
+  win.__marbleFire(0.6);
+  const rgt = M().ball.vx;
+  reset(9);
+  win.__marbleSetAim(-0.5);
+  win.__marbleFire(0.6);
+  const lft = M().ball.vx;
+  ok(rgt > 0 && lft < 0 && Math.abs(rgt + lft) < 1e-6,
+     '★ 左/右角度对出膛方向严格反号（+' + rgt.toFixed(0) + ' / ' + lft.toFixed(0) + '）');
+}
+
+/* ================= 10) Left / Right 道具 ================= */
+section('10) ★ Left / Right：左(右)侧加倍、另一侧变负、中间归 0、可叠加');
+{
+  reset(10);
+  const base = M().effNums;
+  ok(JSON.stringify(base) === JSON.stringify([1,0,2,4,8,4,2,0,1]), '未吃道具时入口=底表（' + base.join('·') + '）');
+
+  win.__marbleEat('L');
+  ok(M().fx.L === 1, '吃到 Left → 层数 1');
+  ok(JSON.stringify(M().effNums) === JSON.stringify([2,0,4,8,0,-4,-2,0,-1]),
+     '★ 吃 1 次：左 ×2、右 变负、中间归 0（' + M().effNums.join('·') + '）');
+
+  win.__marbleEat('L');
+  ok(M().fx.L === 2, '再吃一次 → 层数 2');
+  ok(JSON.stringify(M().effNums) === JSON.stringify([4,0,8,16,0,-8,-4,0,-2]),
+     '★ 吃 2 次：继续翻倍（' + M().effNums.join('·') + '）');
+  ok(M().effNums[1] === 0 && M().effNums[7] === 0, '★ 0 号位无论怎么叠都还是 0');
+
+  for(let i = 0; i < 20; i++) win.__marbleEat('L');
+  ok(M().fx.L === M().MAX_STACK, '★ 最多叠加 ' + M().MAX_STACK + ' 层（实际 ' + M().fx.L + '）');
+
+  // Right 是镜像
+  reset(10);
+  win.__marbleEat('R');
+  ok(JSON.stringify(M().effNums) === JSON.stringify([-1,0,-2,-4,0,8,4,0,2]),
+     '★ Right：右侧加倍、左侧变负、中间归 0（' + M().effNums.join('·') + '）');
+
+  // 实打实落桶：吃 L 后落 2 号桶（底表 2）→ 得 4
+  reset(10);
+  win.__marbleEat('L');
+  const r1 = win.__marbleLand(2);
+  ok(r1.n === 4 && M().balls === 9, '★ 吃 L 后落 2 号桶：实得 4（5 → ' + M().balls + '）');
+  ok(M().fx.L === 0, '★ 回合结束，入口恢复正常（L 归零）');
+
+  // 负数：吃 R 后落 0 号桶（底表 1）→ -1
+  reset(10);
+  win.__marbleEat('R');
+  const r2 = win.__marbleLand(0);
+  ok(r2.n === -1 && M().balls === 4, '★ 吃 R 后落左侧 0 号桶：扣 1（5 → ' + M().balls + '）');
+}
+
+/* ================= 11) 错位 / 石化 ================= */
+section('11) ★ 错位（左右各自内部打乱，不串边）· 石化（封桶反弹）');
+{
+  reset(11);
+  win.__marbleEat('SHUF');
+  const perm = M().fx.perm;
+  ok(!!perm, '吃到错位 → 生成排列');
+  ok(perm[4] === 4, '★ 中间入口不动（perm[4]=' + perm[4] + '）');
+  ok(perm.slice(0, 4).every(i => i < 4), '★ 左侧 4 格只在左侧内部交换（' + perm.slice(0,4).join(',') + '）');
+  ok(perm.slice(5).every(i => i > 4), '★ 右侧 4 格只在右侧内部交换（' + perm.slice(5).join(',') + '）');
+  ok(M().effNums[4] === 8, '中间仍是 8');
+  const sorted = a => a.slice().sort((x, y) => x - y);
+  ok(JSON.stringify(sorted(M().effNums.slice(0, 4))) === JSON.stringify([0,1,2,4]),
+     '★ 左侧仍是 1·0·2·4 这四张牌（' + M().effNums.slice(0,4).join('·') + '）');
+  ok(JSON.stringify(sorted(M().effNums.slice(5))) === JSON.stringify([0,1,2,4]),
+     '★ 右侧仍是 4·2·0·1 这四张牌（' + M().effNums.slice(5).join('·') + '）');
+
+  // 石化：封 1~2 个入口，球会弹回去、且该桶不得分
+  reset(11);
+  win.__marbleEat('STONE');
+  const sealed = M().fx.sealed;
+  const cnt = sealed.filter(Boolean).length;
+  ok(cnt >= 1 && cnt <= 2, '★ 石化封住 1~2 个入口（' + cnt + ' 个）');
+  let si = sealed.indexOf(true);
+  const r3 = win.__marbleLand(si);
+  ok(r3.n === 0, '★ 落进被封的桶：记 0 分（不白送分）');
+  ok(M().fx.sealed.every(v => !v), '★ 回合结束，水泥筒消失（入口恢复）');
+
+  // 封桶反弹：球掉到桶口被弹回场内
+  reset(11);
+  win.__marbleEat('STONE');
+  let sidx = M().fx.sealed.indexOf(true);
+  const s = M();
+  const bx = s.fieldL + (sidx + 0.5) * s.slotW;
+  setBall({ x: bx, y: s.mouthY - 26, vy: 420 });
+  run(10);
+  const bb = M().ball;
+  ok(M().state === 'play' && bb && bb.y < s.mouthY - 4,
+     '★ 被封的入口会把球弹回场内（y=' + (bb ? bb.y.toFixed(0) : '—') + ' < 桶口 ' + s.mouthY + '）');
+}
+
+/* ================= 12) 分裂 / UP ================= */
+section('12) ★ 分裂球（一变三、可叠加、上限 9）· 1UP/2UP/3UP');
+{
+  reset(12);
+  ok(M().flyers.length === 0, '开局场上没有在飞的球');
+  win.__marbleEat('SPLIT');
+  ok(M().flyers.length === 3, '★ 吃到分裂：一变三（' + M().flyers.length + ' 球）');
+  ok(M().flyers.every(b => b.splitLv === 1), '三球都记了分裂层数 1');
+  const angs = M().flyers.map(b => Math.atan2(b.vy, b.vx));
+  ok(new Set(angs.map(a => a.toFixed(3))).size === 3, '★ 三球朝三个不同方向弹开');
+
+  win.__marbleEat('SPLIT', 0);
+  ok(M().flyers.length === 5, '★ 再吃一次继续分裂：3 → ' + M().flyers.length + ' 球');
+  ok(M().flyers[0].splitLv === 2, '层数累加到 2');
+
+  for(let i = 0; i < 30; i++) win.__marbleEat('SPLIT', 0);
+  ok(M().flyers.length <= M().MAX_FLYERS, '★ 同屏封顶 ' + M().MAX_FLYERS + ' 球（实际 ' + M().flyers.length + '）');
+
+  // 多球计分求和
+  reset(12);
+  win.__marbleEat('SPLIT');
+  const per = M().effNums[4];
+  win.__marbleLand(4); win.__marbleLand(4); win.__marbleLand(4);
+  ok(M().balls === 5 + per * 3,
+     '★ 三球全部落 8 号桶：得分按总和算（5 + ' + per + '×3 = ' + M().balls + '）');
+
+  // UP
+  reset(12);
+  const b0 = M().balls;
+  win.__marbleEat('UP3');
+  ok(M().balls === b0 + 3, '★ 3UP 立即加 3 条命（' + b0 + ' → ' + M().balls + '）');
+  ok(M().flyers.length === 3, '★ 3UP 同时分裂出 3 个小球（' + M().flyers.length + '）');
+  reset(12);
+  win.__marbleEat('UP1');
+  ok(M().balls === 6 && M().flyers.length === 1, '★ 1UP 加 1 命、分裂出 1 个球（' + M().balls + ' 命 / ' + M().flyers.length + ' 球）');
+}
+
+/* ================= 13) 地雷 / 火力球 / 冰封球 ================= */
+section('13) ★ 地雷（炸死球+炸钉）· 火力球（撞钉引爆）· 冰封球（冻钉碎裂）');
+{
+  // 爆炸本身：炸掉范围内的钉（用独立的爆炸钩子，避免「炸完回合就结束、钉立刻复原」干扰观察）
+  reset(13);
+  const p0 = M().pegs[12];
+  win.__marbleExplode(p0.x, p0.y, 48, true);
+  const dead = M().pegs.filter(p => p.dead).length;
+  ok(dead > 0, '★ 爆炸炸毁范围内的钉（' + dead + ' 颗）');
+  ok(M().pegs.filter(p => p.dead).every(p => Math.hypot(p.x - p0.x, p.y - p0.y) <= 48 + M().RP + 0.01),
+     '★ 只有范围内的钉被炸掉（没有全屏清空）');
+
+  // 地雷：球被炸死 + 场上无球则回合结束
+  reset(13);
+  setBall({ x: p0.x, y: p0.y - 4, vy: 60 });
+  win.__marbleEat('MINE');
+  ok(M().state === 'ready' && M().flyers.length === 0, '★ 触碰的球被炸死，场上无球 → 该回合结束');
+  ok(M().balls === 5, '★ 被地雷炸死 = 白打一颗（弹珠 5 → ' + M().balls + '）');
+  ok(M().pegs.every(p => !p.dead), '★ 它是场上唯一的球 → 回合立即结束 → 钉随回合结束复原');
+
+  // 地雷会连累其它球
+  reset(13);
+  win.__marbleEat('SPLIT');
+  ok(M().flyers.length === 3, '先裂成 3 球');
+  win.__marbleEat('MINE', 0);
+  ok(M().flyers.length < 3, '★ 地雷把周围的球一起炸掉（剩 ' + M().flyers.length + '）');
+
+  // 火力球
+  reset(13);
+  const p1 = M().pegs[20];
+  setBall({ x: p1.x, y: p1.y - 40, vy: 520 });
+  win.__marbleEat('FIRE');
+  ok(M().flyers[0].fire === true, '吃到火力 → 球进入火力状态');
+  run(14);
+  ok(M().pegs.filter(p => p.dead).length > 0, '★ 撞到下一个钉时引爆，炸掉周围钉（'
+     + M().pegs.filter(p => p.dead).length + ' 颗）');
+  ok(!M().flyers.some(b => b.fire), '★ 引爆后小球恢复普通状态');
+
+  // 冰封球
+  reset(13);
+  const p2 = M().pegs[30];
+  setBall({ x: p2.x, y: p2.y - 60, vy: 260 });
+  win.__marbleEat('ICE');
+  ok(M().flyers[0].iceT > 0, '吃到冰封 → 冰封计时开始（' + M().flyers[0].iceT.toFixed(1) + 's）');
+  run(20);
+  const froz = M().pegs.filter(p => p.frozen).length;
+  ok(froz > 0, '★ 前进途中把路径上的钉冻住（' + froz + ' 颗）');
+  run(40);
+  ok(M().pegs.filter(p => p.dead).length > 0, '★ 撞到冰冻的钉 → 碎裂消失（'
+     + M().pegs.filter(p => p.dead).length + ' 颗）');
+
+  // 回合结束：钉全部复原
+  reset(13);
+  win.__marbleExplode(M().pegs[12].x, M().pegs[12].y, 48, false);
+  ok(M().pegs.some(p => p.dead), '（前置）爆炸确实炸掉了钉');
+  win.__marbleLand(4);
+  ok(M().pegs.every(p => !p.dead && !p.frozen), '★ 回合结束，被炸/被冻的钉全部复原');
+}
+
+/* ================= 14) 刷新时机 / 小丑礼盒 / 回合末清除 ================= */
+section('14) ★ 刷新时机：局初 30% · 回合中出礼盒 · 回合末清空');
+{
+  let withItems = 0;
+  for(let s = 1; s <= 120; s++){ reset(s); if(M().itemsOn) withItems++; }
+  const rate = withItems / 120;
+  ok(rate > 0.12 && rate < 0.55, '★ 约 30% 的局开局会刷出道具（实测 ' + (rate * 100).toFixed(0) + '%）');
+
+  // 找到一局有道具的
+  let seedWith = 0;
+  for(let s = 1; s <= 120; s++){ reset(s); if(M().itemsOn && M().items.length > 0){ seedWith = s; break; } }
+  ok(seedWith > 0, '存在开局就带道具的局（种子 ' + seedWith + '，' + M().items.length + ' 个）');
+  ok(M().items.length <= 2, '★ 开局最多刷 2 个（' + M().items.length + '）');
+
+  // 道具位置合法：在场地内、不压钉
+  const st = M();
+  const bad = st.items.filter(it =>
+    it.x < st.fieldL + 8 || it.x > st.fieldR - 8 || it.y < st.fieldT + 20 || it.y > st.mouthY - 8);
+  ok(bad.length === 0, '★ 道具都刷在场地内且不越过桶口（' + st.items.length + ' 个）');
+
+  // 小丑礼盒：吃到后刷出 1~3 个新道具
+  reset(14);
+  win.__marbleClearItems();
+  ok(M().items.length === 0, '（前置）清空道具');
+  win.__marbleEat('CLOWN');
+  const after = M().items.length;
+  ok(after >= 1 && after <= 3, '★ 小丑礼盒刷出 1~3 个随机道具（' + after + ' 个）');
+
+  // 回合进行到一定阶段刷礼盒
+  reset(14);
+  win.__marbleClearItems();
+  win.__marbleFire(0.5);
+  ok(M().state === 'play', '（前置）发射，回合进行中');
+  win.__marbleAddPegHits(10);
+  run(2);
+  ok(M().clownDone && M().items.some(it => it.kind === 'CLOWN'),
+     '★ 回合打到一定阶段（撞钉 ≥10）刷出小丑礼盒');
+
+  // 回合结束：没吃到的道具不带到下一回合
+  reset(14);
+  win.__marbleClearItems();
+  win.__marblePutItem('SPLIT', M().fieldL + 40, M().fieldT + 120);
+  ok(M().items.length === 1, '（前置）放 1 个道具');
+  win.__marbleLand(4);
+  ok(M().items.length === 0, '★ 回合结束，没吃到的道具消失（不带到下一回合）');
+}
+
+/* ================= 15) 压力：道具全程开启 ================= */
+section('15) 压力：每回合都塞道具，连打不卡死 / 数值不坏');
+{
+  reset(21);
+  let shots = 0, stuck = 0, bad = 0, maxFly = 0, longest = 0;
+  while(M().state !== 'over' && shots < 80){
+    win.__marbleSpawnItems(2);                       // 每回合都塞 2 个随机道具
+    win.__marbleSetAim(((shots % 7) - 3) / 6);       // 顺便换个角度
+    press(); setCharge((shots % 10) / 10); release();
+    let f = 0;
+    while(M().state === 'play' && f < 1600){
+      perfNow += 16; step(DT); f++;
+      const st = M();
+      maxFly = Math.max(maxFly, st.flyers.length);
+      if(!Number.isFinite(st.balls) || st.balls < 0) bad++;
+      for(const b of st.flyers) if(![b.x, b.y, b.vx, b.vy].every(Number.isFinite)) bad++;
+    }
+    longest = Math.max(longest, f);
+    if(f >= 1600) stuck++;
+    shots++;
+  }
+  ok(stuck === 0, '★ ' + shots + ' 发（每发都带道具）没有一发卡住不落桶（卡住 ' + stuck + ' 发）');
+  ok(bad === 0, '★ 全程没有 NaN / 负弹珠（异常 ' + bad + ' 次）');
+  ok(maxFly <= M().MAX_FLYERS, '★ 同屏球数始终 ≤ ' + M().MAX_FLYERS + '（峰值 ' + maxFly + '）');
+  ok(longest < 1200, '最长一发 ' + longest + ' 帧就收工（远小于 1600 帧上限）');
+  ok(M().state === 'over' || shots === 80, '正常结束或打满（' + shots + ' 发，state=' + M().state + '）');
+}
+
+/* ================= 16) 绘制冒烟 ================= */
+section('16) 绘制：各种状态下画图都不报错（含道具/旋转炮口/水泥筒/负分桶）');
+{
+  const tryDraw = label => {
+    let r = 'ok';
+    try { win.__marbleDraw(); } catch (e) { r = String(e && e.message || e); }
+    ok(r === 'ok', '★ ' + label + ' 绘制不报错', r);
+  };
+  reset(16);
+  tryDraw('开局（带提示）');
+  win.__marbleSetAim(0.5); tryDraw('炮口转到 30°');
+  win.__marbleSpawnItems(3); tryDraw('场上有 3 个道具');
+  win.__marbleFire(0.7); tryDraw('单球飞行中');
+  win.__marbleEat('SPLIT'); tryDraw('三球同屏');
+  win.__marbleEat('FIRE', 0); tryDraw('火力球');
+  win.__marbleEat('ICE', 1); tryDraw('冰封球');
+  win.__marbleEat('L'); win.__marbleEat('L'); win.__marbleEat('R');
+  tryDraw('负分桶 + 两位数桶号');
+  win.__marbleEat('SHUF'); tryDraw('入口错位');
+  win.__marbleEat('STONE'); tryDraw('水泥筒封桶');
+  win.__marbleExplode(M().pegs[12].x, M().pegs[12].y, 48, false);
+  tryDraw('爆炸特效进行中');
+  win.__marbleLand(4); tryDraw('回合结束（复原后）');
+  win.__marbleSetBall({ x: M().cannonX, y: M().mouthY - 30, vy: 200 });
+  win.__marbleEat('MINE'); tryDraw('地雷炸完');
+}
+
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');
