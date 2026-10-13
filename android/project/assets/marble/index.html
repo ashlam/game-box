@@ -176,13 +176,36 @@
   const G = 520;                    // 重力（逻辑单位/秒²）
   const RB = 6.5;                   // 球半径
   const RP = 5;                     // 钉半径
-  const REST_PEG = 0.74;            // 钉恢复系数（弹性 <1，会慢慢泄能）
+  const REST_PEG = 0.74;            // 钉恢复系数（基准档 <1，会慢慢泄能；实际每颗钉按 PEG_KINDS 取）
   const REST_WALL = 0.86;           // 墙
   const REST_CAP = 0.7;             // 桶分隔条圆头
   const WATCH_SPEED = 9;            // 低于此速度算「停住」
   const WATCH_TIME = 1.0;           // 停这么久就给一脚（防止卡在钉顶）
   const FLIGHT_CAP = 14;            // 单球超时兜底（正常远小于此值）
   const CANNON_MOUTH = 92;
+  const SPD_CAP = 820;              // ★ 速度上限：超弹钉会「加能量」，封顶防穿钉（820/120=6.8 < r球+r钉=11.5）
+
+  /* ---------- ★ 撞针（钉子）分 4 档弹力：颜色区分，每局分布随机 ----------
+   *   rest < 1 泄能（球越弹越弱）→ rest > 1 加能（球会被顶回上方）
+   *   颜色：软=灰白 / 普=粉橙（原配色） / 弹=亮绿 / 超弹=金
+   *   每局由 rollPegMix() 随机抽权重（并随机挑一种当主基调）→ 每局手感都不一样   */
+  const PEG_KINDS = [
+    { key:'soft',   name:'软钉', rest:0.46, c:['#f6f1e8','#d8cdbb','#a59680'], ring:'rgba(140,128,106,.8)' },
+    { key:'mid',    name:'普钉', rest:REST_PEG, c:['#ffd9d2','#f4a9a0','#e08a80'], ring:'rgba(190,110,100,.75)' },
+    { key:'spring', name:'弹钉', rest:0.94, c:['#e9ffd9','#8fe36a','#3d9a38'], ring:'rgba(35,110,45,.8)' },
+    { key:'super',  name:'超弹', rest:1.06, c:['#fff4cc','#ffd24a','#c1830f'], ring:'rgba(150,95,10,.85)' },
+  ];
+  /* 纵深偏置：>0 下方偏高弹、<0 上方偏高弹，0 = 不偏置。
+   * ★ 实测（tools/bench_marble_pegs.js，每档 240 发）：
+   *   上方偏高弹 上半场占比 53.0%、球在上方待 2.38s；下方偏高弹 48.2%/2.03s；不偏置 49.8%/2.10s；
+   *   旧版「全是 0.74 普钉」只有 46.0%/1.84s。所以取 -0.3（上方偏弹）。 */
+  const PEG_TILT_DEF = -0.3;
+  /* 各档权重的上限：软钉太多球会一路直坠（实测全软 42.5% / 1.29s，比旧版还无聊）；
+   * 超弹太多球会在场上飞十几秒撞到 14s 兜底（实测全超弹 240 发里 9 发超时）→ 两头都封顶。 */
+  const PEG_CAP = [0.40, 0.50, 0.48, 0.30];
+  /* 平均基调（偏弹）：不是每局都长这样，只是「抽签时的重心」。
+   * 取这个值是因为实测它的「球待在上方的时间」最长（上方秒 2.38s vs 旧版 1.84s）。 */
+  const PEG_CENTER = [0.60, 0.85, 1.20, 1.00];
 
   /* ---------- ★ 方向控制（与发射键分离） ---------- */
   const AIM_MAX = 0.66;             // 炮口最大摆角（弧度，≈38°）
@@ -199,7 +222,10 @@
   const MINE_R = 48;                // 地雷爆炸半径
   const CLOWN_HITS = 10;            // 本回合撞钉够这么多 → 刷小丑礼盒
   const CLOWN_TIME = 5.0;           // 或飞够这么久 → 刷小丑礼盒
-  const ITEM_RUN_CHANCE = 0.3;      // ★ 每局开局 30% 概率刷出道具（用户定的）
+  /* ★ 道具刷新概率（用户定 80%）：本作节奏快，一局就十几发，
+   *   只在「局初」刷的话后面十几发全是空白 → 所以「局初」和「每回合开局」都按 80% 刷。 */
+  const ITEM_RUN_CHANCE = 0.8;      // 每局开局（第一发）
+  const ITEM_ROUND_CHANCE = 0.8;    // ★ 之后每一回合开局（这才是体感上的「每局都有道具」）
 
   /* 道具表：txt 是画在道具上的字形（不用 emoji，字体缺失也能画） */
   const ITEMS = {
@@ -226,6 +252,9 @@
   let lastBucket = -1, pegHits = 0, flights = 0;
   let flyers = [];                 // ★ 在飞的小球（可多个：分裂 / UP 道具）
   let pegs = [];
+  let pegMix = [0, 1, 0, 0];       // 本局 4 档撞针的权重（reset 时随机 roll）
+  let pegTilt = PEG_TILT_DEF;      // 纵深偏置（可用 __marblePegMix 调，做实验用）
+  let itemSeq = 0;                 // 道具自增 id（测试要认「同一个道具」有没有被清掉）
 
   /* ★ 本回合生效的效果（回合结束全部复原） */
   let fx = { L:0, R:0, perm:null, sealed:[] };
@@ -266,13 +295,61 @@
     aim = 0; aimDir = 0;
     clearTimeout(overTimer); overTimer = null;
     $('over').classList.remove('on');
+    pegMix = rollPegMix();
     genPegs();
     newRound(true);                      // 清效果 + 复钉
-    /* ★ 道具刷新规则 1：每局开局 30% 概率刷 0~2 个随机道具（没中就本局开局一个都没有） */
+    /* ★ 道具刷新规则 1：每局开局 80% 概率刷 1~2 个随机道具 */
     itemsOn = rng() < ITEM_RUN_CHANCE;
-    if(itemsOn) spawnItems(randInt(0, 2));
+    if(itemsOn) spawnItems(randInt(1, 2));
+    toast(pegMixText());
   }
   let rng = mulberry32(1);
+
+  /** ★ 本局撞针分布：4 档各随机一个权重，再随机挑一档当主基调 → 每局都不一样
+   *    （最后按 PEG_CAP 封顶：既保证「每局手感不同」，又不会 roll 出极端板子） */
+  function rollPegMix(){
+    const w = [];
+    for(let i = 0; i < PEG_KINDS.length; i++) w.push(PEG_CENTER[i] * (0.55 + rng() * 0.9));
+    const dom = Math.floor(rng() * PEG_KINDS.length);
+    w[dom] *= 1.8 + rng() * 1.8;                       // 主基调放大 1.8~3.6 倍
+    const sum0 = w.reduce((a, b) => a + b, 0);
+    return clampMix(w.map(v => v / sum0));
+  }
+  /** 把超上限的档位削到上限，多出来的分给还有余量的档位（保总和=1，削完不会再被归一化顶回去） */
+  function clampMix(m){
+    for(let it = 0; it < 6; it++){
+      let over = 0, room = 0;
+      for(let i = 0; i < m.length; i++){
+        if(m[i] > PEG_CAP[i]){ over += m[i] - PEG_CAP[i]; m[i] = PEG_CAP[i]; }
+        else room += PEG_CAP[i] - m[i];
+      }
+      if(over <= 1e-9 || room <= 1e-9) break;
+      for(let i = 0; i < m.length; i++) if(m[i] < PEG_CAP[i]) m[i] += over * (PEG_CAP[i] - m[i]) / room;
+    }
+    const s = m.reduce((a, b) => a + b, 0);
+    return m.map(v => v / s);
+  }
+  /** 按「纵深」偏置后的权重：depth 0=最上排 1=最下排；下方偏高弹、上方偏软 */
+  function pegWeightsAt(depth){
+    const t = pegTilt * (depth - 0.5) * 2;       // -tilt .. +tilt
+    return pegMix.map((v, i) => Math.max(0.02, v * (1 + t * (i - 1.5))));
+  }
+  function pickPegKind(depth){
+    const w = pegWeightsAt(depth);
+    let s = 0; for(let i = 0; i < w.length; i++) s += w[i];
+    let r = rng() * s;
+    for(let i = 0; i < w.length; i++){ r -= w[i]; if(r <= 0) return i; }
+    return w.length - 1;
+  }
+  function pegCounts(){
+    const c = new Array(PEG_KINDS.length).fill(0);
+    for(const p of pegs) c[p.k]++;
+    return c;
+  }
+  function pegMixText(){
+    const c = pegCounts();
+    return '本局撞针：' + PEG_KINDS.map((K, i) => K.name + ' ' + c[i]).join(' · ');
+  }
 
   /** 生成钉场（种子固定 → 同一局可复现，测试能断言）。
    *  规则：
@@ -300,7 +377,9 @@
           if(dx * dx + dy * dy < (2 * RP + 3) * (2 * RP + 3)){ ok = false; break; }
         }
         if(!ok) continue;
-        pegs.push({ x: jx, y: jy, i: idx++, dead:false, frozen:false });
+        /* ★ 撞针弹力档：按本局权重 + 纵深偏置抽取（下方更容易出高弹钉） */
+        const depth = (jy - y0) / Math.max(1, y1 - y0);
+        pegs.push({ x: jx, y: jy, i: idx++, k: pickPegKind(depth), dead:false, frozen:false });
       }
     }
   }
@@ -310,6 +389,7 @@
      ============================================================ */
   function mkBall(x, y, vx, vy){
     return { x, y, vx, vy, restT:0, xStag:0, checkX:x, flightT:0, trail:[],
+             probeT:0, probeX:x, probeY:y,
              splitLv:0, fire:false, iceT:0, dead:false };
   }
 
@@ -344,6 +424,8 @@
     items = [];
     roundGain = 0; roundPegHits = 0; clownDone = false;
     if(!fresh) flyers = [];
+    /* ★ 道具刷新规则 1b：每一回合开局也按 80% 刷 1~2 个（不然一局十几发，只有第一发有道具） */
+    if(!fresh && rng() < ITEM_ROUND_CHANCE) spawnItems(randInt(1, 2));
   }
 
   /** 结算：把本回合累计（可能是多球之和、也可能是负数）加进弹珠数 */
@@ -392,12 +474,12 @@
       const pos = findItemSpot();
       if(!pos) return;
       const kind = ITEM_KEYS[Math.floor(rng() * ITEM_KEYS.length)];
-      items.push({ x: pos.x, y: pos.y, kind, t: 0 });
+      items.push({ id: ++itemSeq, x: pos.x, y: pos.y, kind, t: 0 });
     }
   }
   function spawnClown(){
     const pos = findItemSpot();
-    if(pos) items.push({ x: pos.x, y: pos.y, kind: 'CLOWN', t: 0 });
+    if(pos) items.push({ id: ++itemSeq, x: pos.x, y: pos.y, kind: 'CLOWN', t: 0 });
   }
 
   /* ---------- 爆炸 / 分裂 ---------- */
@@ -581,8 +663,10 @@
     tone(520, 0.16, { type:'triangle', to:180, gain:0.14 });
     noiseBurst(0.1, { type:'bandpass', freq:1600, to:500, gain:0.05, decay:3 });
   }
-  function sndPeg(i){                                   // 撞钉：pachinko 的「叮」，按钉序错开音高
-    tone(760 + (i % 5) * 130, 0.07, { type:'sine', gain:0.06 });
+  /* 撞钉：pachinko 的「叮」——★ 音高按撞针档位走（软钉闷、超弹脆），同档内再按钉序错开 */
+  function sndPeg(i, k){
+    const base = [540, 760, 990, 1280][k | 0] || 760;
+    tone(base + (i % 5) * 60, 0.07, { type:(k | 0) >= 2 ? 'triangle' : 'sine', gain:0.06 });
   }
   function sndWall(){ tone(210, 0.06, { type:'sine', gain:0.05 }); }
   function sndBucket(n){                                // 落桶：0=低沉「噗」；N>0 越大越亮
@@ -767,11 +851,13 @@
       b.y = p.y + ny * rr;
       const vn = b.vx * nx + b.vy * ny;
       if(vn < 0){                                          // 只在接近时反弹
-        b.vx -= (1 + REST_PEG) * vn * nx;
-        b.vy -= (1 + REST_PEG) * vn * ny;
+        /* ★ 弹力按这颗钉的档位来：软钉 0.46（泄能）… 超弹 1.10（加能，把球顶回上方） */
+        const rest = (PEG_KINDS[p.k] || PEG_KINDS[1]).rest;
+        b.vx -= (1 + rest) * vn * nx;
+        b.vy -= (1 + rest) * vn * ny;
         pegHits++; roundPegHits++;
         const _now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : -999;
-        if(_now - lastPegSnd > 26){ lastPegSnd = _now; sndPeg(p.i); }
+        if(_now - lastPegSnd > 26){ lastPegSnd = _now; sndPeg(p.i, p.k); }
         effects.push({ kind:'ring', x: p.x, y: p.y, t: 0 });
         if(effects.length > 60) effects.shift();
         b.restT = 0;
@@ -851,6 +937,23 @@
         b.vy = Math.min(b.vy, -40);
       }
     }
+    /* 看门狗 C：★ 每整秒采样一次「这一秒挪了多远」，< 14 就判定原地打摆。
+     *   为什么需要它：高弹钉（rest≈1）能让球在「天花板 ↔ 钉顶」之间垂直弹跳十几秒，
+     *   速度不低（A 抓不到）、每次撞顶又把 xStag 清零（B 也抓不到）——实测会卡满 14s 超时。 */
+    b.probeT += h;
+    if(b.probeT >= 1.0){
+      const moved = Math.hypot(b.x - b.probeX, b.y - b.probeY);
+      b.probeT = 0; b.probeX = b.x; b.probeY = b.y;
+      if(moved < 14){
+        b.vx += (rng() < 0.5 ? -1 : 1) * 70;
+        b.vy = Math.min(b.vy, -60);
+        b.restT = 0; b.xStag = 0; b.checkX = b.x;
+      }
+    }
+
+    // ★ 速度封顶：超弹钉会加能量，不封顶会快到一子步跨过一颗钉（穿钉）
+    const spd = Math.hypot(b.vx, b.vy);
+    if(spd > SPD_CAP){ const kk = SPD_CAP / spd; b.vx *= kk; b.vy *= kk; }
 
     // 超时兜底：正常远小于此值（测试会断言实际用不到）
     if(b.flightT > FLIGHT_CAP){
@@ -994,13 +1097,38 @@
         ctx.beginPath(); ctx.arc(p.x - 1.5, p.y - 1.7, 1.5, 0, 7); ctx.fill();
         continue;
       }
-      // 钉身（参考图的粉橙）
+      // ★ 钉身：颜色 = 这一档的弹力（软=灰白 / 普=粉橙 / 弹=亮绿 / 超弹=金）
+      const K = PEG_KINDS[p.k] || PEG_KINDS[1];
+      if(K.rest > 0.9){                              // 高/超弹：外圈脉冲光晕（远远就能认出来）
+        const pulse = 0.5 + 0.5 * Math.sin(tGlobal * 3.4 + p.i * 0.7);
+        ctx.globalAlpha = 0.16 + 0.2 * pulse;
+        ctx.fillStyle = K.c[1];
+        ctx.beginPath(); ctx.arc(p.x, p.y, RP + 3 + 1.8 * pulse, 0, 7); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
       const g = ctx.createRadialGradient(p.x - 1.6, p.y - 1.8, 0.5, p.x, p.y, RP);
-      g.addColorStop(0, '#ffd9d2'); g.addColorStop(0.55, '#f4a9a0'); g.addColorStop(1, '#e08a80');
+      g.addColorStop(0, K.c[0]); g.addColorStop(0.55, K.c[1]); g.addColorStop(1, K.c[2]);
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(p.x, p.y, RP, 0, 7); ctx.fill();
-      ctx.strokeStyle = 'rgba(190,110,100,.75)'; ctx.lineWidth = 1;
+      ctx.strokeStyle = K.ring; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(p.x, p.y, RP, 0, 7); ctx.stroke();
+      // 档位标记：软钉两道横纹（泄能） / 弹钉一圈内环 / 超弹一颗四角星（加能）
+      if(K.rest < 0.6){
+        ctx.strokeStyle = 'rgba(120,108,88,.85)'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(p.x - 2.6, p.y - 1.6); ctx.lineTo(p.x + 2.6, p.y - 1.6);
+        ctx.moveTo(p.x - 2.6, p.y + 1.6); ctx.lineTo(p.x + 2.6, p.y + 1.6);
+        ctx.stroke();
+      }else if(K.rest > 1){
+        ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(p.x - 3.4, p.y); ctx.lineTo(p.x + 3.4, p.y);
+        ctx.moveTo(p.x, p.y - 3.4); ctx.lineTo(p.x, p.y + 3.4);
+        ctx.stroke();
+      }else if(K.rest > 0.85){
+        ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, 7); ctx.stroke();
+      }
       // 高光
       ctx.fillStyle = 'rgba(255,255,255,.75)';
       ctx.beginPath(); ctx.arc(p.x - 1.5, p.y - 1.7, 1.5, 0, 7); ctx.fill();
@@ -1119,13 +1247,19 @@
     roundRect(cx - 14, 40, 28, 46, 7); ctx.fill();
     ctx.strokeStyle = 'rgba(90,50,20,.8)'; ctx.lineWidth = 1.4;
     roundRect(cx - 14, 40, 28, 46, 7); ctx.stroke();
-    // ★ 炮口：按 aim 旋转（方向由 ◀▶ 控制）
+    /* ★ 炮口：按 aim 旋转（方向由 ◀▶ 控制）
+     *   ⚠️ 必须 rotate(-aim)：发射用的是 (sin aim, cos aim)（aim>0 → 往右下），
+     *      而画布 rotate(θ) 把局部 +y 轴映射到 (-sinθ, cosθ)，
+     *      写 rotate(aim) 炮口会朝反方向（曾经：往右调角度、炮口却朝左歪）。 */
     ctx.save();
-    ctx.translate(cx, 74); ctx.rotate(aim);
+    ctx.translate(cx, 74); ctx.rotate(-aim);
+    // ★ 炮管做成「细长 + 末端喇叭口」：粗方块转 38° 看着就是个斜菱形，读不出朝哪边
     ctx.fillStyle = '#c98a3e';
-    roundRect(-17, 4, 34, 17, 5); ctx.fill();
+    roundRect(-10, 3, 20, 20, 5); ctx.fill();
+    roundRect(-14, 14, 28, 9, 4); ctx.fill();
     ctx.strokeStyle = 'rgba(90,50,20,.8)';
-    roundRect(-17, 4, 34, 17, 5); ctx.stroke();
+    roundRect(-10, 3, 20, 20, 5); ctx.stroke();
+    roundRect(-14, 14, 28, 9, 4); ctx.stroke();
     // 装填好的球（有球可发时才显示）
     if(state !== 'play' && balls > 0){
       const g = ctx.createRadialGradient(-2, 16, 1, 0, 18, 7.5);
@@ -1369,7 +1503,7 @@
     ctx.save();
     ctx.fillStyle = 'rgba(255,252,246,.93)';
     ctx.strokeStyle = '#e0b34c'; ctx.lineWidth = 2;
-    roundRect(cx - hw, cy - 62, hw * 2, 176, 14); ctx.fill(); ctx.stroke();
+    roundRect(cx - hw, cy - 62, hw * 2, 212, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = '#c23b2c'; ctx.font = '800 24px ' + UI;
     ctx.fillText('弹珠乐园', cx, cy - 38);
@@ -1386,6 +1520,20 @@
     ctx.fillText('球撞到彩色圆牌 = 吃到道具', cx, cy + 78);
     ctx.fillStyle = '#8a6f52'; ctx.font = '11px ' + UI;
     ctx.fillText('效果只管这一回合，回合结束复原', cx, cy + 94);
+    // ★ 撞针弹力图鉴：4 档颜色 = 4 档弹力（每局分布随机）
+    ctx.fillStyle = '#7a4b00'; ctx.font = '700 11px ' + UI;
+    ctx.fillText('撞针弹力（每局随机）', cx, cy + 112);
+    const step = (hw * 2 - 24) / PEG_KINDS.length;
+    let lx = cx - hw + 12 + step / 2;
+    for(const K of PEG_KINDS){
+      ctx.fillStyle = K.c[1];
+      ctx.beginPath(); ctx.arc(lx, cy + 124, 5, 0, 7); ctx.fill();
+      ctx.strokeStyle = K.ring; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(lx, cy + 124, 5, 0, 7); ctx.stroke();
+      ctx.fillStyle = '#8a6f52'; ctx.font = '700 10.5px ' + UI;
+      ctx.fillText(K.name, lx, cy + 138);
+      lx += step;
+    }
     ctx.restore();
     ctx.textAlign = 'left';
   }
@@ -1486,6 +1634,9 @@
       '状态=' + state + '  弹珠=' + balls + '  发射=' + launched + '  累计加球=+' + gain + '  最高=' + best,
       '钉场=' + pegs.length + ' 颗(种子 ' + fieldSeed + ')  上一桶=' + lastBucket +
         (lastBucket >= 0 ? '(' + NUMS[lastBucket] + ')' : ''),
+      '撞针分布=' + PEG_KINDS.map((K, i) => K.name + '(' + K.rest.toFixed(2) + ')×' + pegCounts()[i]).join(' ') +
+        '  权重=' + pegMix.map(v => (v * 100).toFixed(0) + '%').join('/') + '  纵深偏置=' + pegTilt.toFixed(2),
+      '道具刷新: 局初' + (ITEM_RUN_CHANCE * 100) + '% / 每回合' + (ITEM_ROUND_CHANCE * 100) + '%',
       '上一球: 出膛=' + lastSpeed.toFixed(0) + ' 力量=' + (lastSpeed > 0 ? Math.round((lastSpeed - MINV) / (MAXV - MINV) * 100) + '%' : '—') +
         '  撞钉=' + pegHits + '  在飞=' + (flyers.length ? flyers.length + '球 ' +
           Math.round(Math.max.apply(null, flyers.map(b2 => b2.flightT)) * 100) / 100 + 's' : '否') +
@@ -1549,12 +1700,16 @@
     G, RB, RP, REST_PEG, REST_WALL, FLIGHT_CAP,
     W, H, fieldL, fieldR, fieldT, mouthY, floorY, slotW, cannonX: CANNON_X,
     pegCount: pegs.length, fieldSeed,
-    pegs: pegs.map(p => ({ x: p.x, y: p.y, i: p.i, dead: !!p.dead, frozen: !!p.frozen })),
+    pegs: pegs.map(p => ({ x: p.x, y: p.y, i: p.i, k: p.k, rest: (PEG_KINDS[p.k] || PEG_KINDS[1]).rest,
+                           dead: !!p.dead, frozen: !!p.frozen })),
+    pegMix: pegMix.slice(), pegDist: pegCounts(), pegTilt,
+    PEG_KINDS: PEG_KINDS.map(k => ({ key: k.key, name: k.name, rest: k.rest })), PEG_CAP: PEG_CAP.slice(),
+    SPD_CAP, ITEM_RUN_CHANCE, ITEM_ROUND_CHANCE,
     flyers: flyers.map(b => ({ x: b.x, y: b.y, vx: b.vx, vy: b.vy, flightT: b.flightT,
                                fire: b.fire, iceT: b.iceT, splitLv: b.splitLv, dead: b.dead })),
     ball: flyers[0] ? { x: flyers[0].x, y: flyers[0].y, vx: flyers[0].vx, vy: flyers[0].vy,
                         flightT: flyers[0].flightT } : null,
-    items: items.map(it => ({ x: it.x, y: it.y, kind: it.kind })),
+    items: items.map(it => ({ id: it.id, x: it.x, y: it.y, kind: it.kind })),
     itemsOn, roundGain, roundPegHits, clownDone, aim, aimDir,
     fx: { L: fx.L, R: fx.R, shuffle: !!fx.perm, perm: fx.perm ? fx.perm.slice() : null,
           sealed: fx.sealed.slice() },
@@ -1582,7 +1737,14 @@
   window.__marbleSetAim = a => { aim = clamp(+a || 0, -AIM_MAX, AIM_MAX); return aim; };
   window.__marbleAimDir = d => { aimDir = +d || 0; };
   window.__marbleFire = c => { fire(clamp(c === undefined ? 0 : +c, 0, 1)); return flyers.length; };
-  window.__marblePutItem = (kind, x, y) => { items.push({ x, y, kind, t: 0 }); return items.length; };
+  window.__marblePutItem = (kind, x, y) => { const it = { id: ++itemSeq, x, y, kind, t: 0 }; items.push(it); return it.id; };
+  /* 实验用：强指定撞针分布（mix=4 档权重、tilt=纵深偏置），并立刻重生成钉场 */
+  window.__marblePegMix = (mix, tilt) => {
+    if(Array.isArray(mix) && mix.length === PEG_KINDS.length) pegMix = mix.slice();
+    if(typeof tilt === 'number') pegTilt = tilt;
+    genPegs();
+    return { mix: pegMix.slice(), dist: pegCounts(), tilt: pegTilt };
+  };
   window.__marbleClearItems = () => { items = []; };
   window.__marbleEat = (kind, idx) => {              // 让第 idx 个球直接吃到某道具
     if(!flyers.length) flyers = [mkBall(CANNON_X, CANNON_MOUTH, 0, 120)];

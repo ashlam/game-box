@@ -26,10 +26,24 @@ const script = fs.readFileSync(HTML, 'utf8').match(/<script>([\s\S]*?)<\/script>
 
 /* ---------------- 桩 ---------------- */
 const gradient = { addColorStop() {} };
+/* ★ 记录型 ctx：把 save/restore/translate/rotate 记下来，
+ *   用来断言「画出来的炮口朝向」和「发射方向」一致（光看数值看不出绘制反向）。 */
+const drawRec = { frames: [], stack: [] };
 function mkCtx() {
   return new Proxy({}, {
     get(t, k) {
       if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => gradient;
+      if (k === 'save') return () => drawRec.stack.push({ tx: 0, ty: 0, rot: 0 });
+      if (k === 'restore') return () => drawRec.stack.pop();
+      if (k === 'translate') return (x, y) => {
+        const s = drawRec.stack[drawRec.stack.length - 1];
+        if (s) { s.tx = x; s.ty = y; }
+      };
+      if (k === 'rotate') return a => {
+        const s = drawRec.stack[drawRec.stack.length - 1];
+        if (s) s.rot = a;
+        drawRec.frames.push({ tx: s ? s.tx : 0, ty: s ? s.ty : 0, rot: a });
+      };
       if (k in t) return t[k];
       return () => {};
     },
@@ -132,7 +146,9 @@ function shoot(c, maxFrames = 1200) {
       if (b.x < s0.fieldL + s0.RB - 0.6 || b.x > s0.fieldR - s0.RB + 0.6) outOfBounds = true;
       if (b.y < s0.fieldT + s0.RB - 0.6) outOfBounds = true;
       if (b.y < s0.mouthY) {
-        for (const p of s0.pegs) {
+        // ★ 只看「还活着」的钉：被火力球/地雷炸掉的钉球本来就该穿过去，拿它判定穿钉是误报
+        for (const p of M().pegs) {
+          if (p.dead) continue;
           const dx = b.x - p.x, dy = b.y - p.y;
           if (dx * dx + dy * dy < (s0.RP + s0.RB - 0.8) * (s0.RP + s0.RB - 0.8)) { tunnel = true; break; }
         }
@@ -277,6 +293,8 @@ section('4) 物理：不穿钉、不出墙、必落桶、用不到超时兜底')
   ok(l.ball && l.ball.x >= l.fieldL + l.RB - 0.01 && l.ball.vx > 0, '左墙同样反弹并钳回界内');
 
   // 真实物理发一球：全程不越界、不穿钉、必然落桶、用不到超时
+  // （★ 先清空道具：这一节测的是纯物理，被地雷炸死的话根本不会落桶）
+  win.__marbleClearItems();
   const r = shoot(0.83, 1200);
   ok(r.resolved && r.bucket >= 0 && r.bucket <= 8, '真实物理必然结算到某个桶（桶[' + r.bucket + ']=' + M().NUMS[r.bucket] + '）', '帧数 ' + r.frames);
   ok(!r.outOfBounds, '全程不出墙（含顶棚）');
@@ -286,8 +304,8 @@ section('4) 物理：不穿钉、不出墙、必落桶、用不到超时兜底')
   ok(r.maxT < 10, '一球在 10s 内打完（' + r.maxT.toFixed(2) + 's）');
 
   // 确定性：同种子同力量 → 同一个桶
-  const d1 = (reset(7), shoot(0.61)), b1 = M().lastBucket, g1 = M().balls;
-  const d2 = (reset(7), shoot(0.61)), b2 = M().lastBucket, g2 = M().balls;
+  const d1 = (reset(7), win.__marbleClearItems(), shoot(0.61)), b1 = M().lastBucket, g1 = M().balls;
+  const d2 = (reset(7), win.__marbleClearItems(), shoot(0.61)), b2 = M().lastBucket, g2 = M().balls;
   ok(b1 === b2 && g1 === g2 && d1.bucket === d2.bucket,
      '★ 确定性：同种子+同力量 → 同一个桶（' + b1 + ' vs ' + b2 + '，球数 ' + g1 + '/' + g2 + '）');
 }
@@ -310,10 +328,16 @@ section('5) 看门狗：卡死的球会被踢醒');
   s = M();
   const p1 = s.pegs[0];
   setBall({ x: p1.x, y: p1.y - (s.RP + s.RB) - 0.4, vx: 0, vy: -300, restT: 0 });
-  run(Math.round(1.8 / DT));
-  const b = M();
-  const movedB = b.ball && Math.abs(b.ball.vx) > 10;
-  ok(movedB, 'B·高速原地打摆（vx 恒 0）→ 1.8s 内被踢醒（vx=' + (b.ball ? b.ball.vx.toFixed(1) : 'null') + '）');
+  run(Math.round(1.3 / DT));
+  /* ★ 判「位移」而不是瞬时 vx：球被踢出去后还会在钉顶上弹几下，vx 会被蹭小，
+   *   但「离原地多远」骗不了人。 */
+  let far = 0;
+  for (let f = 0; f < Math.round(0.5 / DT); f++) {
+    perfNow += 16; step(DT);
+    const bb = M().ball;
+    if (bb) far = Math.max(far, Math.abs(bb.x - p1.x));
+  }
+  ok(far > 3, 'B·高速原地打摆（vx 恒 0）→ 1.8s 内被踢开（离原地最远 ' + far.toFixed(1) + '）');
 }
 
 /* ================= 6) 音效 ================= */
@@ -624,7 +648,7 @@ section('13) ★ 地雷（炸死球+炸钉）· 火力球（撞钉引爆）· �
   ok(!M().flyers.some(b => b.fire), '★ 引爆后小球恢复普通状态');
 
   // 冰封球
-  reset(13);
+  reset(13); win.__marbleClearItems();      // ★ 只测冰封机制，别让路上的道具插一脚
   const p2 = M().pegs[30];
   setBall({ x: p2.x, y: p2.y - 60, vy: 260 });
   win.__marbleEat('ICE');
@@ -632,9 +656,11 @@ section('13) ★ 地雷（炸死球+炸钉）· 火力球（撞钉引爆）· �
   run(20);
   const froz = M().pegs.filter(p => p.frozen).length;
   ok(froz > 0, '★ 前进途中把路径上的钉冻住（' + froz + ' 颗）');
-  run(40);
-  ok(M().pegs.filter(p => p.dead).length > 0, '★ 撞到冰冻的钉 → 碎裂消失（'
-     + M().pegs.filter(p => p.dead).length + ' 颗）');
+  // ★ 取「过程中的峰值」：球一旦落桶回合就结束、钉会复原，只看最后一帧会误判
+  let shattered = 0;
+  for (let f = 0; f < 40 && M().flyers.length; f++) { perfNow += 16; step(DT);
+    shattered = Math.max(shattered, M().pegs.filter(p => p.dead).length); }
+  ok(shattered > 0, '★ 撞到冰冻的钉 → 碎裂消失（' + shattered + ' 颗）');
 
   // 回合结束：钉全部复原
   reset(13);
@@ -645,18 +671,31 @@ section('13) ★ 地雷（炸死球+炸钉）· 火力球（撞钉引爆）· �
 }
 
 /* ================= 14) 刷新时机 / 小丑礼盒 / 回合末清除 ================= */
-section('14) ★ 刷新时机：局初 30% · 回合中出礼盒 · 回合末清空');
+section('14) ★ 刷新时机：局初 80% · 每回合 80% · 回合中出礼盒 · 回合末清空');
 {
   let withItems = 0;
-  for(let s = 1; s <= 120; s++){ reset(s); if(M().itemsOn) withItems++; }
-  const rate = withItems / 120;
-  ok(rate > 0.12 && rate < 0.55, '★ 约 30% 的局开局会刷出道具（实测 ' + (rate * 100).toFixed(0) + '%）');
+  for(let s = 1; s <= 200; s++){ reset(s); if(M().itemsOn) withItems++; }
+  const rate = withItems / 200;
+  ok(rate > 0.68 && rate < 0.92, '★ 约 80% 的局开局会刷出道具（实测 ' + (rate * 100).toFixed(0) + '%）');
 
   // 找到一局有道具的
   let seedWith = 0;
-  for(let s = 1; s <= 120; s++){ reset(s); if(M().itemsOn && M().items.length > 0){ seedWith = s; break; } }
+  for(let s = 1; s <= 200; s++){ reset(s); if(M().itemsOn && M().items.length > 0){ seedWith = s; break; } }
   ok(seedWith > 0, '存在开局就带道具的局（种子 ' + seedWith + '，' + M().items.length + ' 个）');
-  ok(M().items.length <= 2, '★ 开局最多刷 2 个（' + M().items.length + '）');
+  ok(M().items.length >= 1 && M().items.length <= 2, '★ 开局刷 1~2 个（' + M().items.length + '）');
+
+  /* ★ 每回合开局也按 80% 刷：连打 12 回合，统计「开局就有道具的回合数」 */
+  reset(31);
+  let roundsWith = 0, rounds = 0;
+  for(let k = 0; k < 12; k++){
+    land(4);                                        // 直接落头奖（+8），弹珠不会耗光
+    if(M().items.length > 0) roundsWith++;          // 本回合开局刷出来的
+    rounds++;
+  }
+  const rr = roundsWith / rounds;
+  ok(rr >= 0.6, '★ 每回合开局也大概率有道具（' + roundsWith + '/' + rounds + ' = ' + (rr * 100).toFixed(0) + '%）');
+  ok(M().ITEM_ROUND_CHANCE === 0.8 && M().ITEM_RUN_CHANCE === 0.8,
+     '★ 刷新概率常数 = 80%（局初 ' + M().ITEM_RUN_CHANCE + ' / 每回合 ' + M().ITEM_ROUND_CHANCE + '）');
 
   // 道具位置合法：在场地内、不压钉
   const st = M();
@@ -682,13 +721,14 @@ section('14) ★ 刷新时机：局初 30% · 回合中出礼盒 · 回合末清
   ok(M().clownDone && M().items.some(it => it.kind === 'CLOWN'),
      '★ 回合打到一定阶段（撞钉 ≥10）刷出小丑礼盒');
 
-  // 回合结束：没吃到的道具不带到下一回合
+  // 回合结束：没吃到的道具不带到下一回合（★ 下一回合会新刷道具，所以按 id 认人）
   reset(14);
   win.__marbleClearItems();
-  win.__marblePutItem('SPLIT', M().fieldL + 40, M().fieldT + 120);
-  ok(M().items.length === 1, '（前置）放 1 个道具');
+  const putId = win.__marblePutItem('SPLIT', M().fieldL + 40, M().fieldT + 120);
+  ok(M().items.length === 1 && M().items[0].id === putId, '（前置）放 1 个道具（id=' + putId + '）');
   win.__marbleLand(4);
-  ok(M().items.length === 0, '★ 回合结束，没吃到的道具消失（不带到下一回合）');
+  ok(!M().items.some(it => it.id === putId),
+     '★ 回合结束，没吃到的道具消失（不带到下一回合，新刷的 ' + M().items.length + ' 个是新 id）');
 }
 
 /* ================= 15) 压力：道具全程开启 ================= */
@@ -744,6 +784,158 @@ section('16) 绘制：各种状态下画图都不报错（含道具/旋转炮口
   win.__marbleLand(4); tryDraw('回合结束（复原后）');
   win.__marbleSetBall({ x: M().cannonX, y: M().mouthY - 30, vy: 200 });
   win.__marbleEat('MINE'); tryDraw('地雷炸完');
+}
+
+/* ================= 17) 炮口方向 == 发射方向 ================= */
+section('17) ★ 炮口朝向与发射方向必须一致（曾经画反：往右调角度、炮口却朝左歪）');
+{
+  reset(1);
+  const s0 = M();
+  const dirOf = a => {
+    reset(1);
+    win.__marbleSetAim(a);
+    win.__marbleFire(0.6);                       // 直接发射，读取出膛速度方向
+    return M().flyers[0];
+  };
+  const bR = dirOf(0.5), bL = dirOf(-0.5), b0 = dirOf(0);
+  ok(bR.vx > 0 && Math.abs(b0.vx) < 1e-9 && bL.vx < 0,
+     '★ 出膛方向跟角度走：右 ' + bR.vx.toFixed(0) + ' / 中 ' + b0.vx.toFixed(0) + ' / 左 ' + bL.vx.toFixed(0));
+  ok(bR.vy > 0 && bL.vy > 0, '★ 不管朝哪边，都是往下打（vy 恒为正）');
+
+  /* ★ 画出来的炮口：抓 drawCannon 里 translate(cannonX, 74) 之后的 rotate 值，
+   *   再按画布规则算出炮管末端（局部 (0,21) → 屏幕 (tx - 21·sinθ, 74 + 21·cosθ)） */
+  const muzzleOf = a => {
+    reset(1);
+    win.__marbleSetAim(a);
+    drawRec.frames.length = 0;
+    win.__marbleDraw();
+    const f = drawRec.frames.filter(r => Math.abs(r.tx - M().cannonX) < 0.6 && Math.abs(r.ty - 74) < 0.6);
+    if (!f.length) return null;
+    const r = f[0];
+    return { rot: r.rot, tipX: r.tx - 21 * Math.sin(r.rot), baseX: r.tx };
+  };
+  const mR = muzzleOf(0.5), mL = muzzleOf(-0.5);
+  ok(mR && mL, '★ 抓到炮身的旋转变换（' + (mR ? mR.rot.toFixed(3) : 'null') + ' rad）');
+  ok(mR && Math.abs(mR.rot - -0.5) < 1e-9, '★ 炮身 rotate = -aim（+0.5 → ' + (mR ? mR.rot.toFixed(3) : '?') + '）');
+  ok(mR && mL && mR.tipX > mR.baseX + 5 && mL.tipX < mL.baseX - 5,
+     '★ 炮口末端与发射方向同侧（右调→末端偏右 ' + (mR ? (mR.tipX - mR.baseX).toFixed(1) : '?') +
+     '，左调→偏左 ' + (mL ? (mL.tipX - mL.baseX).toFixed(1) : '?') + '）');
+  ok(mR && mL && Math.sign(mR.tipX - mR.baseX) === Math.sign(bR.vx) &&
+                 Math.sign(mL.tipX - mL.baseX) === Math.sign(bL.vx),
+     '★ 炮口指向与出膛 vx 同号（绘制与物理不打架）');
+  ok(s0.AIM_MAX > 0 && Math.abs(win.__marbleSetAim(9)) - s0.AIM_MAX < 1e-9,
+     '炮口摆角有上限（AIM_MAX=' + s0.AIM_MAX + ' rad）');
+}
+
+/* ================= 18) 撞针弹力分档 ================= */
+section('18) ★ 撞针 4 档弹力：颜色区分 · 每局分布随机 · 超弹把球顶回上方');
+{
+  reset(1);
+  const s = M();
+  const K = s.PEG_KINDS;
+  ok(K.length === 4, '★ 撞针分 4 档（' + K.map(k => k.name).join('/') + '）');
+  ok(K[0].rest < K[1].rest && K[1].rest < K[2].rest && K[2].rest < K[3].rest,
+     '★ 弹力递增：' + K.map(k => k.rest.toFixed(2)).join(' < '));
+  ok(K[0].rest < 1 && K[3].rest > 1, '★ 软钉泄能(<1)、超弹加能(>1)');
+  ok(s.pegs.every(p => p.k >= 0 && p.k <= 3 && Math.abs(p.rest - K[p.k].rest) < 1e-9),
+     '★ 每颗钉都带档位和对应恢复系数（' + s.pegs.length + ' 颗）');
+
+  // 每局分布随机：30 个种子的档位分布要足够分散
+  const sigs = new Set();
+  let kindsPerRun = [];
+  for (let sd = 1; sd <= 30; sd++) {
+    reset(sd * 13 + 5);
+    sigs.add(M().pegDist.join('/'));
+    kindsPerRun.push(M().pegDist.filter(v => v > 0).length);
+  }
+  ok(sigs.size >= 20, '★ 每局的撞针分布都不一样（30 局出现 ' + sigs.size + ' 种分布）');
+  ok(Math.min.apply(null, kindsPerRun) >= 3,
+     '★ 每局至少 3 种撞针同场（最少 ' + Math.min.apply(null, kindsPerRun) + ' 种）');
+
+  /* 权重有上限 → 不会 roll 出「全是软钉」（球一路直坠）或「全是超弹」（飞满 14s 兜底）的极端板子。
+   * ★ 注意断言的是「权重」：实际钉阵还经过纵深偏置（上方偏高弹），某一档会被再放大一截，
+   *   所以下面再单独给实际占比留一道宽松的兜底。 */
+  let wWorst = 0;
+  for (let sd = 1; sd <= 60; sd++) {
+    reset(sd * 7 + 3);
+    M().pegMix.forEach((v, i) => { wWorst = Math.max(wWorst, v - M().PEG_CAP[i]); });
+  }
+  ok(wWorst <= 1e-9, '★ 权重都不超上限（最大超出 ' + wWorst.toExponential(1) + '，上限 ' + M().PEG_CAP.join('/') + '）');
+
+  let rMax = 0, rAt = '';
+  for (let sd = 1; sd <= 60; sd++) {
+    reset(sd * 7 + 3);
+    const d = M().pegDist, tot = d.reduce((a, b) => a + b, 0);
+    d.forEach((v, i) => { if (v / tot > rMax) { rMax = v / tot; rAt = K[i].name; } });
+  }
+  ok(rMax <= 0.65, '★ 实际钉阵里没有哪一档一家独大（最大 ' + rAt + ' ' + (rMax * 100).toFixed(1) + '%）');
+  ok(M().pegMix.reduce((a, b) => a + b, 0) > 0.999, '本局权重归一化（和 = ' + M().pegMix.reduce((a, b) => a + b, 0).toFixed(6) + '）');
+
+  /* 物理：同一高度自由落体砸同一颗钉，档位越高弹得越高 */
+  const bounceV = mix => {
+    reset(1);
+    win.__marblePegMix(mix, 0);
+    const st = M();
+    const p = st.pegs.find(q => q.y > st.fieldT + 70 &&
+      !st.pegs.some(o => o !== q && Math.hypot(o.x - q.x, o.y - q.y) < 46 && o.y < q.y));
+    setBall({ x: p.x, y: p.y - 34, vx: 0, vy: 0 });
+    for (let f = 0; f < 60; f++) {
+      perfNow += 16; step(DT);
+      const b = M().ball;
+      if (!b) return -1;
+      if (b.vy < 0) return -b.vy;
+    }
+    return -1;
+  };
+  const vS = bounceV([1, 0, 0, 0]), vM = bounceV([0, 1, 0, 0]),
+        vP = bounceV([0, 0, 1, 0]), vU = bounceV([0, 0, 0, 1]);
+  ok(vS > 0 && vM > 0 && vP > 0 && vU > 0, '（前置）四档都能测到反弹（' + [vS, vM, vP, vU].map(v => v.toFixed(0)).join('/') + '）');
+  ok(vS < vM && vM < vP && vP < vU,
+     '★ 同样落下 → 弹起速度 软<' + '普<弹<超弹（' + [vS, vM, vP, vU].map(v => v.toFixed(0)).join(' < ') + '）');
+  ok(vU > 0.9 * Math.sqrt(2 * s.G * 22.5), '★ 超弹几乎不掉能量（弹起 ' + vU.toFixed(0) + ' vs 落下 ' + Math.sqrt(2 * s.G * 22.5).toFixed(0) + '）');
+
+  /* ★ 超弹钉能把球顶回上方：从 60 高处自由落体砸下去 → 反弹后能往上飞回一大截 */
+  reset(1); win.__marblePegMix([0, 0, 0, 1], 0);
+  const st2 = M();
+  const pu = st2.pegs.find(q => q.y > st2.fieldT + 130 &&
+    !st2.pegs.some(o => o !== q && o.y < q.y && q.y - o.y < 62 && Math.abs(o.x - q.x) < 16));
+  setBall({ x: pu.x, y: pu.y - 60, vx: 0, vy: 0 });
+  let upV = 0, topY = 1e9, bounced = false;
+  for (let f = 0; f < 90; f++) {
+    perfNow += 16; step(DT);
+    const b = M().ball; if (!b) break;
+    if (b.vy < 0) { bounced = true; if (b.vy < upV) upV = b.vy; topY = Math.min(topY, b.y); }
+    else if (bounced) break;             // 弹到最高点开始下落 → 收工
+  }
+  ok(upV < -150, '★ 球砸在超弹钉上被顶回上方（反弹 vy=' + upV.toFixed(0) + '，最高回到 y=' + topY.toFixed(0) + '）');
+
+  // 速度封顶：超弹加能也不会快到穿钉（820/120 = 6.8 < r球+r钉 11.5）
+  reset(1); win.__marblePegMix([0, 0, 0, 1], 0);
+  setBall({ x: M().cannonX, y: M().fieldT + 20, vx: 300, vy: 200 });
+  let vmax = 0;
+  for (let f = 0; f < 200 && M().state === 'play'; f++) {
+    perfNow += 16; step(DT);
+    const b = M().ball; if (!b) break;
+    vmax = Math.max(vmax, Math.hypot(b.vx, b.vy));
+  }
+  ok(vmax <= M().SPD_CAP + 1, '★ 速度封顶生效（峰值 ' + vmax.toFixed(0) + ' ≤ ' + M().SPD_CAP + '）');
+  ok(M().SPD_CAP / 120 < M().RP + M().RB, '★ 封顶后一子步位移 ' + (M().SPD_CAP / 120).toFixed(1) + ' < 球钉半径和 ' + (M().RP + M().RB) + '（不会穿钉）');
+}
+
+/* ================= 19) 看门狗 C：垂直弹跳死循环 ================= */
+section('19) ★ 看门狗 C：撞顶会清掉旧计时器，靠「整秒位移」把垂直弹跳救出来');
+{
+  reset(5);
+  win.__marblePegMix([0, 0, 1, 0], 0);          // 全是弹钉：最容易「天花板↔钉顶」垂直弹跳
+  const st = M();
+  const top = st.pegs.reduce((a, b) => (a.y < b.y ? a : b));
+  ok(top.rest > 0.9, '（前置）这一板全是弹钉（rest=' + top.rest + '）');
+  setBall({ x: top.x, y: top.y - (st.RP + st.RB) - 0.4, vx: 0, vy: -300 });
+  run(Math.round(0.9 / DT));
+  ok(M().ball && Math.abs(M().ball.vx) < 10, '（前置）0.9s 时还在原地垂直弹（vx=' + (M().ball ? M().ball.vx.toFixed(1) : 'null') + '）');
+  run(Math.round(0.6 / DT));
+  const b = M().ball;
+  ok(b && Math.abs(b.vx) > 10, '★ 1.5s 内被踢出垂直死循环（vx=' + (b ? b.vx.toFixed(1) : 'null') + '）');
 }
 
 /* ================= 汇总 ================= */
