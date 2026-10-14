@@ -28,7 +28,7 @@ const script = fs.readFileSync(HTML, 'utf8').match(/<script>([\s\S]*?)<\/script>
 const gradient = { addColorStop() {} };
 /* ★ 记录型 ctx：把 save/restore/translate/rotate 记下来，
  *   用来断言「画出来的炮口朝向」和「发射方向」一致（光看数值看不出绘制反向）。 */
-const drawRec = { frames: [], stack: [] };
+const drawRec = { frames: [], stack: [], alphas: [] };
 function mkCtx() {
   return new Proxy({}, {
     get(t, k) {
@@ -47,7 +47,11 @@ function mkCtx() {
       if (k in t) return t[k];
       return () => {};
     },
-    set(t, k, v) { t[k] = v; return true; },
+    set(t, k, v) {
+      t[k] = v;
+      if (k === 'globalAlpha') drawRec.alphas.push(v);   // ★ 抓透明度，用来断言「最后一回合的道具在闪」
+      return true;
+    },
   });
 }
 function mkEl(tag) {
@@ -671,7 +675,7 @@ section('13) ★ 地雷（炸死球+炸钉）· 火力球（撞钉引爆）· �
 }
 
 /* ================= 14) 刷新时机 / 小丑礼盒 / 回合末清除 ================= */
-section('14) ★ 刷新时机：局初 80% · 每回合 80% · 回合中出礼盒 · 回合末清空');
+section('14) ★ 刷新时机：局初 80% · 每回合 80% · 回合中出礼盒 · 道具寿命 3 回合');
 {
   let withItems = 0;
   for(let s = 1; s <= 200; s++){ reset(s); if(M().itemsOn) withItems++; }
@@ -721,14 +725,59 @@ section('14) ★ 刷新时机：局初 80% · 每回合 80% · 回合中出礼�
   ok(M().clownDone && M().items.some(it => it.kind === 'CLOWN'),
      '★ 回合打到一定阶段（撞钉 ≥10）刷出小丑礼盒');
 
-  // 回合结束：没吃到的道具不带到下一回合（★ 下一回合会新刷道具，所以按 id 认人）
+  /* ★ 道具寿命：回合结束不再清空，life -1，最多活 ITEM_LIFE 回合
+   *   （下一回合还会新刷道具，所以一律按 id 认人） */
   reset(14);
   win.__marbleClearItems();
   const putId = win.__marblePutItem('SPLIT', M().fieldL + 40, M().fieldT + 120);
+  const LIFE = M().ITEM_LIFE, MAXN = M().ITEM_MAX;
+  ok(LIFE === 3, '★ 道具寿命常数 ITEM_LIFE=3（' + LIFE + '）');
   ok(M().items.length === 1 && M().items[0].id === putId, '（前置）放 1 个道具（id=' + putId + '）');
-  win.__marbleLand(4);
-  ok(!M().items.some(it => it.id === putId),
-     '★ 回合结束，没吃到的道具消失（不带到下一回合，新刷的 ' + M().items.length + ' 个是新 id）');
+  ok(M().items[0].life === LIFE, '（前置）初始寿命 = ' + M().items[0].life);
+
+  /* 自然衰减：连打 5 回合，看这个道具的 life 变化
+   *   （每回合还会自动刷道具，所以只认 id） */
+  const alive = [];
+  for(let k = 0; k < 5; k++){
+    win.__marbleLand(4);                             // 直接落头奖（+8），弹珠耗不光
+    const mine = M().items.find(it => it.id === putId);
+    alive.push(mine ? mine.life : 0);
+  }
+  ok(alive[0] === LIFE - 1 && alive[1] === LIFE - 2 && alive[2] === 0,
+     '★ 每回合结束寿命 -1，第 ' + LIFE + ' 回合后消失（' + LIFE + ' → ' + alive.slice(0, 3).join(' → ') + '）');
+  ok(alive[3] === 0 && alive[4] === 0, '★ 消失后不会「复活」（第 4、5 回合仍为 0）');
+
+  /* ★ 闪烁提醒：life=1 的道具明暗周期变化；life 满的恒亮
+   *   （itemAlpha 是纯函数，直接采样；再用记录型 ctx 确认这个值真的写进画布了） */
+  const sampleAlpha = life => {
+    const out = [];
+    for(let f = 0; f < 40; f++){ run(1); out.push(win.__marbleItemAlpha(life)); }
+    return { mn: Math.min.apply(null, out), mx: Math.max.apply(null, out) };
+  };
+  const aLast = sampleAlpha(1), aFull = sampleAlpha(3);
+  ok(aLast.mn < 0.4 && aLast.mx > 0.85,
+     '★ 寿命=1（最后一回合）→ 忽明忽暗（alpha ' + aLast.mn.toFixed(2) + '~' + aLast.mx.toFixed(2) + '）');
+  ok(aFull.mn > 0.99 && aFull.mx > 0.99,
+     '★ 寿命没到最后 → 一直亮着（alpha ' + aFull.mn.toFixed(2) + '）');
+
+  // 这个值确实被写进画布了（撞针光晕也在设 alpha，所以只看「有没有够暗的时刻」）
+  reset(14); win.__marbleLand(4); run(120);
+  win.__marbleClearItems();
+  win.__marblePutItem('SPLIT', M().fieldL + 40, M().fieldT + 120, 1);
+  let wrote = false;
+  for(let f = 0; f < 40; f++){
+    run(1);
+    drawRec.alphas.length = 0;
+    win.__marbleDraw();
+    if(drawRec.alphas.some(v => v < 0.45)) { wrote = true; break; }
+  }
+  ok(wrote, '★ 闪烁的不透明度真的落到画布上了（抓到 alpha<0.45）');
+
+  // 场上道具不会无限堆积
+  reset(77);
+  let peak = 0;
+  for(let k = 0; k < 20; k++){ win.__marbleLand(4); peak = Math.max(peak, M().items.length); }
+  ok(peak <= MAXN, '★ 连打 20 回合，场上道具不超上限（峰值 ' + peak + ' ≤ ' + MAXN + '）');
 }
 
 /* ================= 15) 压力：道具全程开启 ================= */

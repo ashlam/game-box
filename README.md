@@ -11,7 +11,7 @@
 | `sokoban/` | 仓库番 | 推箱子 | **72 关两套关卡集**（街机版 48 + 经典集 24），触屏方向键 + 滑动，可撤销，记录最好成绩 |
 | `breakout/` | 打砖块 | 动作 | 8 关，拖动挡板、搓球变向，砖块有硬度 |
 | `frog/` | 青蛙过河 | 古风 · 蓄力跳 | 按住蓄力松手起跳，落水即止，正中石心加印章 |
-| `marble/` | 弹珠乐园 | 蓄力发射 | 撞钉反弹，落桶加球，0 号桶白损失一颗；撞针 4 档弹力、每局随机分布 |
+| `marble/` | 弹珠乐园 | 蓄力发射 | 撞钉反弹，落桶加球，0 号桶白损失一颗；撞针 4 档弹力、每局随机分布；10 种道具，**最多留 3 回合**（最后一回合闪烁提醒） |
 | `racer/` | 火箭车 | 触控赛车 | 生命值 + 护盾连击（详见下节），带**可视化调参页** |
 | `klotski/` | 华容道 · 车阵 | 滑块解谜 | 经典「横刀立马」，棋子全是各种车，记录最少步数 |
 | `2048/` | 2048 | 数字合并 | 滑动合成 2048，记录最高分 |
@@ -99,7 +99,7 @@ node tools/test_blockpuzzle.js  # 96 项
 node tools/test_breakout.js     # 23 项
 node tools/test_frog.js         # 53 项
 node tools/test_klotski.js      # 190 项
-node tools/test_marble.js       # 192 项
+node tools/test_marble.js       # 199 项
 node tools/test_othello.js      # 黑白棋整局对局 + 计时断言
 node tools/test_parking.js      # 停车场华容道：77 项
 node tools/test_sokoban.js      # 两套关卡逐关重放解法：30 项
