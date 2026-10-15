@@ -2097,39 +2097,73 @@ section('31) ★ 炮口方向键：竖屏手机上够大、两键之间够开（
   };
 
   const aim = rule('.ctl .aim');
-  const aimW = px(aim, 'width');
-  ok(aimW >= 64, '★ 方向键宽度 ≥ 64px（实际 ' + aimW + 'px；原来是 54px，太小）');
-  const ctlH = px(rule('.ctl'), 'height');
-  ok(ctlH >= 64, '★ 方向键高度 ≥ 64px（控件条高 ' + ctlH + 'px；原来是 58px）');
-  const aimFont = px(aim, 'font-size');
-  ok(aimFont >= 24, '★ 箭头字号 ≥ 24px（实际 ' + aimFont + 'px；原来是 20px）');
+  const fire = rule('.ctl .fire');
+  const ctl = rule('.ctl');
 
-  /* ★ 关键：两键之间的间距必须**明显大于**普通 gap，
-   *   否则拇指点下去容易落进缝里 → 按错方向（用户反馈的「容易按错」）。 */
-  const pairRule = rule('.ctl .aim + .aim');
-  const pairGap = px(pairRule, 'margin-left');
-  const baseGap = px(rule('.ctl'), 'gap');
-  ok(pairGap > 0, '★ 专门给「两个方向键之间」加了间距（margin-left: ' + pairGap + 'px）');
-  ok(pairGap > baseGap,
-     '★ 方向键间距(' + pairGap + ') > 控件条基础间距(' + baseGap + ') —— 把最容易按错的那一对拉开');
-  ok(pairGap >= 10, '★ 方向键间距 ≥ 10px（实际 ' + pairGap + 'px；原来是 8px）');
+  /* ★ 布局是**两行**（用户选定）：发射键铺满第一行、◀▶ 平分第二行。
+   *   所以方向键不再写死宽度，而是 flex:1 1 0 平分整行 → 实际宽度 152~198px，
+   *   比一行版的 76px 宽得多。这里守「平分 + 高度 + 字号」这几条关键样式。 */
+  ok(/flex\s*:\s*1\s+1\s+0/.test(aim),
+     '★ 方向键用 flex:1 1 0 平分整行（不再写死宽度 → 比一行版宽得多）');
+  ok(/min-width\s*:\s*0/.test(aim), '★ 方向键设了 min-width:0（flex 子项才肯收缩、不溢出）');
+  const aimH = px(aim, 'height');
+  ok(aimH >= 60, '★ 方向键高度 ≥ 60px（实际 ' + aimH + 'px；原来一行版是 58px）');
+  const aimFont = px(aim, 'font-size');
+  ok(aimFont >= 28, '★ 箭头字号 ≥ 28px（实际 ' + aimFont + 'px；原来是 20px）');
+
+  /* ★ 两行布局的关键：发射键必须占满一整行（flex-basis:100%），
+   *   否则会塌成一行、失去「边蓄力边转向」的前提。 */
+  ok(/flex\s*:\s*1\s+1\s+100%/.test(fire),
+     '★ 发射键占满一整行（flex:1 1 100%）→ 与方向键分成两行');
+  ok(/flex-wrap\s*:\s*wrap/.test(ctl), '★ 控件条允许换行（flex-wrap:wrap）→ 两行布局成立');
+  const fireH = px(fire, 'height');
+  ok(fireH >= 46, '★ 发射键高度 ≥ 46px（实际 ' + fireH + 'px）');
 
   // 触摸目标下限（Apple HIG / Material 都推荐 ≥44px）
-  ok(aimW >= 44 && ctlH >= 44, '★ 达到 44px 最小触摸目标（' + aimW + '×' + ctlH + '）');
+  ok(aimH >= 44 && fireH >= 44, '★ 达到 44px 最小触摸目标（方向键高 ' + aimH + ' / 发射键高 ' + fireH + '）');
 
   // 窄屏兜底：320px 级手机也不能挤爆
   const mq = /@media\s*\(max-width:\s*330px\)\s*\{([\s\S]*?)\n\s*\}/.exec(css);
   ok(!!mq, '★ 有极窄屏（≤330px）的适配块');
   if (mq) {
-    const block = mq[1];
-    const narrowAim = px(block, 'width');
-    ok(narrowAim >= 56, '★ 窄屏方向键仍有 ' + narrowAim + 'px（不会缩到按不着）');
+    /* ⚠️ 必须在媒体块**内部**按选择器取规则：直接对整块找第一个 height
+     *   会拿到 .ctl .fire 的高度（那是另一个按钮），断言就测错对象了。 */
+    const innerAim = new RegExp('\\.ctl\\s+\\.aim\\s*\\{([^}]*)\\}').exec(mq[1]);
+    const narrowAimH = innerAim ? px(innerAim[1], 'height') : NaN;
+    ok(narrowAimH >= 56, '★ 窄屏方向键高度仍有 ' + narrowAimH + 'px（不会缩到按不着）');
+  }
+  /* ★ 矮屏（≤600px 高）也要有压缩档：两行本身多占约 60px，
+     矮屏上不压一档的话画布会掉到 67% 以下。 */
+  const mqh = /@media\s*\(max-height:\s*600px\)\s*\{([\s\S]*?)\n\s*\}/.exec(css);
+  ok(!!mqh, '★ 有矮屏（≤600px 高）的压缩档');
+  if (mqh) {
+    const innerFire = new RegExp('\\.ctl\\s+\\.fire\\s*\\{([^}]*)\\}').exec(mqh[1]);
+    const shortFire = innerFire ? px(innerFire[1], 'height') : NaN;
+    ok(shortFire >= 44 && shortFire < fireH,
+       '★ 矮屏把发射键压到 ' + shortFire + 'px（< 正常 ' + fireH + 'px，把高度还给场地）');
   }
 
   // 发射键文字要能自适应（窄屏不换行顶破按钮）
-  ok(/font-size\s*:\s*clamp\(/.test(rule('.ctl .fire')),
+  ok(/font-size\s*:\s*clamp\(/.test(fire),
      '★ 发射键文字用 clamp() 随屏宽缩放（窄屏不换行）');
-  ok(/min-width\s*:\s*0/.test(rule('.ctl .fire')), '★ 发射键设了 min-width:0（flex 子项才肯收缩、不溢出）');
+  ok(/min-width\s*:\s*0/.test(fire), '★ 发射键设了 min-width:0（flex 子项才肯收缩、不溢出）');
+
+  /* ★ DOM 顺序 = 视觉顺序（发射在上、◀▶ 在下），不靠 CSS order ——
+   *   这样键盘 Tab / 读屏的焦点顺序也是对的。 */
+  const ctlHtml = /<div class="ctl" id="ctlbar">([\s\S]*?)<\/div>/.exec(RAW_HTML);
+  ok(!!ctlHtml, '（前置）取到控制条的 HTML');
+  if (ctlHtml) {
+    const seq = (ctlHtml[1].match(/id="(btn[A-Za-z]+)"/g) || []).map(s => s.slice(4, -1));
+    ok(seq[0] === 'btnFire' && seq[1] === 'btnLeft' && seq[2] === 'btnRight',
+       '★ HTML 顺序就是视觉顺序（' + seq.join(' → ') + '）');
+  }
+  /* ★ 不该再用 CSS order 硬调顺序（DOM 顺序已经对了）。
+   *   ⚠️ 只扫 .ctl 相关的规则块 —— 直接全文找 `order:` 会误伤别处
+   *   （本文件里 #toast 等规则也含 order 字样，上一版就是这么误报的）。 */
+  const ctlRules = css.match(/\.[^{}]*\bctl\b[^{}]*\{[^}]*\}/g) || [];
+  const orderHits = ctlRules.filter(t => /(^|[;{\s])order\s*:/.test(t));
+  ok(orderHits.length === 0,
+     '★ 没有用 CSS order 硬调顺序（DOM 顺序已经对了）', orderHits.join(' | '));
 }
 
 /* ================= 汇总 ================= */

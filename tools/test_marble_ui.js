@@ -88,7 +88,9 @@ f.onload=()=>setTimeout(()=>{
        fireClientH:fireEl.clientHeight,
        ctlScrollW:ctlEl.scrollWidth, ctlClientW:ctlEl.clientWidth,
        ctlOverflow:ctlEl.scrollWidth-ctlEl.clientWidth,
-       cvH:cv.height, ctlBottom:ctlEl.getBoundingClientRect().bottom};
+       cvH:cv.height,
+       /* ★ 两行布局要靠这两个判断：发射键下沿 ≤ 方向键上沿 = 确实分了两行 */
+       fireBottom:fire.bottom, aimTop:L.top, ctlBottom:ctlEl.getBoundingClientRect().bottom};
   }catch(e){ o={ok:false,err:e.message}; }
   document.getElementById('out').textContent=JSON.stringify(o);
 },600);
@@ -160,22 +162,41 @@ ok(results.length === VIEWPORTS.length,
    '全部 ' + VIEWPORTS.length + ' 个尺寸都量到了（实际 ' + results.length + ' 个）');
 
 if (results.length) {
-  section('2) 触摸目标与防误触');
+  /* ★ 矮屏（max-height:600px）会走压缩档：两行布局本身要多占约 60px，
+     矮屏上再叠加就挤，所以 CSS 在矮屏把两行都压薄一点（把高度还给场地）。
+     断言因此按屏高区分门槛，而不是一套死数 —— 但**下限始终 ≥44px**（触摸目标底线）。 */
+  const isShort = h => h <= 600;
+
+  section('2) 触摸目标与防误触（两行布局：◀▶ 平分下面一行）');
   for (const { w, h, label, r } of results) {
-    okNum(r.aimW, v => v >= 64,
-       label + ' ' + w + '×' + h + '：方向键宽 ' + r.aimW + ' ≥ 64');
-    okNum(r.aimH, v => v >= 64,
-       '  └ 方向键高 ' + r.aimH + ' ≥ 64');
+    const short = isShort(h);
+    /* 两行布局下方向键是「平分整行」，所以宽度很大（152~198px）；
+       高度：正常 66 / 窄屏 60 / 矮屏 52。断言按各档的**最小值**守。 */
+    okNum(r.aimW, v => v >= 100,
+       label + ' ' + w + '×' + h + '：方向键宽 ' + r.aimW + ' ≥ 100（两行版平分整行，比一行版宽得多）');
+    okNum(r.aimH, v => v >= (short ? 48 : 56),
+       '  └ 方向键高 ' + r.aimH + ' ≥ ' + (short ? 48 : 56) + (short ? '（矮屏压缩档）' : ''));
     ok(r.aimW >= 44 && r.aimH >= 44, '  └ 达到 44px 最小触摸目标');
-    /* 防误触：两键中心距要够大，间隙要够宽（原来 8px 间隙 / 62px 中心距太挤） */
-    okNum(r.gap, v => v >= 10, '  └ 两键间隙 ' + r.gap + 'px ≥ 10（原来 8px）');
-    okNum(r.centerDist, v => v >= 80,
-       '  └ 两键中心距 ' + r.centerDist + 'px ≥ 80（原来 62px，容易点进缝里按错）');
+    okNum(r.gap, v => v >= (short ? 6 : 8), '  └ 两键间隙 ' + r.gap + 'px ≥ ' + (short ? 6 : 8));
+    okNum(r.centerDist, v => v >= 120,
+       '  └ 两键中心距 ' + r.centerDist + 'px ≥ 120（原来一行版只有 62px，容易点进缝里按错）');
+  }
+
+  section('2b) ★ 两行布局的关键性质：发射键与方向键**不在同一行**');
+  /* 这是「两行」方案能保住「边蓄力边转向」的前提：
+     发射键在上、方向键在下 → 右手拇指按住发射键时，左手拇指够得到方向键。
+     如果哪天被改回一行（或布局塌成一行），这条会立刻失败。 */
+  for (const { w, h, label, r } of results) {
+    okNum(r.fireBottom, () => true, label + '：发射键下沿可读（' + r.fireBottom + 'px）');
+    okNum(r.aimTop, () => true, '  └ 方向键上沿可读（' + r.aimTop + 'px）');
+    ok(r.fireBottom <= r.aimTop + 1,
+       '  └ 发射键在方向键上方（发射下沿 ' + r.fireBottom + ' ≤ 方向键上沿 ' + r.aimTop + '）→ 两行成立');
   }
 
   section('3) 发射键：不换行、不溢出');
   for (const { w, h, label, r } of results) {
-    okNum(r.fireH, v => v >= 40, label + '：发射键高 ' + r.fireH + 'px ≥ 40');
+    okNum(r.fireH, v => v >= (isShort(h) ? 44 : 48),
+       label + '：发射键高 ' + r.fireH + 'px ≥ ' + (isShort(h) ? 44 : 48));
     okNum(r.fireScrollH, () => true, '  └ 发射键 scrollHeight 可读（' + r.fireScrollH + '）');
     ok(r.fireScrollH <= r.fireClientH + 1,
        '  └ 文字没有换行顶破按钮（scrollH ' + r.fireScrollH + ' ≤ clientH ' + r.fireClientH + '）');
@@ -183,10 +204,12 @@ if (results.length) {
        '  └ 控件条不横向溢出（' + r.ctlScrollW + ' / ' + r.ctlClientW + '，超出 ' + r.ctlOverflow + 'px）');
   }
 
-  section('4) 画布仍占主要高度（别为了放大按钮把场地挤没了）');
+  section('4) 画布仍占主要高度（两行会多占约 60px，但不能把场地挤没）');
   for (const { w, h, label, r } of results) {
-    okNum(r.cvH, v => v / h * 100 >= 65,
-       label + '：画布高 ' + r.cvH + 'px = 视口 ' + (r.cvH / h * 100).toFixed(0) + '% ≥ 65%');
+    /* 两行版控件条从 72 → 约 134px（矮屏压缩后约 112px），
+       所以门槛比一行版（65%）放宽；实测最差 69%（360×640），其余 70%+。 */
+    okNum(r.cvH, v => v / h * 100 >= 68,
+       label + '：画布高 ' + r.cvH + 'px = 视口 ' + (r.cvH / h * 100).toFixed(0) + '% ≥ 68%');
   }
 }
 

@@ -29,32 +29,47 @@
                background:var(--card);color:var(--txt);font-family:inherit;line-height:1;white-space:nowrap}
   .top button:active{background:var(--acc);border-color:var(--acc);color:#fff}
 
-  /* ★ 方向控制与发射键物理分离：左边 ◀▶ 只管调角度，右边大键只管蓄力/发射。
-     这样「调方向」永远不会占用「发射时机」——手指在左边转炮口时，右边的大键照样随时能按。
+  /* ★ 方向控制与发射键物理分离：方向键只管调角度，发射键只管蓄力/发射。
+     这样「调方向」永远不会占用「发射时机」——按住发射蓄力时，另一只手照样能点方向微调。
 
-     ★ 用户反馈：竖屏手机上方向键太小、按着别扭、容易按错。原因是原来只有 54×58px，
-       而且 ◀ 与 ▶ 之间只隔 8px —— 拇指点下去很容易落进中间那道缝里（按错方向）。
-       现在：① 按钮放大到 76×72；② **两个方向键之间额外留 14px**（`.aim + .aim`），
-       与发射键之间只有 10px —— 把「最容易按错的那一对」拉开，而不是平均用力；
-       ③ 箭头字号 20 → 28px，按下去看得更清楚。 */
-  .ctl{width:100%;max-width:420px;flex:0 0 auto;display:flex;gap:10px;margin-top:8px;height:72px}
-  .ctl .aim{width:76px;flex:0 0 auto;font-size:28px;line-height:1;border-radius:15px;
-            border:1px solid var(--line);background:var(--card);color:var(--txt);font-family:inherit;
-            touch-action:none;padding:0}
-  /* ◀ 与 ▶ 之间再拉开一点（方向键是最容易按错的一对） */
-  .ctl .aim + .aim{margin-left:14px}
-  .ctl .aim:active{background:var(--acc);border-color:var(--acc);color:#fff}
-  /* 发射键：文字用 clamp 随屏宽收，窄屏（320px）也不会换行顶破按钮 */
-  .ctl .fire{flex:1;min-width:0;font-size:clamp(12px,3.6vw,15px);font-weight:600;border-radius:15px;
+     ★ 布局演进（用户逐轮反馈）：
+       ① 原来 54×58px 且 ◀▶ 只隔 8px → 竖屏手机上太小、容易按进缝里按错；
+       ② 放大到 76×72 并拉开方向键间距（但仍是「◀▶ 挤在左、发射占满右」一行）；
+       ③ 用户选定**两行布局**：发射键铺满上面一行、◀▶ 平分下面一行。
+          好处是方向键能做得更大（不再受发射键挤压）、位置居中、拇指落点自然；
+          代价是多占约 60px 竖向高度，所以下面用 flex 让画布自己让出空间。
+
+     ★ 为什么两行仍然能「边蓄力边转向」：发射键与方向键在不同行、且都够大，
+       右拇指按住发射键的同时，左拇指可以点/滑下面的方向键（多点触控，互不干扰）。 */
+  .ctl{width:100%;max-width:420px;flex:0 0 auto;display:flex;flex-wrap:wrap;
+       gap:10px;margin-top:8px;height:auto}
+  /* 发射键：铺满第一行。
+     min-width:0 必须留着 —— 它是 flex 子项，默认 min-width:auto 会拒绝收缩到
+     内容宽度以下，窄屏上就会把控件条顶溢出。 */
+  .ctl .fire{flex:1 1 100%;min-width:0;height:58px;
+             font-size:clamp(13px,3.8vw,16px);font-weight:600;border-radius:15px;
              border:1px solid #e0b34c;background:#d24534;color:#fff;font-family:inherit;
              letter-spacing:clamp(0px,0.45vw,2px);touch-action:none;padding:0 4px}
   .ctl .fire:active{filter:brightness(.9)}
-  /* 极窄屏（<330px）再收一档，保证三个键都放得下 */
+  /* 方向键：平分第二行（不再固定宽度，随屏宽自适应 → 比一行版更大更好按） */
+  .ctl .aim{flex:1 1 0;min-width:0;height:66px;font-size:32px;line-height:1;
+            border-radius:15px;border:1px solid var(--line);background:var(--card);
+            color:var(--txt);font-family:inherit;touch-action:none;padding:0}
+  .ctl .aim + .aim{margin-left:0}          /* 两行布局下由 gap 控制间距，去掉一行版的额外左边距 */
+  .ctl .aim:active{background:var(--acc);border-color:var(--acc);color:#fff}
+  /* 极窄屏（<330px）再收一档 */
   @media (max-width:330px){
-    .ctl{gap:8px;height:66px}
-    .ctl .aim{width:64px;font-size:24px;border-radius:13px}
-    .ctl .aim + .aim{margin-left:10px}
-    .ctl .fire{border-radius:13px}
+    .ctl{gap:8px}
+    .ctl .fire{height:52px;border-radius:13px}
+    .ctl .aim{height:60px;font-size:28px;border-radius:13px}
+  }
+  /* ★ 矮屏（如 iPhone SE 320×568）：两行布局本身要多占约 60px，
+     矮屏上再叠加就显得挤，所以把两行都压薄一点，把高度还给场地。
+     只在「确实矮」时生效（640px 的常见 Android 不受影响）。 */
+  @media (max-height:600px){
+    .ctl{gap:7px;margin-top:6px}
+    .ctl .fire{height:46px;font-size:clamp(12px,3.6vw,14px)}
+    .ctl .aim{height:52px;font-size:26px}
   }
 
   #stage{width:100%;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;touch-action:none}
@@ -109,9 +124,11 @@
 <div id="stage"><canvas id="cv"></canvas></div>
 
 <div class="ctl" id="ctlbar">
+  <!-- ★ DOM 顺序 = 视觉顺序（两行布局：发射在上、◀▶ 在下），
+       这样不依赖 CSS order —— 键盘 Tab / 读屏的焦点顺序也是对的 -->
+  <button id="btnFire" class="fire">按住蓄力 · 松手发射</button>
   <button id="btnLeft" class="aim" aria-label="炮口左转">◀</button>
   <button id="btnRight" class="aim" aria-label="炮口右转">▶</button>
-  <button id="btnFire" class="fire">按住蓄力 · 松手发射</button>
 </div>
 
 <div id="toast"></div>
@@ -1981,7 +1998,7 @@
     ctx.fillStyle = '#c23b2c'; ctx.font = '800 24px ' + UI;
     ctx.fillText('弹珠乐园', cx, cy - 38);
     ctx.fillStyle = '#5a4231'; ctx.font = '700 12.5px ' + UI;
-    ctx.fillText('◀ ▶ 调炮口角度（左键）', cx, cy - 16);
+    ctx.fillText('◀ ▶ 调炮口角度（下面两个键）', cx, cy - 16);
     ctx.fillStyle = '#5a4231'; ctx.font = '700 12.5px ' + UI;
     ctx.fillText('按住红色大键蓄力 · 松手发射', cx, cy + 2);
     ctx.fillStyle = '#8a6f52'; ctx.font = '11.5px ' + UI;
