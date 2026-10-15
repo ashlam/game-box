@@ -11,6 +11,10 @@ private/
 # 本地工作笔记（WorkBuddy 用的项目记忆，不进版本库）
 .workbuddy/
 
+# 用户拍的参考照片（体积大且是私人素材，只做开发参考，不进版本库）
+MVIMG_*.jpg
+IMG_*.jpg
+
 # Python / 编辑器 / 系统
 __pycache__/
 *.pyc
