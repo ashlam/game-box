@@ -22,7 +22,8 @@ const path = require('path');
 const vm = require('vm');
 
 const HTML = process.argv[2] || path.join(__dirname, '..', 'web', 'marble', 'index.html');
-const script = fs.readFileSync(HTML, 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
+const RAW_HTML = fs.readFileSync(HTML, 'utf8');
+const script = RAW_HTML.match(/<script>([\s\S]*?)<\/script>/)[1];
 
 /* ---------------- 桩 ---------------- */
 const gradient = { addColorStop() {} };
@@ -670,7 +671,7 @@ section('12) ★ 分裂球（一变 ' + 4 + '、可叠加、上限 9）· 1UP/2U
 
   // 多球计分求和（★ 把金冠挪开，先隔离出「落桶只加分数」这件事）
   reset(12);
-  win.__marbleSetCrown(0);
+  win.__marblePinCrown(0);
   win.__marbleEat('SPLIT');
   const per = M().effNums[4];
   const livesBefore = M().lives;
@@ -682,7 +683,7 @@ section('12) ★ 分裂球（一变 ' + 4 + '、可叠加、上限 9）· 1UP/2U
 
   // 金冠筒：多球全部落进去 → 每球各 +1 命
   reset(12);
-  win.__marbleSetCrown(4);
+  win.__marblePinCrown(4);
   win.__marbleEat('SPLIT');
   const lb2 = M().lives;
   for(let i = 0; i < SN; i++) win.__marbleLand(4);
@@ -1450,13 +1451,19 @@ section('21) ★ 撞针 4 档弹力：颜色区分 · 每局分布随机 · 超�
   ok(rMax <= 0.65, '★ 实际钉阵里没有哪一档一家独大（最大 ' + rAt + ' ' + (rMax * 100).toFixed(1) + '%）');
   ok(M().pegMix.reduce((a, b) => a + b, 0) > 0.999, '本局权重归一化（和 = ' + M().pegMix.reduce((a, b) => a + b, 0).toFixed(6) + '）');
 
-  /* 物理：同一高度自由落体砸同一颗钉，档位越高弹得越高 */
+  /* 物理：同一高度自由落体砸同一颗钉，档位越高弹得越高。
+   * ⚠️ 选钉条件别写太苛刻：只要「上方 30 内没有别的钉」就够 —— 球从 p.y-34 落下，
+   *   上方干净即可。以前写的是「上方 46 内无钉」，那在旧钉阵下偶尔能撞上一颗，
+   *   换个 RNG 消耗顺序（比如新增一次随机会改变钉场）就变成 0 命中、直接崩。
+   *   找最下面那颗钉：它上方天然最空，且离桶口还有距离。 */
   const bounceV = mix => {
     reset(1);
     win.__marblePegMix(mix, 0);
     const st = M();
-    const p = st.pegs.find(q => q.y > st.fieldT + 70 &&
-      !st.pegs.some(o => o !== q && Math.hypot(o.x - q.x, o.y - q.y) < 46 && o.y < q.y));
+    const cands = st.pegs.filter(q => q.y > st.fieldT + 70 &&
+      !st.pegs.some(o => o !== q && Math.hypot(o.x - q.x, o.y - q.y) < 30 && o.y < q.y));
+    const p = cands.length ? cands[cands.length - 1] : st.pegs.slice().sort((a, b) => b.y - a.y)[0];
+    if (!p) return -1;
     setBall({ x: p.x, y: p.y - 34, vx: 0, vy: 0 });
     for (let f = 0; f < 60; f++) {
       perfNow += 16; step(DT);
@@ -1658,15 +1665,16 @@ section('25) ★ 生命与分数分离：落桶得分、发射扣命、UP 补命
    *   「分数变负」和「生命」完全是两回事。 */
   ok(M().lives === 10, '★ 分数为负也不影响生命（仍是 ' + M().lives + '）');
 
-  // 命归 0 → 结束；分数保留（★ 把金冠挪开，否则落 4 号会一直续命、永远打不完）
+  // 命归 0 → 结束；分数保留（★ 把金冠 pin 在 0 号，否则落 4 号会被金冠续命、永远打不完）
   reset(73); win.__marbleClearFx(); win.__marbleClearItems();
-  win.__marbleSetCrown(0);
+  win.__marblePinCrown(0);
   for(let k = 0; k < 10; k++){ press(); setCharge(0.5); release(); land(4); }
   const g = M();
   ok(g.lives === 0, '★ 打满 10 发 → 生命归 0（' + g.lives + '）');
   ok(g.score === 10 * 8 * M().SCORE_MULT,
      '★ 分数保留下来（10 × 8 × ' + M().SCORE_MULT + ' = ' + g.score + '）');
   ok(g.state === 'over', '★ 生命归 0 → 结束（state=' + g.state + '）');
+  win.__marblePinCrown(-1);                     // 解锁，别影响后面的用例
 
   // 最高分落盘用的是分数
   ok(M().best >= 10 * 8 * M().SCORE_MULT, '★ 最高分按「分数」记（best=' + M().best + '）');
@@ -1686,42 +1694,72 @@ section('25) ★ 生命与分数分离：落桶得分、发射扣命、UP 补命
 }
 
 /* ===== 26) ★ 金冠：默认 8 号筒 · 每局 20% 挪窝 · 落进去额外 +1 命 ===== */
-section('26) ★ 金冠：默认在 8 号筒 · 每局 20% 移到别的筒 · 落进去额外 +1 命');
+section('26) ★ 金冠：每回合重掷 · 30% 落到别的筒 · 落进去额外 +1 命');
 {
   const s0 = M();
   ok(s0.CROWN_DEF_I === 4, '★ 默认筒是 4 号格 = 8 号筒（CROWN_DEF_I=' + s0.CROWN_DEF_I + '）');
   ok(s0.NUMS[s0.CROWN_DEF_I] === 8, '★ 默认筒的数字就是 8（' + s0.NUMS[s0.CROWN_DEF_I] + '）');
-  ok(s0.CROWN_MOVE_CHANCE === 0.4, '★ 移动几率 40%（' + s0.CROWN_MOVE_CHANCE + '）');
+  ok(s0.CROWN_MOVE_CHANCE === 0.3, '★ 换筒几率 30%（' + s0.CROWN_MOVE_CHANCE + '）');
 
-  // ---- 默认位置：不移动时必须落在 8 号筒 ----
-  reset(1);
-  ok(M().crownI === 4, '★ 没触发移动时金冠在默认筒（crownI=' + M().crownI + '）');
-  ok(win.__marbleCrownText().indexOf('8 号筒') >= 0, '提示文案说的是 8 号筒（' + win.__marbleCrownText() + '）');
-
-  // ---- 移动几率 ≈ 20%，且只落在「别的」筒上 ----
-  const N = 2000;
-  let moved = 0, dist = {}, hitDefault = 0;
+  // ---- 分布：30% 落到别的筒，其余回 8 号筒 ----
+  const N = 3000;
+  let moved = 0, dist = {}, atDefault = 0;
   for (let k = 1; k <= N; k++) {
-    reset(k * 7919);                              // 换种子 → 重新 roll
+    reset(k * 7919);                              // 换种子 → 重新掷
     const c = M().crownI;
-    if (c === M().CROWN_DEF_I) hitDefault++;
+    if (c === M().CROWN_DEF_I) atDefault++;
     else { moved++; dist[c] = (dist[c] || 0) + 1; }
     if (c < 0 || c > 8) { ok(false, '金冠位置越界: ' + c); break; }
   }
   const rate = moved / N;
-  ok(rate > 0.34 && rate < 0.46, '★ 移动几率约 40%（' + N + ' 局实测 ' + (rate * 100).toFixed(1) + '%）');
+  ok(rate > 0.25 && rate < 0.35, '★ 换筒几率约 30%（' + N + ' 局实测 ' + (rate * 100).toFixed(1) + '%）');
+  ok(atDefault / N > 0.65, '★ 其余回 8 号筒（' + (atDefault / N * 100).toFixed(1) + '%）');
   const otherSlots = Object.keys(dist).map(Number);
   ok(otherSlots.indexOf(M().CROWN_DEF_I) < 0,
-     '★ 移动时不会「移到原地」（' + otherSlots.length + ' 个别的筒都出现过）');
+     '★ 换筒时不会「在原地」（' + otherSlots.length + ' 个别的筒都出现过）');
   ok(otherSlots.length === 8, '★ 8 个别的筒都能被选中（实测出现 ' + otherSlots.length + ' 个）');
   const counts = otherSlots.map(k => dist[k]);
   const mn = Math.min.apply(null, counts), mx = Math.max.apply(null, counts);
   ok(mx < mn * 2.2, '★ 各筒被选中的次数大致均匀（' + mn + ' ~ ' + mx + '，不偏袒某一筒）');
 
+  /* ---- ★ 每回合都重掷（用户的核心要求）----
+   *   不是「每局一次」，而是**每次能发球之前**都掷一次；
+   *   而且要保证「恒有且仅有 1 个金冠」—— 即 crownI 永远落在合法筒上。
+   *   （合法性在循环里累积计数、最后断言一次，避免刷出几百条重复 pass） */
+  reset(1);
+  const seen = [];
+  let illegal = 0;
+  for (let k = 0; k < 200; k++) {
+    if (M().state === 'over') break;
+    land(4);                                       // 推进一个回合（endRound → newRound）
+    const c = M().crownI;
+    if (!(c >= 0 && c < 9)) illegal++;
+    seen.push(c);
+  }
+  ok(seen.length > 5, '（前置）推进了 ' + seen.length + ' 个回合');
+  ok(illegal === 0, '★ 全程恒有且仅有 1 个金冠（' + seen.length + ' 个回合里位置越界 ' + illegal + ' 次）');
+  const uniq = new Set(seen);
+  ok(uniq.size >= 2, '★ 同一个局内金冠位置会变（' + seen.length + ' 回合里出现 ' + uniq.size + ' 种位置）');
+  ok(seen.filter(c => c !== 4).length > 0, '★ 局内确实出现过非 8 号筒（' +
+     seen.filter(c => c !== 4).length + '/' + seen.length + ' 回合）');
+
+  // 统计「一次发球前掷一次」的频率是否也接近 30%
+  let rMoved = 0, rTot = 0, last = M().crownI;
+  reset(7);
+  for (let k = 0; k < 600 && M().state !== 'over'; k++) {
+    land(4);
+    rTot++;
+    if (M().crownI !== 4) rMoved++;
+    last = M().crownI;
+  }
+  ok(rTot > 50, '（前置）取样 ' + rTot + ' 个回合');
+  ok(rMoved / rTot > 0.18 && rMoved / rTot < 0.42,
+     '★ 逐回合看也在 30% 上下（' + rTot + ' 回合里 ' + (rMoved / rTot * 100).toFixed(1) + '%）');
+
   // ---- 落进金冠筒：得分 + 额外 1 命 ----
   reset(1);
   win.__marbleClearFx(); win.__marbleClearItems();
-  win.__marbleSetCrown(2);                        // 挪到 2 号格（数字 2）
+  win.__marblePinCrown(2);                        // 挪到 2 号格（数字 2）
   press(); setCharge(0.5); release();             // 生命 10 → 9
   const lv0 = M().lives;
   const r = land(2);
@@ -1732,7 +1770,7 @@ section('26) ★ 金冠：默认在 8 号筒 · 每局 20% 移到别的筒 · �
   // ---- 非金冠筒不给命 ----
   reset(1);
   win.__marbleClearFx(); win.__marbleClearItems();
-  win.__marbleSetCrown(2);
+  win.__marblePinCrown(2);
   press(); setCharge(0.5); release();
   const lv1 = M().lives;
   land(5);                                        // 5 号格不是金冠
@@ -1741,7 +1779,7 @@ section('26) ★ 金冠：默认在 8 号筒 · 每局 20% 移到别的筒 · �
   // ---- 金冠可以落在「底表为 0」的筒上：那时它就是「一条命的筒」 ----
   reset(1);
   win.__marbleClearFx(); win.__marbleClearItems();
-  win.__marbleSetCrown(1);                        // NUMS[1] = 0
+  win.__marblePinCrown(1);                        // NUMS[1] = 0
   ok(M().NUMS[1] === 0, '（前置）1 号格底表数字是 0');
   press(); setCharge(0.5); release();
   const lv2 = M().lives;
@@ -1755,7 +1793,7 @@ section('26) ★ 金冠：默认在 8 号筒 · 每局 20% 移到别的筒 · �
   for (let seed = 1; seed <= 200 && !sealedCase; seed++) {
     reset(seed);
     win.__marbleClearFx(); win.__marbleClearItems();
-    win.__marbleSetCrown(3);
+    win.__marblePinCrown(3);
     win.__marbleEat('STONE');
     if (M().fx.sealed[3]) sealedCase = seed;
   }
@@ -1763,7 +1801,7 @@ section('26) ★ 金冠：默认在 8 号筒 · 每局 20% 移到别的筒 · �
   if (sealedCase !== null) {
     reset(sealedCase);
     win.__marbleClearFx(); win.__marbleClearItems();
-    win.__marbleSetCrown(3);
+    win.__marblePinCrown(3);
     win.__marbleEat('STONE');
     ok(M().fx.sealed[3], '（前置）3 号格（金冠）已被水泥封住');
     press(); setCharge(0.5); release();
@@ -1776,7 +1814,7 @@ section('26) ★ 金冠：默认在 8 号筒 · 每局 20% 移到别的筒 · �
   // ---- 靠金冠续命：生命只剩 1 时落金冠 → 不会立刻结束 ----
   reset(1);
   win.__marbleClearFx(); win.__marbleClearItems();
-  win.__marbleSetCrown(4);
+  win.__marblePinCrown(4);
   for(let k = 0; k < 9; k++){ press(); setCharge(0.5); release(); land(0); }   // 生命掉到 1
   ok(M().lives === 1, '（前置）生命只剩 1（' + M().lives + '）');
   press(); setCharge(0.5); release();             // 生命 1 → 0（发射扣掉）
@@ -1786,7 +1824,7 @@ section('26) ★ 金冠：默认在 8 号筒 · 每局 20% 移到别的筒 · �
 
   // ---- 几何：金冠移动不影响 L/R 分界与错位「中间不动」 ----
   reset(1);
-  win.__marbleSetCrown(0);
+  win.__marblePinCrown(0);
   ok(M().WIN_I === 4, '★ WIN_I（几何中心）不跟着金冠跑（仍是 ' + M().WIN_I + '）');
   win.__marbleClearFx();
   win.__marbleEat('L');
@@ -1799,8 +1837,8 @@ section('26) ★ 金冠：默认在 8 号筒 · 每局 20% 移到别的筒 · �
   // ---- 绘制：金冠在任意筒（含 0 分筒）都不报错 ----
   let dOk = true, dErr = '';
   try{
-    for(const c of [0, 1, 4, 8]){ reset(1); win.__marbleSetCrown(c); run(1); win.__marbleDraw(); }
-    reset(1); win.__marbleSetCrown(4); run(1); land(4); win.__marbleDraw();   // 砸中金冠（闪光）
+    for(const c of [0, 1, 4, 8]){ reset(1); win.__marblePinCrown(c); run(1); win.__marbleDraw(); }
+    reset(1); win.__marblePinCrown(4); run(1); land(4); win.__marbleDraw();   // 砸中金冠（闪光）
   }catch(e){ dOk = false; dErr = e.message; }
   ok(dOk, '★ 金冠在 0/1/4/8 号格 + 被砸中的闪光，绘制都不报错', dErr);
 }
@@ -1961,7 +1999,7 @@ section('29) ★ 分数倍率：桶上是几就得「几 × ' + 100 + '」分');
   // 每个桶都得「桶面数字 × 倍率」
   for (const i of [0, 2, 4, 8]) {
     reset(81); win.__marbleClearFx(); win.__marbleClearItems();
-    win.__marbleSetCrown(0);                    // 挪开金冠，隔离出「纯得分」
+    win.__marblePinCrown(0);                    // 挪开金冠，隔离出「纯得分」
     const rv = win.__marbleLand(i);
     const want = M().NUMS[i] * SM;
     ok(M().score === want,
@@ -1972,25 +2010,25 @@ section('29) ★ 分数倍率：桶上是几就得「几 × ' + 100 + '」分');
 
   // 头奖 8 → 800；被 L 加倍后 16 → 1600
   reset(81); win.__marbleClearFx(); win.__marbleClearItems();
-  win.__marbleSetCrown(0);
+  win.__marblePinCrown(0);
   win.__marbleEat('L');
   const rL = win.__marbleLand(2);               // 底表 2 → L 加倍后 4
   ok(rL.n === 4 && M().score === 4 * SM, '★ 被 L 加成 4 的桶 → ' + M().score + ' 分');
   reset(81); win.__marbleClearFx(); win.__marbleClearItems();
-  win.__marbleSetCrown(0);
+  win.__marblePinCrown(0);
   win.__marbleLand(4);
   ok(M().score === 800, '★ 头奖 8 分 → 800（个位数看着寒酸的问题解决）');
 
   // 负分也乘倍率
   reset(81); win.__marbleClearFx(); win.__marbleClearItems();
-  win.__marbleSetCrown(0);
+  win.__marblePinCrown(0);
   win.__marbleEat('R');
   win.__marbleLand(0);                          // 底表 1 → R 后 -1
   ok(M().score === -1 * SM, '★ 负分桶也乘倍率（' + M().score + '）');
 
   // 倍率只影响「得分」，不影响生命
   reset(81); win.__marbleClearFx(); win.__marbleClearItems();
-  win.__marbleSetCrown(0);
+  win.__marblePinCrown(0);
   const lv0 = M().lives;
   press(); setCharge(0.5); release();
   land(4);
@@ -1998,7 +2036,7 @@ section('29) ★ 分数倍率：桶上是几就得「几 × ' + 100 + '」分');
 
   // 金冠筒：得分 ×倍率 + 1命
   reset(81); win.__marbleClearFx(); win.__marbleClearItems();
-  win.__marbleSetCrown(4);
+  win.__marblePinCrown(4);
   const lv1 = M().lives;
   win.__marbleLand(4);
   ok(M().score === 8 * SM && M().lives === lv1 + 1,
@@ -2010,7 +2048,7 @@ section('30) ★ 金冠每局重掷 · 启动用随机种子（修「从没见�
 {
   reset(1);
   const s0 = M();
-  ok(s0.CROWN_MOVE_CHANCE === 0.4, '★ 移动几率已提到 40%（' + s0.CROWN_MOVE_CHANCE + '）');
+  ok(s0.CROWN_MOVE_CHANCE === 0.3, '★ 换筒几率 30%（' + s0.CROWN_MOVE_CHANCE + '）');
 
   /* ⚠️ 这条是本次的真 bug 回归测试：
    *   启动代码原本是 reset(1)（固定种子），导致**每次刷新页面都是同一局** ——
@@ -2023,22 +2061,109 @@ section('30) ★ 金冠每局重掷 · 启动用随机种子（修「从没见�
   for (let i = 0; i < 30; i++) { reset(); seeds.push(M().fieldSeed); crowns.push(M().crownI); }
   ok(new Set(seeds).size === 30, '★ 连续 30 次重开拿到 30 个不同种子（每局都不一样）');
   const movedCnt = crowns.filter(c => c !== 4).length;
-  ok(movedCnt >= 5 && movedCnt <= 22,
-     '★ 30 次重开里金冠挪窝 ' + movedCnt + ' 次（40% 期望 12 次，允许随机波动）');
-  ok(new Set(crowns).size >= 3, '★ 金冠真的落到多个不同筒上（' + new Set(crowns).size + ' 种）');
+  ok(movedCnt >= 3 && movedCnt <= 20,
+     '★ 30 次重开里金冠换筒 ' + movedCnt + ' 次（30% 期望 9 次，允许随机波动）');
+  ok(new Set(crowns).size >= 2, '★ 金冠真的落到多个不同筒上（' + new Set(crowns).size + ' 种）');
 
-  // 稳定性：移动率在 2000 局里应当接近 40%
+  // 稳定性：换筒率在 3000 局里应当接近 30%
   let moved = 0;
-  const N = 2000;
+  const N = 3000;
   for (let k = 1; k <= N; k++) { reset(k * 7919); if (M().crownI !== 4) moved++; }
   const rate = moved / N;
-  ok(rate > 0.35 && rate < 0.45, '★ 2000 局实测移动率 ' + (rate * 100).toFixed(1) + '%（目标 40%）');
+  ok(rate > 0.25 && rate < 0.35, '★ ' + N + ' 局实测换筒率 ' + (rate * 100).toFixed(1) + '%（目标 30%）');
 
   // 固定种子仍然可用（需要复现某一局时）
   reset(12345);
   const a = M().crownI;
   reset(12345);
   ok(M().crownI === a, '★ 显式传种子仍可复现同一局（crownI=' + a + '）');
+}
+
+/* ===== 31) ★ 方向键尺寸（竖屏手机按着别扭/容易按错）===== */
+section('31) ★ 炮口方向键：竖屏手机上够大、两键之间够开（用户反馈）');
+{
+  /* ⚠️ 这几条是**源码级**断言，不是像素测量 —— 本测试跑在假 DOM 里，
+   *   CSS 完全不生效（clientWidth 都是写死的）。真正的尺寸由
+   *   tools/test_marble_ui.js（真 Chrome 无头测量）负责，两者互补：
+   *   这里守住「别把关键样式删掉/改小」，那边守住「真机上确实够大」。 */
+  const css = RAW_HTML.match(/<style>([\s\S]*?)<\/style>/)[1];
+  const rule = sel => {
+    const m = new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\{([^}]*)\\}').exec(css);
+    return m ? m[1] : '';
+  };
+  const px = (txt, prop) => {
+    const m = new RegExp(prop + '\\s*:\\s*([\\d.]+)px').exec(txt);
+    return m ? parseFloat(m[1]) : NaN;
+  };
+
+  const aim = rule('.ctl .aim');
+  const fire = rule('.ctl .fire');
+  const ctl = rule('.ctl');
+
+  /* ★ 布局是**两行**（用户选定）：发射键铺满第一行、◀▶ 平分第二行。
+   *   所以方向键不再写死宽度，而是 flex:1 1 0 平分整行 → 实际宽度 152~198px，
+   *   比一行版的 76px 宽得多。这里守「平分 + 高度 + 字号」这几条关键样式。 */
+  ok(/flex\s*:\s*1\s+1\s+0/.test(aim),
+     '★ 方向键用 flex:1 1 0 平分整行（不再写死宽度 → 比一行版宽得多）');
+  ok(/min-width\s*:\s*0/.test(aim), '★ 方向键设了 min-width:0（flex 子项才肯收缩、不溢出）');
+  const aimH = px(aim, 'height');
+  ok(aimH >= 60, '★ 方向键高度 ≥ 60px（实际 ' + aimH + 'px；原来一行版是 58px）');
+  const aimFont = px(aim, 'font-size');
+  ok(aimFont >= 28, '★ 箭头字号 ≥ 28px（实际 ' + aimFont + 'px；原来是 20px）');
+
+  /* ★ 两行布局的关键：发射键必须占满一整行（flex-basis:100%），
+   *   否则会塌成一行、失去「边蓄力边转向」的前提。 */
+  ok(/flex\s*:\s*1\s+1\s+100%/.test(fire),
+     '★ 发射键占满一整行（flex:1 1 100%）→ 与方向键分成两行');
+  ok(/flex-wrap\s*:\s*wrap/.test(ctl), '★ 控件条允许换行（flex-wrap:wrap）→ 两行布局成立');
+  const fireH = px(fire, 'height');
+  ok(fireH >= 46, '★ 发射键高度 ≥ 46px（实际 ' + fireH + 'px）');
+
+  // 触摸目标下限（Apple HIG / Material 都推荐 ≥44px）
+  ok(aimH >= 44 && fireH >= 44, '★ 达到 44px 最小触摸目标（方向键高 ' + aimH + ' / 发射键高 ' + fireH + '）');
+
+  // 窄屏兜底：320px 级手机也不能挤爆
+  const mq = /@media\s*\(max-width:\s*330px\)\s*\{([\s\S]*?)\n\s*\}/.exec(css);
+  ok(!!mq, '★ 有极窄屏（≤330px）的适配块');
+  if (mq) {
+    /* ⚠️ 必须在媒体块**内部**按选择器取规则：直接对整块找第一个 height
+     *   会拿到 .ctl .fire 的高度（那是另一个按钮），断言就测错对象了。 */
+    const innerAim = new RegExp('\\.ctl\\s+\\.aim\\s*\\{([^}]*)\\}').exec(mq[1]);
+    const narrowAimH = innerAim ? px(innerAim[1], 'height') : NaN;
+    ok(narrowAimH >= 56, '★ 窄屏方向键高度仍有 ' + narrowAimH + 'px（不会缩到按不着）');
+  }
+  /* ★ 矮屏（≤600px 高）也要有压缩档：两行本身多占约 60px，
+     矮屏上不压一档的话画布会掉到 67% 以下。 */
+  const mqh = /@media\s*\(max-height:\s*600px\)\s*\{([\s\S]*?)\n\s*\}/.exec(css);
+  ok(!!mqh, '★ 有矮屏（≤600px 高）的压缩档');
+  if (mqh) {
+    const innerFire = new RegExp('\\.ctl\\s+\\.fire\\s*\\{([^}]*)\\}').exec(mqh[1]);
+    const shortFire = innerFire ? px(innerFire[1], 'height') : NaN;
+    ok(shortFire >= 44 && shortFire < fireH,
+       '★ 矮屏把发射键压到 ' + shortFire + 'px（< 正常 ' + fireH + 'px，把高度还给场地）');
+  }
+
+  // 发射键文字要能自适应（窄屏不换行顶破按钮）
+  ok(/font-size\s*:\s*clamp\(/.test(fire),
+     '★ 发射键文字用 clamp() 随屏宽缩放（窄屏不换行）');
+  ok(/min-width\s*:\s*0/.test(fire), '★ 发射键设了 min-width:0（flex 子项才肯收缩、不溢出）');
+
+  /* ★ DOM 顺序 = 视觉顺序（发射在上、◀▶ 在下），不靠 CSS order ——
+   *   这样键盘 Tab / 读屏的焦点顺序也是对的。 */
+  const ctlHtml = /<div class="ctl" id="ctlbar">([\s\S]*?)<\/div>/.exec(RAW_HTML);
+  ok(!!ctlHtml, '（前置）取到控制条的 HTML');
+  if (ctlHtml) {
+    const seq = (ctlHtml[1].match(/id="(btn[A-Za-z]+)"/g) || []).map(s => s.slice(4, -1));
+    ok(seq[0] === 'btnFire' && seq[1] === 'btnLeft' && seq[2] === 'btnRight',
+       '★ HTML 顺序就是视觉顺序（' + seq.join(' → ') + '）');
+  }
+  /* ★ 不该再用 CSS order 硬调顺序（DOM 顺序已经对了）。
+   *   ⚠️ 只扫 .ctl 相关的规则块 —— 直接全文找 `order:` 会误伤别处
+   *   （本文件里 #toast 等规则也含 order 字样，上一版就是这么误报的）。 */
+  const ctlRules = css.match(/\.[^{}]*\bctl\b[^{}]*\{[^}]*\}/g) || [];
+  const orderHits = ctlRules.filter(t => /(^|[;{\s])order\s*:/.test(t));
+  ok(orderHits.length === 0,
+     '★ 没有用 CSS order 硬调顺序（DOM 顺序已经对了）', orderHits.join(' | '));
 }
 
 /* ================= 汇总 ================= */

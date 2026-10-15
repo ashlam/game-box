@@ -29,15 +29,48 @@
                background:var(--card);color:var(--txt);font-family:inherit;line-height:1;white-space:nowrap}
   .top button:active{background:var(--acc);border-color:var(--acc);color:#fff}
 
-  /* ★ 方向控制与发射键物理分离：左边 ◀▶ 只管调角度，右边大键只管蓄力/发射。
-     这样「调方向」永远不会占用「发射时机」——手指在左边转炮口时，右边的大键照样随时能按。 */
-  .ctl{width:100%;max-width:420px;flex:0 0 auto;display:flex;gap:8px;margin-top:8px;height:58px}
-  .ctl .aim{width:54px;flex:0 0 auto;font-size:20px;line-height:1;border-radius:13px;
-            border:1px solid var(--line);background:var(--card);color:var(--txt);font-family:inherit;touch-action:none}
-  .ctl .aim:active{background:var(--acc);border-color:var(--acc);color:#fff}
-  .ctl .fire{flex:1;font-size:15px;font-weight:600;border-radius:13px;border:1px solid #e0b34c;
-             background:#d24534;color:#fff;font-family:inherit;letter-spacing:2px;touch-action:none}
+  /* ★ 方向控制与发射键物理分离：方向键只管调角度，发射键只管蓄力/发射。
+     这样「调方向」永远不会占用「发射时机」——按住发射蓄力时，另一只手照样能点方向微调。
+
+     ★ 布局演进（用户逐轮反馈）：
+       ① 原来 54×58px 且 ◀▶ 只隔 8px → 竖屏手机上太小、容易按进缝里按错；
+       ② 放大到 76×72 并拉开方向键间距（但仍是「◀▶ 挤在左、发射占满右」一行）；
+       ③ 用户选定**两行布局**：发射键铺满上面一行、◀▶ 平分下面一行。
+          好处是方向键能做得更大（不再受发射键挤压）、位置居中、拇指落点自然；
+          代价是多占约 60px 竖向高度，所以下面用 flex 让画布自己让出空间。
+
+     ★ 为什么两行仍然能「边蓄力边转向」：发射键与方向键在不同行、且都够大，
+       右拇指按住发射键的同时，左拇指可以点/滑下面的方向键（多点触控，互不干扰）。 */
+  .ctl{width:100%;max-width:420px;flex:0 0 auto;display:flex;flex-wrap:wrap;
+       gap:10px;margin-top:8px;height:auto}
+  /* 发射键：铺满第一行。
+     min-width:0 必须留着 —— 它是 flex 子项，默认 min-width:auto 会拒绝收缩到
+     内容宽度以下，窄屏上就会把控件条顶溢出。 */
+  .ctl .fire{flex:1 1 100%;min-width:0;height:58px;
+             font-size:clamp(13px,3.8vw,16px);font-weight:600;border-radius:15px;
+             border:1px solid #e0b34c;background:#d24534;color:#fff;font-family:inherit;
+             letter-spacing:clamp(0px,0.45vw,2px);touch-action:none;padding:0 4px}
   .ctl .fire:active{filter:brightness(.9)}
+  /* 方向键：平分第二行（不再固定宽度，随屏宽自适应 → 比一行版更大更好按） */
+  .ctl .aim{flex:1 1 0;min-width:0;height:66px;font-size:32px;line-height:1;
+            border-radius:15px;border:1px solid var(--line);background:var(--card);
+            color:var(--txt);font-family:inherit;touch-action:none;padding:0}
+  .ctl .aim + .aim{margin-left:0}          /* 两行布局下由 gap 控制间距，去掉一行版的额外左边距 */
+  .ctl .aim:active{background:var(--acc);border-color:var(--acc);color:#fff}
+  /* 极窄屏（<330px）再收一档 */
+  @media (max-width:330px){
+    .ctl{gap:8px}
+    .ctl .fire{height:52px;border-radius:13px}
+    .ctl .aim{height:60px;font-size:28px;border-radius:13px}
+  }
+  /* ★ 矮屏（如 iPhone SE 320×568）：两行布局本身要多占约 60px，
+     矮屏上再叠加就显得挤，所以把两行都压薄一点，把高度还给场地。
+     只在「确实矮」时生效（640px 的常见 Android 不受影响）。 */
+  @media (max-height:600px){
+    .ctl{gap:7px;margin-top:6px}
+    .ctl .fire{height:46px;font-size:clamp(12px,3.6vw,14px)}
+    .ctl .aim{height:52px;font-size:26px}
+  }
 
   #stage{width:100%;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;touch-action:none}
   /* ★ 嵌在很矮的容器里（预览面板的小 iframe）时放开滚动：否则画布被压成一条缝，
@@ -91,9 +124,11 @@
 <div id="stage"><canvas id="cv"></canvas></div>
 
 <div class="ctl" id="ctlbar">
+  <!-- ★ DOM 顺序 = 视觉顺序（两行布局：发射在上、◀▶ 在下），
+       这样不依赖 CSS order —— 键盘 Tab / 读屏的焦点顺序也是对的 -->
+  <button id="btnFire" class="fire">按住蓄力 · 松手发射</button>
   <button id="btnLeft" class="aim" aria-label="炮口左转">◀</button>
   <button id="btnRight" class="aim" aria-label="炮口右转">▶</button>
-  <button id="btnFire" class="fire">按住蓄力 · 松手发射</button>
 </div>
 
 <div id="toast"></div>
@@ -190,10 +225,11 @@
    *   「中间不动」都靠它 —— 这两处必须永远是 4，不能跟着金冠跑。
    *   金冠位置是**另一个**变量 crownI（见下），两者以前是同一个常量，现已拆开。 */
   const WIN_I = 4;                                         // 几何中心格（固定）
-  /* ★ 金冠（用户要求）：默认在 8 号筒，每局有 40% 几率移到别的筒上；
+  /* ★ 金冠（用户要求）：**每个回合（每次发球）开始时重掷一次**，保证场上恒有且仅有 1 个金冠。
+   *   30% 落到别的筒，其余 70% 回到 8 号筒（等价于 `if r <= 30 then 别的筒 else 8 号筒`）。
    *   小球落进金冠筒 = 正常得分 + 额外 1up（加一条命）。 */
   const CROWN_DEF_I = 4;                                   // 默认：8 号筒（中间）
-  const CROWN_MOVE_CHANCE = 0.4;                           // 每局移动的几率（用户从 20% 提到 40%）
+  const CROWN_MOVE_CHANCE = 0.3;                           // ★ 每回合重掷时「换到别的筒」的几率
 
   /* ---------- 手感 / 物理常数 ---------- */
   const MINV = 150, MAXV = 660;     // 蓄力 0%/100% 的出膛速度（线性）
@@ -316,7 +352,8 @@
   let flyers = [];                 // ★ 在飞的小球（可多个：分裂 / UP 道具）
   let pegs = [];
   let pegMix = [0, 1, 0, 0];       // 本局 4 档撞针的权重（reset 时随机 roll）
-  let crownI = CROWN_DEF_I;        // ★ 本局金冠所在的筒（默认 4 = 8 号筒，每局 20% 移到别处）
+  let crownI = CROWN_DEF_I;        // ★ 本回合金冠所在的筒（每回合重掷；默认 4 = 8 号筒）
+  let crownPin = -1;               // ≥0 时锁定金冠位置（测试用：否则每回合都会被重掷覆盖）
   let pegTilt = PEG_TILT_DEF;      // 纵深偏置（可用 __marblePegMix 调，做实验用）
   let itemSeq = 0;                 // 道具自增 id（测试要认「同一个道具」有没有被清掉）
 
@@ -361,9 +398,9 @@
     clearTimeout(overTimer); overTimer = null;
     $('over').classList.remove('on');
     pegMix = rollPegMix();
-    crownI = rollCrown();
+    crownPin = -1;                       // 换新局：解除金冠锁定（正常重掷）；测试若要锁定需在 reset 之后再 pin
     genPegs();
-    newRound(true);                      // 清效果 + 复钉
+    newRound(true);                      // 清效果 + 复钉 + ★掷金冠位置（尊重 crownPin）
     /* ★ 道具刷新规则 1：每局开局 80% 概率刷 1~2 个随机道具 */
     itemsOn = rng() < ITEM_RUN_CHANCE;
     if(itemsOn) spawnItems(randInt(1, 2));
@@ -371,10 +408,12 @@
   }
   let rng = mulberry32(1);
 
-  /** ★ 本局金冠位置：默认 8 号筒（CROWN_DEF_I）；40% 几率移到**别的**筒上。
+  /** ★ 本回合金冠位置：70% 在默认的 8 号筒（CROWN_DEF_I），30% 落到**别的**筒。
    *   移动时从「除默认筒以外」的 8 个筒里等概率挑一个 —— 不会出现「移到原地」
-   *   那种白白消耗掉概率的情况（观感上也就真的「有 40% 会看到它挪窝」）。 */
+   *   那种白白消耗掉 30% 几率的情况（观感上也就真的「有 30% 会看到它换筒」）。
+   *   ⚠️ 每个回合都会调用一次（见 newRound），所以场上**恒有且仅有 1 个**金冠。 */
   function rollCrown(){
+    if(crownPin >= 0) return crownPin;          // 测试锁定位置时直接返回（不吃 rng，保持可复现）
     if(rng() >= CROWN_MOVE_CHANCE) return CROWN_DEF_I;
     const others = [];
     for(let i = 0; i < NUMS.length; i++) if(i !== CROWN_DEF_I) others.push(i);
@@ -522,8 +561,18 @@
   /** 回合复位：入口效果、石化复位；
    *  ★ 道具不再清空 —— 寿命 -1，掉到 0 才消失（只有换新局才全清）
    *  ★ 撞针也一样：被炸掉 / 被冻住保持 PEG_LIFE 回合，寿命 -1 掉到 0 才复原
-   *  ★ 入口变化也一样：保持 ENTRANCE_LIFE 回合，寿命 -1 掉到 0 才恢复底表 */
+   *  ★ 入口变化也一样：保持 ENTRANCE_LIFE 回合，寿命 -1 掉到 0 才恢复底表
+   *  ★ 金冠：**每个回合（每次发球）都重掷一次位置**（用户要求），保证恒有且仅有 1 个
+   */
   function newRound(fresh){
+    /* ★ 金冠重掷：放在回合复位里 → 换新局（reset → newRound(true)）与
+     *   每次回合结束（endRound → newRound(false)）都会掷一次，
+     *   也就是「玩家每次能发球之前，金冠位置都是刚掷出来的」。
+     *   ⚠️ 只在**位置真的变了**时提示：每回合都弹一次 toast 会一直盖住画面，
+     *   而 70% 的情况是原地不动（回 8 号筒），没必要每次都喊。 */
+    const prevCrown = crownI;
+    crownI = rollCrown();
+    if(!fresh && crownI !== prevCrown) toast(crownText(), 1200);
     if(fresh){
       fx = clearFx();                              // 换新局：入口整体重置
     }else if(fx.life > 0 && --fx.life <= 0){
@@ -1949,7 +1998,7 @@
     ctx.fillStyle = '#c23b2c'; ctx.font = '800 24px ' + UI;
     ctx.fillText('弹珠乐园', cx, cy - 38);
     ctx.fillStyle = '#5a4231'; ctx.font = '700 12.5px ' + UI;
-    ctx.fillText('◀ ▶ 调炮口角度（左键）', cx, cy - 16);
+    ctx.fillText('◀ ▶ 调炮口角度（下面两个键）', cx, cy - 16);
     ctx.fillStyle = '#5a4231'; ctx.font = '700 12.5px ' + UI;
     ctx.fillText('按住红色大键蓄力 · 松手发射', cx, cy + 2);
     ctx.fillStyle = '#8a6f52'; ctx.font = '11.5px ' + UI;
@@ -1959,7 +2008,7 @@
     ctx.fillStyle = '#7a4b00'; ctx.font = '700 11.5px ' + UI;
     ctx.fillText('落进戴金冠的筒 → 额外 +1 命', cx, cy + 58);
     ctx.fillStyle = '#8a6f52'; ctx.font = '11px ' + UI;
-    ctx.fillText('金冠默认在 8 号筒，每局 ' + Math.round(CROWN_MOVE_CHANCE * 100) + '% 会挪窝', cx, cy + 74);
+    ctx.fillText('金冠每回合重掷：' + Math.round(CROWN_MOVE_CHANCE * 100) + '% 换到别的筒', cx, cy + 74);
     ctx.fillStyle = '#7a4b00'; ctx.font = '700 11.5px ' + UI;
     ctx.fillText('球撞彩色圆牌 = 吃道具；up 牌补命', cx, cy + 94);
     ctx.fillStyle = '#8a6f52'; ctx.font = '11px ' + UI;
@@ -2154,7 +2203,8 @@
       '撞针状态: 碎' + pegs.filter(p => p.dead).length + ' 冻' + pegs.filter(p => p.frozen).length +
         ' / 共' + pegs.length + ' 颗  寿命=' + PEG_LIFE + '回合',
       '金冠: ' + crownText() + '  默认筒=' + NUMS[CROWN_DEF_I] + '号(' + CROWN_DEF_I + ')' +
-        '  移动几率=' + (CROWN_MOVE_CHANCE * 100) + '%',
+        '  每回合重掷 · 换筒几率=' + (CROWN_MOVE_CHANCE * 100) + '%' +
+        (crownPin >= 0 ? '  ⚠已锁定在 ' + crownPin : ''),
       '上一球: 出膛=' + lastSpeed.toFixed(0) + ' 力量=' + (lastSpeed > 0 ? Math.round((lastSpeed - MINV) / (MAXV - MINV) * 100) + '%' : '—') +
         '  撞钉=' + pegHits + '  在飞=' + (flyers.length ? flyers.length + '球 ' +
           Math.round(Math.max.apply(null, flyers.map(b2 => b2.flightT)) * 100) / 100 + 's' : '否') +
@@ -2197,10 +2247,13 @@
   $('btnDiag').addEventListener('click', e => { e.stopPropagation(); copyText(showDbg()); });
   $('dbg').addEventListener('click', e => { e.stopPropagation(); copyText(showDbg()); });
 
-  function toast(msg){
+  /** 顶部浮动提示。ms 可选 —— 回合中报金冠位置时用短一点，
+   *   免得每次都盖住画面（新局那次用默认的 1700ms）。 */
+  function toast(msg, ms){
     const t = $('toast');
     t.textContent = msg; t.classList.add('on');
-    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 1700);
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.classList.remove('on'), ms || 1700);
   }
 
   /* ---------- 启动 ---------- */
@@ -2236,7 +2289,7 @@
     lastSpeed, charge, charging, hintOn, soundOn, HINT_H,
     NUMS: NUMS.slice(), START_BALLS, START_LIVES, SCORE_MULT, MINV, MAXV, CHARGE_T,
     WALL_PEG_GAP,
-    WIN_I, crownI, CROWN_DEF_I, CROWN_MOVE_CHANCE, crownFlash,
+    WIN_I, crownI, crownPin, CROWN_DEF_I, CROWN_MOVE_CHANCE, crownFlash,
     G, RB, RP, REST_PEG, REST_WALL, FLIGHT_CAP,
     W, H, fieldL, fieldR, fieldT, mouthY, floorY, slotW, cannonX: CANNON_X,
     pegCount: pegs.length, fieldSeed,
@@ -2307,7 +2360,23 @@
   window.__marbleExplode = (x, y, r, kill) => explode(x, y, r === undefined ? MINE_R : r, !!kill);
   window.__marbleChainMax = () => CHAIN_MAX;
   window.__marbleCrownText = () => crownText();
-  window.__marbleSetCrown = i => { crownI = clamp(i | 0, 0, NUMS.length - 1); return crownI; };
+  /* 锁定/解锁金冠位置（测试用）。
+   * ⚠️ 金冠现在**每回合都会重掷**，所以单次设置会被下一回合覆盖掉 ——
+   *   要让「金冠一定在某个筒」持续生效，必须用 pin。
+   *   ⚠️ 而且必须**同时**设置 crownI：pin 只管「以后的回合」，
+   *   当前这一回合的 crownI 是 reset 时已经掷好的，不同步就会「pin 了但当场不生效」。
+   *   pin(-1) 解锁，恢复正常重掷（crownI 保持当前值不动）。 */
+  window.__marblePinCrown = i => {
+    if(i === undefined || i === null || i < 0){ crownPin = -1; return crownPin; }
+    crownPin = i | 0;
+    crownI = clamp(crownPin, 0, NUMS.length - 1);
+    return crownPin;
+  };
+  window.__marbleSetCrown = i => {
+    crownI = clamp(i | 0, 0, NUMS.length - 1);
+    crownPin = crownI;                          // 顺手锁住，避免被随后的回合复位覆盖
+    return crownI;
+  };
   /* 把某颗钉挪到指定坐标（测试「墙边钉挤住球」的反证场景用） */
   window.__marbleSetPegPos = (idx, x, y) => {
     const p = pegs[idx]; if(!p) return null;
