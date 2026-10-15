@@ -5,9 +5,13 @@
  * 用法：node test_othello.js
  */
 const fs = require('fs');
+const path = require('path');
 const vm = require('vm');
 
-const HTML = '/volume1/docker/hermes/files/bot_workspace/projects/games-box/web/othello/index.html';
+/* ★ 路径必须相对本文件解析：这里原来写的是迁移前的绝对路径
+   （/volume1/docker/hermes/.../games-box/web/othello/index.html），
+   迁移到新目录后就一直 ENOENT —— 测试从来没真正跑起来过。 */
+const HTML = path.join(__dirname, '..', 'web', 'othello', 'index.html');
 const script = fs.readFileSync(HTML, 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
 
 /* ---------------- DOM 桩 ---------------- */
