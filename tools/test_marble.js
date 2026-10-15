@@ -635,7 +635,8 @@ section('13) ★ 地雷（炸死球+炸钉）· 火力球（撞钉引爆）· �
   win.__marbleEat('MINE');
   ok(M().state === 'ready' && M().flyers.length === 0, '★ 触碰的球被炸死，场上无球 → 该回合结束');
   ok(M().balls === 5, '★ 被地雷炸死 = 白打一颗（弹珠 5 → ' + M().balls + '）');
-  ok(M().pegs.every(p => !p.dead), '★ 它是场上唯一的球 → 回合立即结束 → 钉随回合结束复原');
+  ok(M().pegs.filter(p => p.dead).length > 0,
+     '★ 它是场上唯一的球 → 回合立即结束，但被炸掉的钉仍保持碎（寿命机制）');
 
   // 地雷会连累其它球
   reset(13);
@@ -664,18 +665,19 @@ section('13) ★ 地雷（炸死球+炸钉）· 火力球（撞钉引爆）· �
   run(20);
   const froz = M().pegs.filter(p => p.frozen).length;
   ok(froz > 0, '★ 前进途中把路径上的钉冻住（' + froz + ' 颗）');
-  // ★ 取「过程中的峰值」：球一旦落桶回合就结束、钉会复原，只看最后一帧会误判
+  // ★ 取「过程中的峰值」：球一旦落桶回合就结束，钉不再复原（但状态是持续的，直接看即可）
   let shattered = 0;
   for (let f = 0; f < 40 && M().flyers.length; f++) { perfNow += 16; step(DT);
     shattered = Math.max(shattered, M().pegs.filter(p => p.dead).length); }
   ok(shattered > 0, '★ 撞到冰冻的钉 → 碎裂消失（' + shattered + ' 颗）');
 
-  // 回合结束：钉全部复原
+  // ★ 回合结束：钉的状态不再复原，而是寿命 -1（保持 PEG_LIFE 回合）
   reset(13);
   win.__marbleExplode(M().pegs[12].x, M().pegs[12].y, 48, false);
   ok(M().pegs.some(p => p.dead), '（前置）爆炸确实炸掉了钉');
   win.__marbleLand(4);
-  ok(M().pegs.every(p => !p.dead && !p.frozen), '★ 回合结束，被炸/被冻的钉全部复原');
+  ok(M().pegs.some(p => p.dead), '★ 回合结束，被炸掉的钉仍保持碎（不再立刻复原）');
+  ok(M().pegs.every(p => !p.frozen), '（前置）本回合没有被冻的钉');
 }
 
 /* ================= 14) 刷新时机 / 小丑礼盒 / 回合末清除 ================= */
@@ -784,8 +786,104 @@ section('14) ★ 刷新时机：局初 80% · 每回合 80% · 回合中出礼�
   ok(peak <= MAXN, '★ 连打 20 回合，场上道具不超上限（峰值 ' + peak + ' ≤ ' + MAXN + '）');
 }
 
-/* ================= 15) 压力：道具全程开启 ================= */
-section('15) 压力：每回合都塞道具，连打不卡死 / 数值不坏');
+/* ========== 15) ★ 撞针状态的寿命：被炸掉 / 被冻住保持 PEG_LIFE 回合 ========== */
+section('15) ★ 撞针状态寿命：被炸掉/被冻住不再回合结束即复原，保持 3 回合');
+{
+  /* 用户原话：地雷/火力球/冰封球导致的「撞钉消失或状态改变」不在本回合结束后重置，
+   *           而是保持 3 回合，3 回合后撞针恢复。 */
+  reset(31);
+  const PL = M().PEG_LIFE;
+  ok(PL === 3, '★ 撞针状态寿命常数 PEG_LIFE=3（' + PL + '）');
+
+  // ---- 被炸掉：寿命从 PEG_LIFE 开始，每回合 -1，掉到 0 才复原 ----
+  win.__marbleSetPeg(12, 'dead');
+  let p = M().pegs[12];
+  ok(p.dead && p.life === PL, '★ 炸掉一颗钉 → 状态=碎、寿命=' + PL + '（实际 ' + p.life + '）');
+  ok(p.last === false, '（前置）刚炸掉时不闪烁（还剩 ' + PL + ' 回合）');
+
+  const seen = [];
+  for(let k = 0; k < 4; k++){
+    win.__marbleLand(4);                          // 直接落头奖，弹珠耗不光
+    const q = M().pegs[12];
+    seen.push(q.dead ? q.life : 0);
+  }
+  ok(seen[0] === PL - 1 && seen[1] === PL - 2 && seen[2] === 0,
+     '★ 每回合结束寿命 -1，第 ' + PL + ' 回合后复原（' + PL + ' → ' + seen.slice(0, 3).join(' → ') + '）');
+  ok(seen[3] === 0 && !M().pegs[12].dead, '★ 复原后不会「复活」成碎（第 4 回合仍是好的）');
+
+  // ---- 被冻住：同一套寿命规则 ----
+  reset(31);
+  win.__marbleSetPeg(20, 'frozen');
+  let q = M().pegs[20];
+  ok(q.frozen && q.life === PL, '★ 冻住一颗钉 → 状态=冻、寿命=' + PL + '（实际 ' + q.life + '）');
+  win.__marbleLand(4);
+  q = M().pegs[20];
+  ok(q.frozen && q.life === PL - 1, '★ 冻住的钉回合结束仍在（寿命 ' + q.life + '）');
+  win.__marbleLand(4);
+  q = M().pegs[20];
+  ok(q.frozen && q.life === 1, '★ 第 ' + (PL - 1) + ' 回合：冻住且只剩 1 回合寿命（会闪烁）');
+  ok(q.last === true, '★ 最后一回合 last=true（画面外圈闪红提醒）');
+  win.__marbleLand(4);
+  ok(!M().pegs[20].frozen && M().pegs[20].life === 0, '★ 第 ' + PL + ' 回合后解冻复原');
+
+  // ---- 闪红提醒只发生在最后一回合 ----
+  ok(win.__marblePegStateLast(3) === false && win.__marblePegStateLast(2) === false,
+     '★ 寿命 3/2 时不闪（不是最后一回合）');
+  ok(win.__marblePegStateLast(1) === true, '★ 寿命 1 时才闪');
+
+  // ---- 冻住 → 被撞碎：转成「碎」，寿命重新起算（两种状态互斥，共用一份寿命） ----
+  reset(31);
+  win.__marbleSetPeg(30, 'frozen', 1);
+  ok(M().pegs[30].last === true, '（前置）冻住且只剩 1 回合');
+  win.__marbleSetPeg(30, 'dead');
+  const s = M().pegs[30];
+  ok(s.dead && !s.frozen && s.life === PL, '★ 冻住的钉被撞碎 → 转成「碎」，寿命重新起算 ' + PL);
+
+  // ---- 爆炸不会给已经碎掉的钉「续命」 ----
+  reset(31);
+  win.__marbleSetPeg(40, 'dead', 1);
+  const pos = M().pegs[40];
+  win.__marbleExplode(pos.x, pos.y, 48, false);      // 同一位置再炸一次
+  ok(M().pegs[40].life === 1, '★ 已碎掉的钉不会再被炸到（寿命不被刷新，仍是 1）');
+
+  // ---- 换新局：整场钉状态清空 ----
+  reset(31);
+  win.__marbleSetPeg(12, 'dead');
+  win.__marbleSetPeg(20, 'frozen');
+  ok(M().pegs.some(x => x.dead) && M().pegs.some(x => x.frozen), '（前置）场上有碎钉和冻钉');
+  win.__marbleReset(31);                             // 重开一局
+  ok(M().pegs.every(x => !x.dead && !x.frozen && x.life === 0),
+     '★ 换新局：所有钉状态清空、寿命归 0');
+
+  // ---- 状态是「跨回合持续」的：钉碎了以后这一回合内物理上真的穿过它 ----
+  reset(31);
+  win.__marbleSetPeg(50, 'dead', 2);
+  const dp = M().pegs[50];
+  ok(M().pegs[50].dead, '（前置）第 50 号钉已碎');
+  // 从正上方朝它打，应该直接穿过去（不会被反弹）
+  setBall({ x: dp.x, y: dp.y - 60, vx: 0, vy: 400 });
+  let passed = false;
+  for(let f = 0; f < 30 && M().flyers.length; f++){
+    perfNow += 16; step(DT);
+    const b = M().flyers[0];
+    if(b && b.y > dp.y + 20){ passed = true; break; }
+  }
+  ok(passed, '★ 碎掉的钉不再碰撞 —— 球直接穿过去（跨回合保持有效）');
+
+  // ---- 绘制：碎钉（凹痕）/ 冻钉 / 最后一回合闪红，都不报错 ----
+  reset(31);
+  win.__marbleSetPeg(12, 'dead', 1);
+  win.__marbleSetPeg(20, 'frozen', 1);
+  win.__marbleSetPeg(30, 'dead', 3);
+  win.__marbleSetPeg(40, 'frozen', 3);
+  let drawOk = true, err = '';
+  try{ for(let f = 0; f < 6; f++){ run(1); win.__marbleDraw(); } }
+  catch(e){ drawOk = false; err = e.message; }
+  ok(drawOk, '★ 碎钉/冻钉/最后一回合闪红 绘制不报错', err);
+}
+
+/* ================= 16) 压力：道具全程开启 ================= */
+section('16) 压力：每回合都塞道具，连打不卡死 / 数值不坏');
 {
   reset(21);
   let shots = 0, stuck = 0, bad = 0, maxFly = 0, longest = 0;
@@ -813,7 +911,7 @@ section('15) 压力：每回合都塞道具，连打不卡死 / 数值不坏');
 }
 
 /* ================= 16) 绘制冒烟 ================= */
-section('16) 绘制：各种状态下画图都不报错（含道具/旋转炮口/水泥筒/负分桶）');
+section('17) 绘制：各种状态下画图都不报错（含道具/旋转炮口/水泥筒/负分桶）');
 {
   const tryDraw = label => {
     let r = 'ok';
@@ -840,7 +938,7 @@ section('16) 绘制：各种状态下画图都不报错（含道具/旋转炮口
 }
 
 /* ================= 17) 炮口方向 == 发射方向 ================= */
-section('17) ★ 炮口朝向与发射方向必须一致（曾经画反：往右调角度、炮口却朝左歪）');
+section('18) ★ 炮口朝向与发射方向必须一致（曾经画反：往右调角度、炮口却朝左歪）');
 {
   reset(1);
   const s0 = M();
@@ -881,7 +979,7 @@ section('17) ★ 炮口朝向与发射方向必须一致（曾经画反：往右
 }
 
 /* ================= 18) 撞针弹力分档 ================= */
-section('18) ★ 撞针 4 档弹力：颜色区分 · 每局分布随机 · 超弹把球顶回上方');
+section('19) ★ 撞针 4 档弹力：颜色区分 · 每局分布随机 · 超弹把球顶回上方');
 {
   reset(1);
   const s = M();
@@ -976,7 +1074,7 @@ section('18) ★ 撞针 4 档弹力：颜色区分 · 每局分布随机 · 超�
 }
 
 /* ================= 19) 看门狗 C：垂直弹跳死循环 ================= */
-section('19) ★ 看门狗 C：撞顶会清掉旧计时器，靠「整秒位移」把垂直弹跳救出来');
+section('20) ★ 看门狗 C：撞顶会清掉旧计时器，靠「整秒位移」把垂直弹跳救出来');
 {
   reset(5);
   win.__marblePegMix([0, 0, 1, 0], 0);          // 全是弹钉：最容易「天花板↔钉顶」垂直弹跳
@@ -992,7 +1090,7 @@ section('19) ★ 看门狗 C：撞顶会清掉旧计时器，靠「整秒位移�
 }
 
 /* ================= 20) ★ 容器尺寸兜底（黑屏事故） ================= */
-section('20) ★ 布局兜底：容器尺寸为 0 / 太矮，都不能变成「一片黑只剩按钮」');
+section('21) ★ 布局兜底：容器尺寸为 0 / 太矮，都不能变成「一片黑只剩按钮」');
 {
   const sg = M();
   ok(sg.MIN_STAGE_H === 320, '最小画布高度常数 MIN_STAGE_H=320（' + sg.MIN_STAGE_H + '）');

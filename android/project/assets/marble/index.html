@@ -234,6 +234,11 @@
    *   现在每回合结束 life - 1，掉到 0 才消失；life===1 那一回合会闪烁提醒「这是最后一回合」 */
   const ITEM_LIFE = 3;              // 一个道具最多在场几回合（含刷出来的那一回合）
   const ITEM_MAX = 6;               // 场上同时存在的道具上限（不然会越积越多堵满场）
+  /* ★ 撞针异常状态的寿命（用户改的：被炸掉 / 被冻住不再「回合结束就复原」）
+   *   地雷 / 火力球炸掉的钉、冰封球冻住的钉，都保持 PEG_LIFE 回合；
+   *   每回合结束 life - 1，掉到 0 才复原 —— 跟道具同一套规则、同一个节奏。
+   *   life 只有一份（两种状态互斥）：冻住的钉又被撞碎 = 一次新的状态变化，寿命重新起算。 */
+  const PEG_LIFE = 3;               // 撞针异常状态最多保持几回合（含出事的那一回合）
 
   /* 道具表：txt 是画在道具上的字形（不用 emoji，字体缺失也能画） */
   const ITEMS = {
@@ -387,7 +392,7 @@
         if(!ok) continue;
         /* ★ 撞针弹力档：按本局权重 + 纵深偏置抽取（下方更容易出高弹钉） */
         const depth = (jy - y0) / Math.max(1, y1 - y0);
-        pegs.push({ x: jx, y: jy, i: idx++, k: pickPegKind(depth), dead:false, frozen:false });
+        pegs.push({ x: jx, y: jy, i: idx++, k: pickPegKind(depth), dead:false, frozen:false, life:0 });
       }
     }
   }
@@ -425,11 +430,18 @@
     return L.concat([WIN_I], Rr);
   }
 
-  /** 回合复位：入口效果、石化、被炸/被冻的钉全部复原；
-   *  ★ 场上道具不再清空 —— 寿命 -1，掉到 0 才消失（只有换新局才全清） */
+  /** 回合复位：入口效果、石化复位；
+   *  ★ 道具不再清空 —— 寿命 -1，掉到 0 才消失（只有换新局才全清）
+   *  ★ 撞针也一样：被炸掉 / 被冻住保持 PEG_LIFE 回合，寿命 -1 掉到 0 才复原 */
   function newRound(fresh){
     fx = { L:0, R:0, perm:null, sealed:new Array(NUMS.length).fill(false) };
-    for(const p of pegs){ p.dead = false; p.frozen = false; }
+    for(const p of pegs){
+      if(fresh){                                   // 换新局：钉场整体重置
+        p.dead = false; p.frozen = false; p.life = 0;
+      }else if(p.life > 0 && --p.life <= 0){       // ★ 寿命耗尽才复原
+        p.dead = false; p.frozen = false;
+      }
+    }
     if(fresh){
       items = [];                                  // 换新局：整场清空
     }else{
@@ -501,13 +513,25 @@
     if(pos) items.push({ id: ++itemSeq, x: pos.x, y: pos.y, kind: 'CLOWN', t: 0, life: ITEM_LIFE });
   }
 
+  /* ---------- 撞针状态：炸掉 / 冻住（★ 都带 PEG_LIFE 回合寿命） ---------- */
+  /** 把一颗钉标成「被炸掉」：寿命重新起算 PEG_LIFE
+   *   （注意：已经碎掉的钉不会再被炸到 —— explode 会跳过，所以寿命不会靠反复炸来续） */
+  function killPeg(p){
+    p.dead = true; p.frozen = false; p.life = PEG_LIFE;
+  }
+  /** 把一颗钉标成「被冻住」 */
+  function freezePeg(p){
+    if(p.dead) return;                        // 已经碎掉的钉不再冻
+    p.frozen = true; p.life = PEG_LIFE;
+  }
+
   /* ---------- 爆炸 / 分裂 ---------- */
   function explode(x, y, r, killBalls){
     let killedPegs = 0, killedBalls = 0;
     for(const p of pegs){
       if(p.dead) continue;
       const dx = p.x - x, dy = p.y - y;
-      if(dx * dx + dy * dy <= (r + RP) * (r + RP)){ p.dead = true; killedPegs++; }
+      if(dx * dx + dy * dy <= (r + RP) * (r + RP)){ killPeg(p); killedPegs++; }
     }
     if(killBalls){
       for(const b of flyers){
@@ -837,7 +861,7 @@
         if(p.dead || p.frozen) continue;
         const dx = p.x - b.x, dy = p.y - b.y;
         if(dx * dx + dy * dy <= (ICE_R + RP) * (ICE_R + RP)){
-          p.frozen = true;
+          freezePeg(p);
           effects.push({ kind:'ring', x: p.x, y: p.y, t: 0 });
           if(effects.length > 60) effects.shift();
         }
@@ -860,7 +884,7 @@
       const d2 = dx * dx + dy * dy;
       if(d2 >= rr * rr || d2 === 0) continue;
       if(p.frozen){                                        // ★ 冰冻钉：碎裂消失，球穿过去（不反弹）
-        p.dead = true;
+        killPeg(p);                                        // ★ 碎掉后同样保持 PEG_LIFE 回合
         effects.push({ kind:'shatter', x: p.x, y: p.y, t: 0 });
         tone(1500, 0.09, { type:'sine', to:2500, gain:0.07 });
         continue;
@@ -1093,9 +1117,33 @@
     }
   }
 
+  /** ★ 撞针状态还剩最后一回合（life<=1）→ 该闪一闪提醒「下回合就复原了」
+   *   （抽成纯函数：测试直接采样，不用去画布上抓被脉冲光晕污染的 alpha） */
+  function pegStateLast(p){
+    return (p.life | 0) <= 1 && (p.dead || p.frozen);
+  }
+  function pegStatePulse(p){
+    return 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(tGlobal * 11 + p.i * 0.6));
+  }
+
+  /** ★ 碎掉的钉：画一个暗色凹痕（还能看出「这里本来有颗钉」），PEG_LIFE 回合后长回来。
+   *   最后一回合外圈闪红，提醒玩家它马上要复原。 */
+  function drawPegGhost(p){
+    ctx.fillStyle = 'rgba(60,80,110,.20)';
+    ctx.beginPath(); ctx.arc(p.x, p.y, RP, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(50,70,100,.35)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(p.x, p.y, RP, 0, 7); ctx.stroke();
+    if(pegStateLast(p)){
+      ctx.globalAlpha = pegStatePulse(p);
+      ctx.strokeStyle = 'rgba(255,60,50,.95)'; ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.arc(p.x, p.y, RP + 2.2, 0, 7); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
   function drawPegs(){
     for(const p of pegs){
-      if(p.dead) continue;                       // ★ 被炸掉 / 被碎掉的钉，回合结束才复原
+      if(p.dead){ drawPegGhost(p); continue; }   // ★ 碎掉的钉：留个暗色凹痕，PEG_LIFE 回合后复原
       // 钉影
       ctx.fillStyle = 'rgba(70,90,120,.18)';
       ctx.beginPath(); ctx.arc(p.x + 1.5, p.y + 2, RP, 0, 7); ctx.fill();
@@ -1114,6 +1162,12 @@
         ctx.closePath(); ctx.stroke();
         ctx.fillStyle = 'rgba(255,255,255,.85)';
         ctx.beginPath(); ctx.arc(p.x - 1.5, p.y - 1.7, 1.5, 0, 7); ctx.fill();
+        if(pegStateLast(p)){                       // ★ 冰封最后一回合：外圈闪红，提醒马上解冻
+          ctx.globalAlpha = pegStatePulse(p);
+          ctx.strokeStyle = 'rgba(255,60,50,.95)'; ctx.lineWidth = 1.8;
+          ctx.beginPath(); ctx.arc(p.x, p.y, RP + 2.2, 0, 7); ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
         continue;
       }
       // ★ 钉身：颜色 = 这一档的弹力（软=灰白 / 普=粉橙 / 弹=亮绿 / 超弹=金）
@@ -1540,7 +1594,7 @@
     ctx.save();
     ctx.fillStyle = 'rgba(255,252,246,.93)';
     ctx.strokeStyle = '#e0b34c'; ctx.lineWidth = 2;
-    roundRect(cx - hw, cy - 62, hw * 2, 236, 14); ctx.fill(); ctx.stroke();
+    roundRect(cx - hw, cy - 62, hw * 2, 258, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = '#c23b2c'; ctx.font = '800 24px ' + UI;
     ctx.fillText('弹珠乐园', cx, cy - 38);
@@ -1559,18 +1613,19 @@
     ctx.fillText('效果只管这一回合，回合结束复原', cx, cy + 94);
     ctx.fillStyle = '#b4483f'; ctx.font = '700 11px ' + UI;
     ctx.fillText('道具最多留 ' + ITEM_LIFE + ' 回合，最后一回合闪烁', cx, cy + 110);
+    ctx.fillText('被炸掉/冻住的钉留 ' + PEG_LIFE + ' 回合才复原', cx, cy + 126);
     // ★ 撞针弹力图鉴：4 档颜色 = 4 档弹力（每局分布随机）
     ctx.fillStyle = '#7a4b00'; ctx.font = '700 11px ' + UI;
-    ctx.fillText('撞针弹力（每局随机）', cx, cy + 132);
+    ctx.fillText('撞针弹力（每局随机）', cx, cy + 148);
     const step = (hw * 2 - 24) / PEG_KINDS.length;
     let lx = cx - hw + 12 + step / 2;
     for(const K of PEG_KINDS){
       ctx.fillStyle = K.c[1];
-      ctx.beginPath(); ctx.arc(lx, cy + 146, 5, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(lx, cy + 162, 5, 0, 7); ctx.fill();
       ctx.strokeStyle = K.ring; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.arc(lx, cy + 146, 5, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(lx, cy + 162, 5, 0, 7); ctx.stroke();
       ctx.fillStyle = '#8a6f52'; ctx.font = '700 10.5px ' + UI;
-      ctx.fillText(K.name, lx, cy + 160);
+      ctx.fillText(K.name, lx, cy + 176);
       lx += step;
     }
     ctx.restore();
@@ -1722,6 +1777,8 @@
         '  权重=' + pegMix.map(v => (v * 100).toFixed(0) + '%').join('/') + '  纵深偏置=' + pegTilt.toFixed(2),
       '道具刷新: 局初' + (ITEM_RUN_CHANCE * 100) + '% / 每回合' + (ITEM_ROUND_CHANCE * 100) +
         '%  寿命=' + ITEM_LIFE + '回合  场上 ' + items.length + '/' + ITEM_MAX,
+      '撞针状态: 碎' + pegs.filter(p => p.dead).length + ' 冻' + pegs.filter(p => p.frozen).length +
+        ' / 共' + pegs.length + ' 颗  寿命=' + PEG_LIFE + '回合',
       '上一球: 出膛=' + lastSpeed.toFixed(0) + ' 力量=' + (lastSpeed > 0 ? Math.round((lastSpeed - MINV) / (MAXV - MINV) * 100) + '%' : '—') +
         '  撞钉=' + pegHits + '  在飞=' + (flyers.length ? flyers.length + '球 ' +
           Math.round(Math.max.apply(null, flyers.map(b2 => b2.flightT)) * 100) / 100 + 's' : '否') +
@@ -1790,7 +1847,8 @@
     W, H, fieldL, fieldR, fieldT, mouthY, floorY, slotW, cannonX: CANNON_X,
     pegCount: pegs.length, fieldSeed,
     pegs: pegs.map(p => ({ x: p.x, y: p.y, i: p.i, k: p.k, rest: (PEG_KINDS[p.k] || PEG_KINDS[1]).rest,
-                           dead: !!p.dead, frozen: !!p.frozen })),
+                           dead: !!p.dead, frozen: !!p.frozen, life: p.life | 0,
+                           last: pegStateLast(p) })),
     pegMix: pegMix.slice(), pegDist: pegCounts(), pegTilt,
     PEG_KINDS: PEG_KINDS.map(k => ({ key: k.key, name: k.name, rest: k.rest })), PEG_CAP: PEG_CAP.slice(),
     SPD_CAP, ITEM_RUN_CHANCE, ITEM_ROUND_CHANCE, MIN_STAGE_H, squeezed: layoutSqueezed,
@@ -1799,7 +1857,7 @@
     ball: flyers[0] ? { x: flyers[0].x, y: flyers[0].y, vx: flyers[0].vx, vy: flyers[0].vy,
                         flightT: flyers[0].flightT } : null,
     items: items.map(it => ({ id: it.id, x: it.x, y: it.y, kind: it.kind, life: it.life })),
-    ITEM_LIFE, ITEM_MAX,
+    ITEM_LIFE, ITEM_MAX, PEG_LIFE,
     itemsOn, roundGain, roundPegHits, clownDone, aim, aimDir,
     fx: { L: fx.L, R: fx.R, shuffle: !!fx.perm, perm: fx.perm ? fx.perm.slice() : null,
           sealed: fx.sealed.slice() },
@@ -1852,6 +1910,17 @@
   window.__marbleDraw = () => { draw(); return true; };
   window.__marbleSpawnItems = k => { spawnItems(k); return items.length; };
   window.__marbleItemAlpha = life => itemAlpha({ life: life | 0 });
+  window.__marblePegStateLast = life => pegStateLast({ life: life | 0, dead: true });
+  window.__marblePegPulse = () => pegStatePulse({ i: 0 });
+  /* 直接给某颗钉设置状态（测「寿命保持」用，绕开物理的不确定性） */
+  window.__marbleSetPeg = (idx, state, life) => {
+    const p = pegs[idx]; if(!p) return null;
+    if(state === 'dead') killPeg(p);
+    else if(state === 'frozen') freezePeg(p);
+    else { p.dead = false; p.frozen = false; p.life = 0; }
+    if(life !== undefined) p.life = life | 0;
+    return { dead: p.dead, frozen: p.frozen, life: p.life };
+  };
 })();
 </script>
 </body>
