@@ -240,13 +240,14 @@
    *   life 只有一份（两种状态互斥）：冻住的钉又被撞碎 = 一次新的状态变化，寿命重新起算。 */
   const PEG_LIFE = 3;               // 撞针异常状态最多保持几回合（含出事的那一回合）
 
-  /* 道具表：txt 是画在道具上的字形（不用 emoji，字体缺失也能画） */
+  /* 道具表：txt 是画在道具上的字形（不用 emoji，字体缺失也能画）
+   *   ★ shape:'bomb' = 不走「彩色圆牌」那套，改画黑色炸弹 + 白骷髅（地雷是纯负面道具，要一眼认出来） */
   const ITEMS = {
     L:     { txt:'L',  color:'#ffd166', ink:'#7a4b00', name:'Left' },
     R:     { txt:'R',  color:'#ffd166', ink:'#7a4b00', name:'Right' },
     SHUF:  { txt:'⇄',  color:'#c2a3ff', ink:'#3b2a6b', name:'错位' },
     SPLIT: { txt:'Y',  color:'#7dffa0', ink:'#14532d', name:'分裂球' },
-    MINE:  { txt:'✹',  color:'#ff5b4d', ink:'#5a0f0a', name:'地雷' },
+    MINE:  { txt:'✹',  color:'#ff5b4d', ink:'#5a0f0a', name:'地雷', shape:'bomb' },
     FIRE:  { txt:'F',  color:'#ffa04d', ink:'#5a2a05', name:'火力球' },
     ICE:   { txt:'❄',  color:'#7dd8ff', ink:'#0b3d52', name:'冰封球' },
     STONE: { txt:'■',  color:'#b9c2cf', ink:'#2f3742', name:'石化' },
@@ -1399,7 +1400,105 @@
     return (it.life | 0) <= 1 ? 0.26 + 0.74 * (0.5 + 0.5 * Math.sin(tGlobal * 11)) : 1;
   }
 
-  /** ★ 道具：彩色圆牌 + 字形（L / R / ⇄ / Y / ✹ / F / ❄ / ■ / ? / +1..+3），轻轻上下浮动 */
+  /** ★ 普通道具：彩色圆牌 + 字形（L / R / ⇄ / Y / F / ❄ / ■ / ? / +1..+3） */
+  function drawItemPlate(it, y, meta, last){
+    ctx.fillStyle = 'rgba(255,255,255,.26)';
+    ctx.beginPath(); ctx.arc(it.x, y, ITEM_R + 4.5, 0, 7); ctx.fill();
+    const g = ctx.createRadialGradient(it.x - 3, y - 3.5, 1, it.x, y, ITEM_R);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, meta.color); g.addColorStop(1, meta.color);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(it.x, y, ITEM_R, 0, 7); ctx.fill();
+    ctx.strokeStyle = last ? 'rgba(255,60,50,.95)' : 'rgba(40,30,20,.5)';
+    ctx.lineWidth = last ? 1.8 : 1.2;
+    ctx.beginPath(); ctx.arc(it.x, y, ITEM_R, 0, 7); ctx.stroke();
+    ctx.fillStyle = meta.ink;
+    ctx.font = '800 ' + (meta.txt.length > 1 ? 9 : 11.5) + 'px ' + UI;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(meta.txt, it.x, y + 0.5);
+  }
+
+  /** ★ 地雷：黑色炸弹 + 白骷髅 + 引线火花。
+   *   为什么单独画：地雷跟其它道具不一样，它几乎只有负面效果（吃到 = 这颗白打 + 周围钉全炸没），
+   *   混在「彩色圆牌」里玩家会误吃 —— 所以要一眼认出来，而且要有「危险」的观感。
+   *   ⚠️ 画得比判定略大（判定仍是 ITEM_R）：视觉预警 > 判定是安全的方向 —— 宁可多躲，不会「看着没碰到却炸了」。 */
+  function drawMine(it, y, last){
+    const R = ITEM_R + 1.2;
+    /* ⚠️ 调用方设的 globalAlpha（最后一回合的明暗闪烁）必须保住 ——
+     *   本函数内部会临时调低 alpha 画脉冲光环，画完要还原成「进来时的值」，
+     *   不能写死 1（否则地雷在最后一回合不会闪，跟其它道具不一致）。 */
+    const baseA = ctx.globalAlpha;
+    /* ★ 爆炸半径预警圈：地雷真正可怕的是「吃到后炸掉周围一大片」（MINE_R=48），
+     *   光看一个小圆牌完全想不到 —— 所以把真实爆炸范围虚画出来（只对地雷画，其它道具没有）。 */
+    ctx.strokeStyle = 'rgba(255,47,34,.42)';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.arc(it.x, y, MINE_R, 0, 7); ctx.stroke();
+    ctx.setLineDash([]);
+    // 危险光环：红色脉冲（别的道具是白色柔光，一眼区分）
+    const pulse = 0.5 + 0.5 * Math.sin(tGlobal * 6.2);
+    ctx.globalAlpha = baseA * (0.20 + 0.22 * pulse);
+    ctx.fillStyle = '#ff2f22';
+    ctx.beginPath(); ctx.arc(it.x, y, R + 6.5 + 1.6 * pulse, 0, 7); ctx.fill();
+    ctx.globalAlpha = baseA;
+    // 引线 + 跳动的火花
+    ctx.strokeStyle = '#6b5a45'; ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(it.x + R * 0.52, y - R * 0.70);
+    ctx.quadraticCurveTo(it.x + R * 1.15, y - R * 1.25, it.x + R * 0.95, y - R * 1.72);
+    ctx.stroke();
+    const sx = it.x + R * 0.95, sy = y - R * 1.72;
+    const spark = 0.6 + 0.4 * Math.sin(tGlobal * 18);
+    ctx.fillStyle = '#ffd24a';
+    ctx.beginPath(); ctx.arc(sx, sy, 1.0 + 2.0 * spark, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    ctx.beginPath(); ctx.arc(sx, sy, 0.4 + 1.0 * spark, 0, 7); ctx.fill();
+    ctx.lineCap = 'butt';
+    // 炸弹球体：近黑（径向渐变留一点立体感）
+    const g = ctx.createRadialGradient(it.x - R * 0.34, y - R * 0.40, R * 0.12, it.x, y, R);
+    g.addColorStop(0, '#5b6470'); g.addColorStop(0.45, '#2b323c'); g.addColorStop(1, '#0d1015');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(it.x, y, R, 0, 7); ctx.fill();
+    ctx.strokeStyle = last ? 'rgba(255,60,50,.95)' : 'rgba(0,0,0,.85)';
+    ctx.lineWidth = last ? 2 : 1.2;
+    ctx.beginPath(); ctx.arc(it.x, y, R, 0, 7); ctx.stroke();
+    // 玻璃高光
+    ctx.fillStyle = 'rgba(255,255,255,.30)';
+    ctx.beginPath(); ctx.arc(it.x - R * 0.36, y - R * 0.42, R * 0.20, 0, 7); ctx.fill();
+    /* ★ 白骷髅（纯矢量，不依赖 emoji/字体） */
+    const sr = R * 0.60;                       // 颅骨半径
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(it.x, y - sr * 0.12, sr, 0, 7); ctx.fill();
+    roundRect(it.x - sr * 0.62, y + sr * 0.45, sr * 1.24, sr * 0.74, sr * 0.30);   // 下颌
+    ctx.fill();
+    ctx.fillStyle = '#0d1015';                 // 眼窝 + 鼻腔（挖空成黑洞）
+    const er = sr * 0.34, ey = y - sr * 0.16, ex = sr * 0.42;
+    ctx.beginPath(); ctx.arc(it.x - ex, ey, er, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(it.x + ex, ey, er, 0, 7); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(it.x, y + sr * 0.22);
+    ctx.lineTo(it.x - sr * 0.17, y + sr * 0.56);
+    ctx.lineTo(it.x + sr * 0.17, y + sr * 0.56);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#0d1015'; ctx.lineWidth = Math.max(0.8, sr * 0.11);   // 牙缝
+    ctx.beginPath();
+    for(let i = 1; i <= 2; i++){
+      const tx = it.x - sr * 0.62 + (sr * 1.24) * i / 3;
+      ctx.moveTo(tx, y + sr * 0.52); ctx.lineTo(tx, y + sr * 1.10);
+    }
+    ctx.stroke();
+  }
+
+  /** ★ 寿命点：下方几颗小点 = 还能待几回合（最后一回合全变红） */
+  function drawItemLifeDots(it, y, last){
+    const n = Math.max(1, Math.min(ITEM_LIFE, it.life | 0));
+    const span = 4.2, x0 = it.x - (n - 1) * span / 2;
+    for(let i = 0; i < n; i++){
+      ctx.fillStyle = last ? '#ff3b30' : 'rgba(255,255,255,.92)';
+      ctx.beginPath(); ctx.arc(x0 + i * span, y + ITEM_R + 5.2, 1.5, 0, 7); ctx.fill();
+    }
+  }
+
+  /** ★ 道具：彩色圆牌 + 字形，轻轻上下浮动；地雷走 drawMine 单独一套外观 */
   function drawItems(){
     for(const it of items){
       const meta = ITEMS[it.kind] || ITEMS.CLOWN;
@@ -1407,26 +1506,9 @@
       /* ★ 最后一回合（life===1）：整张牌明暗闪烁 + 红圈，提醒「这回合不打掉就没了」 */
       const last = it.life <= 1;
       ctx.globalAlpha = itemAlpha(it);
-      ctx.fillStyle = 'rgba(255,255,255,.26)';
-      ctx.beginPath(); ctx.arc(it.x, y, ITEM_R + 4.5, 0, 7); ctx.fill();
-      const g = ctx.createRadialGradient(it.x - 3, y - 3.5, 1, it.x, y, ITEM_R);
-      g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, meta.color); g.addColorStop(1, meta.color);
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(it.x, y, ITEM_R, 0, 7); ctx.fill();
-      ctx.strokeStyle = last ? 'rgba(255,60,50,.95)' : 'rgba(40,30,20,.5)';
-      ctx.lineWidth = last ? 1.8 : 1.2;
-      ctx.beginPath(); ctx.arc(it.x, y, ITEM_R, 0, 7); ctx.stroke();
-      ctx.fillStyle = meta.ink;
-      ctx.font = '800 ' + (meta.txt.length > 1 ? 9 : 11.5) + 'px ' + UI;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(meta.txt, it.x, y + 0.5);
-      /* ★ 寿命点：下方几颗小点 = 还能待几回合（最后一回合全变红） */
-      const n = Math.max(1, Math.min(ITEM_LIFE, it.life | 0));
-      const span = 4.2, x0 = it.x - (n - 1) * span / 2;
-      for(let i = 0; i < n; i++){
-        ctx.fillStyle = last ? '#ff3b30' : 'rgba(255,255,255,.92)';
-        ctx.beginPath(); ctx.arc(x0 + i * span, y + ITEM_R + 5.2, 1.5, 0, 7); ctx.fill();
-      }
+      if(meta.shape === 'bomb') drawMine(it, y, last);
+      else drawItemPlate(it, y, meta, last);
+      drawItemLifeDots(it, y, last);
       ctx.globalAlpha = 1;
       ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
     }
@@ -1594,7 +1676,7 @@
     ctx.save();
     ctx.fillStyle = 'rgba(255,252,246,.93)';
     ctx.strokeStyle = '#e0b34c'; ctx.lineWidth = 2;
-    roundRect(cx - hw, cy - 62, hw * 2, 258, 14); ctx.fill(); ctx.stroke();
+    roundRect(cx - hw, cy - 62, hw * 2, 276, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = '#c23b2c'; ctx.font = '800 24px ' + UI;
     ctx.fillText('弹珠乐园', cx, cy - 38);
@@ -1614,18 +1696,20 @@
     ctx.fillStyle = '#b4483f'; ctx.font = '700 11px ' + UI;
     ctx.fillText('道具最多留 ' + ITEM_LIFE + ' 回合，最后一回合闪烁', cx, cy + 110);
     ctx.fillText('被炸掉/冻住的钉留 ' + PEG_LIFE + ' 回合才复原', cx, cy + 126);
+    ctx.fillStyle = '#0d1015'; ctx.font = '700 11px ' + UI;
+    ctx.fillText('黑炸弹（白骷髅）千万别碰 —— 会炸死球', cx, cy + 142);
     // ★ 撞针弹力图鉴：4 档颜色 = 4 档弹力（每局分布随机）
     ctx.fillStyle = '#7a4b00'; ctx.font = '700 11px ' + UI;
-    ctx.fillText('撞针弹力（每局随机）', cx, cy + 148);
+    ctx.fillText('撞针弹力（每局随机）', cx, cy + 164);
     const step = (hw * 2 - 24) / PEG_KINDS.length;
     let lx = cx - hw + 12 + step / 2;
     for(const K of PEG_KINDS){
       ctx.fillStyle = K.c[1];
-      ctx.beginPath(); ctx.arc(lx, cy + 162, 5, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(lx, cy + 178, 5, 0, 7); ctx.fill();
       ctx.strokeStyle = K.ring; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.arc(lx, cy + 162, 5, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(lx, cy + 178, 5, 0, 7); ctx.stroke();
       ctx.fillStyle = '#8a6f52'; ctx.font = '700 10.5px ' + UI;
-      ctx.fillText(K.name, lx, cy + 176);
+      ctx.fillText(K.name, lx, cy + 192);
       lx += step;
     }
     ctx.restore();
@@ -1862,7 +1946,7 @@
     fx: { L: fx.L, R: fx.R, shuffle: !!fx.perm, perm: fx.perm ? fx.perm.slice() : null,
           sealed: fx.sealed.slice() },
     effNums: effNums(),
-    AIM_MAX, ITEM_R, MAX_FLYERS, MAX_STACK,
+    AIM_MAX, ITEM_R, MAX_FLYERS, MAX_STACK, MINE_R, FIRE_R, ICE_R, ICE_TIME,
     bgm: !!bgmTimer,
   });
   window.__marbleSetStage = (w, h) => { const st = document.getElementById('stage'); st.clientWidth = w; st.clientHeight = h; layout(); return { W: W, H: H, S: S }; };
@@ -1910,6 +1994,11 @@
   window.__marbleDraw = () => { draw(); return true; };
   window.__marbleSpawnItems = k => { spawnItems(k); return items.length; };
   window.__marbleItemAlpha = life => itemAlpha({ life: life | 0 });
+  window.__marbleItemMeta = kind => {
+    const m = ITEMS[kind]; if(!m) return null;
+    return { key: kind, txt: m.txt, color: m.color, ink: m.ink, name: m.name, shape: m.shape || 'plate' };
+  };
+  window.__marbleMineVisual = () => ({ shape: ITEMS.MINE.shape, R: ITEM_R + 1.2, blastR: MINE_R, ITEM_R });
   window.__marblePegStateLast = life => pegStateLast({ life: life | 0, dead: true });
   window.__marblePegPulse = () => pegStatePulse({ i: 0 });
   /* 直接给某颗钉设置状态（测「寿命保持」用，绕开物理的不确定性） */

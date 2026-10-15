@@ -26,13 +26,21 @@ const script = fs.readFileSync(HTML, 'utf8').match(/<script>([\s\S]*?)<\/script>
 
 /* ---------------- 桩 ---------------- */
 const gradient = { addColorStop() {} };
+/* ★ 记录型渐变：地雷弹体是用径向渐变画的（近黑），
+ *   所以要能看到「这次渐变用了哪些颜色」，不能只留一个空桩。 */
+function mkGradient() {
+  const stops = [];
+  const g = { stops, addColorStop(off, col) { stops.push({ off, col: String(col) }); } };
+  return g;
+}
 /* ★ 记录型 ctx：把 save/restore/translate/rotate 记下来，
- *   用来断言「画出来的炮口朝向」和「发射方向」一致（光看数值看不出绘制反向）。 */
-const drawRec = { frames: [], stack: [], alphas: [] };
+ *   用来断言「画出来的炮口朝向」和「发射方向」一致（光看数值看不出绘制反向）。
+ *   另外记录 fillText 与「圆弧填充」(fillStyle + 半径)，用来断言地雷的黑色弹体 + 白骷髅。 */
+const drawRec = { frames: [], stack: [], alphas: [], texts: [], fills: [], dashes: [] };
 function mkCtx() {
   return new Proxy({}, {
     get(t, k) {
-      if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => gradient;
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => mkGradient();
       if (k === 'save') return () => drawRec.stack.push({ tx: 0, ty: 0, rot: 0 });
       if (k === 'restore') return () => drawRec.stack.pop();
       if (k === 'translate') return (x, y) => {
@@ -44,6 +52,10 @@ function mkCtx() {
         if (s) s.rot = a;
         drawRec.frames.push({ tx: s ? s.tx : 0, ty: s ? s.ty : 0, rot: a });
       };
+      if (k === 'fillText') return (txt, x, y) => { drawRec.texts.push({ txt: String(txt), x, y, style: t.fillStyle }); };
+      if (k === 'setLineDash') return arr => { drawRec.dashes.push(arr ? arr.slice() : []); };
+      if (k === 'arc') return (x, y, r) => { t._lastR = r; t._lastX = x; t._lastY = y; };
+      if (k === 'fill') return () => { drawRec.fills.push({ r: t._lastR, x: t._lastX, y: t._lastY, style: t.fillStyle, alpha: t.globalAlpha }); };
       if (k in t) return t[k];
       return () => {};
     },
@@ -54,6 +66,7 @@ function mkCtx() {
     },
   });
 }
+function resetDrawRec() { drawRec.texts.length = 0; drawRec.fills.length = 0; drawRec.dashes.length = 0; drawRec.alphas.length = 0; }
 function mkClassList() {
   const s = new Set();
   return { add: c => s.add(c), remove: c => s.delete(c), contains: c => s.has(c), _all: () => [...s] };
@@ -910,8 +923,101 @@ section('16) 压力：每回合都塞道具，连打不卡死 / 数值不坏');
   ok(M().state === 'over' || shots === 80, '正常结束或打满（' + shots + ' 发，state=' + M().state + '）');
 }
 
-/* ================= 16) 绘制冒烟 ================= */
-section('17) 绘制：各种状态下画图都不报错（含道具/旋转炮口/水泥筒/负分桶）');
+/* ================= 17) 地雷外观：黑炸弹 + 白骷髅 ================= */
+section('17) ★ 地雷外观：黑色炸弹 + 白骷髅（与其它「彩色圆牌」道具明确区分）');
+{
+  const meta = win.__marbleItemMeta('MINE');
+  const vis = win.__marbleMineVisual();
+  const ITEM_R_OF = () => M().ITEM_R;
+  ok(meta && meta.shape === 'bomb', '★ 地雷走独立外观 shape=bomb（不再画成彩色圆牌）');
+  ok(vis.R > vis.ITEM_R, '★ 画得比判定略大（画 ' + vis.R.toFixed(1) + ' > 判定 ' + vis.ITEM_R +
+     '）—— 视觉预警宁可偏大');
+  ok(vis.blastR > vis.R * 3, '★ 爆炸半径远大于道具本身（' + vis.blastR + ' vs ' + vis.R.toFixed(1) + '）→ 值得画预警圈');
+
+  // 其它道具仍然是彩色圆牌（没有被误伤）
+  const others = ['L', 'R', 'SHUF', 'SPLIT', 'FIRE', 'ICE', 'STONE', 'CLOWN', 'UP1', 'UP2', 'UP3'];
+  ok(others.every(k => win.__marbleItemMeta(k).shape === 'plate'),
+     '★ 其余 ' + others.length + ' 种道具仍是彩色圆牌（shape=plate）');
+
+  // ---- 真的画出来：黑弹体 + 白骷髅 + 红色预警圈 ----
+  reset(41);
+  win.__marbleClearItems();
+  const mx = M().fieldL + 60, my = M().fieldT + 150;
+  win.__marblePutItem('MINE', mx, my);
+  resetDrawRec();
+  win.__marbleDraw();
+
+  // 弹体：近黑填充（半径 ≈ 道具半径）
+  const body = drawRec.fills.filter(f => f.r >= ITEM_R_OF() - 0.01 && f.r <= ITEM_R_OF() + 2.5);
+  ok(body.length > 0, '★ 画出了道具大小的圆形弹体（' + body.length + ' 个）');
+  /* 弹体是径向渐变（近黑）→ 从渐变的 colorStop 里判断「是不是深色」 */
+  const hexOf = c => String(c).replace(/\s/g, '');
+  const lum = c => {
+    const m = /^#([0-9a-f]{6})$/i.exec(hexOf(c));
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    return ((n >> 16 & 255) + (n >> 8 & 255) + (n & 255)) / 3;
+  };
+  const gradBody = body.filter(f => f.style && Array.isArray(f.style.stops) && f.style.stops.length);
+  ok(gradBody.length > 0, '★ 弹体用径向渐变画（有 ' + gradBody.length + ' 个渐变填充）');
+  const darkest = gradBody.length
+    ? Math.min(...gradBody.flatMap(f => f.style.stops.map(s => lum(s.col)).filter(v => v !== null)))
+    : 999;
+  ok(darkest < 0x60, '★ 弹体是深色/近黑（最暗色阶 ' + (darkest === 999 ? '—' : Math.round(darkest)) + ' < 96）');
+
+  // 骷髅：纯白填充 + 比弹体小的圆（颅骨）
+  const white = drawRec.fills.filter(f => String(f.style).replace(/\s/g, '') === '#ffffff' && f.r < ITEM_R_OF());
+  ok(white.length > 0, '★ 画出了白色骷髅（白填充 ' + white.length + ' 处，颅骨半径 ' +
+     (white[0] ? white[0].r.toFixed(1) : '—') + '）');
+  ok(white.every(f => f.r < ITEM_R_OF()), '★ 骷髅在弹体内部（白圆半径都小于弹体）');
+
+  // 眼窝/鼻腔：用近黑挖空
+  const holes = drawRec.fills.filter(f => String(f.style).replace(/\s/g, '') === '#0d1015' && f.r < ITEM_R_OF());
+  ok(holes.length >= 2, '★ 骷髅有挖空的眼窝/鼻腔（' + holes.length + ' 处）');
+
+  // 预警圈：虚线 + 半径 = MINE_R
+  const warn = drawRec.dashes.some(d => Array.isArray(d) && d.length === 2 && d[0] > 0);
+  ok(warn, '★ 画了虚线爆炸预警圈（setLineDash 被调用）');
+  const ring = drawRec.fills.filter(f => Math.abs(f.r - vis.blastR) < 0.01);
+  ok(ring.length === 0, '（说明）预警圈是描边不是填充 —— 填充里不该有它');
+
+  // 地雷不画字形（没有彩色圆牌上的字母）
+  const mineTexts = drawRec.texts.filter(t => Math.abs(t.x - mx) < 12 && Math.abs(t.y - my) < 16);
+  ok(mineTexts.length === 0, '★ 地雷不再画「✹」字形（改用矢量骷髅）');
+
+  // 对照：普通道具仍然画字形
+  win.__marbleClearItems();
+  win.__marblePutItem('SPLIT', mx, my);
+  resetDrawRec();
+  win.__marbleDraw();
+  ok(drawRec.texts.some(t => t.txt === 'Y'), '★ 对照：普通道具（分裂 Y）照旧画字形');
+
+  // 最后一回合：地雷的寿命点仍变红（跟其它道具一致）
+  win.__marbleClearItems();
+  win.__marblePutItem('MINE', mx, my, 1);
+  resetDrawRec();
+  win.__marbleDraw();
+  const redDots = drawRec.fills.filter(f => String(f.style).replace(/\s/g, '') === '#ff3b30');
+  ok(redDots.length > 0, '★ 地雷最后一回合：寿命点变红（与其它道具同一套提醒）');
+
+  /* ★ 回归：地雷最后一回合也必须真的「闪」
+   *   （踩过的坑：drawMine 内部把 globalAlpha 写死回 1，把调用方的闪烁值冲掉了
+   *     → 地雷在最后一回合反而不闪，跟其它道具不一致） */
+  win.__marbleClearItems();
+  win.__marblePutItem('MINE', mx, my, 1);
+  let mineDark = false;
+  for (let f = 0; f < 40 && !mineDark; f++) {
+    run(1);
+    resetDrawRec();
+    win.__marbleDraw();
+    // 只认「画在弹体附近」的填充：alpha 明显变暗 = 闪烁生效
+    if (drawRec.fills.some(x => x.alpha < 0.5 && Math.abs(x.x - mx) < 26 && Math.abs(x.y - my) < 26)) mineDark = true;
+  }
+  ok(mineDark, '★ 地雷最后一回合会闪烁（globalAlpha 没被内部写死冲掉）');
+}
+
+/* ================= 18) 绘制冒烟 ================= */
+section('18) 绘制：各种状态下画图都不报错（含道具/旋转炮口/水泥筒/负分桶）');
 {
   const tryDraw = label => {
     let r = 'ok';
@@ -922,6 +1028,11 @@ section('17) 绘制：各种状态下画图都不报错（含道具/旋转炮口
   tryDraw('开局（带提示）');
   win.__marbleSetAim(0.5); tryDraw('炮口转到 30°');
   win.__marbleSpawnItems(3); tryDraw('场上有 3 个道具');
+  win.__marbleClearItems(); win.__marblePutItem('MINE', M().fieldL + 50, M().fieldT + 140);
+  tryDraw('场上有地雷（黑炸弹 + 白骷髅 + 预警圈）');
+  win.__marbleClearItems(); win.__marblePutItem('MINE', M().fieldL + 50, M().fieldT + 140, 1);
+  tryDraw('地雷最后一回合（闪烁 + 红圈）');
+  win.__marbleClearItems(); win.__marbleSpawnItems(3);
   win.__marbleFire(0.7); tryDraw('单球飞行中');
   win.__marbleEat('SPLIT'); tryDraw('三球同屏');
   win.__marbleEat('FIRE', 0); tryDraw('火力球');
@@ -938,7 +1049,7 @@ section('17) 绘制：各种状态下画图都不报错（含道具/旋转炮口
 }
 
 /* ================= 17) 炮口方向 == 发射方向 ================= */
-section('18) ★ 炮口朝向与发射方向必须一致（曾经画反：往右调角度、炮口却朝左歪）');
+section('19) ★ 炮口朝向与发射方向必须一致（曾经画反：往右调角度、炮口却朝左歪）');
 {
   reset(1);
   const s0 = M();
@@ -979,7 +1090,7 @@ section('18) ★ 炮口朝向与发射方向必须一致（曾经画反：往右
 }
 
 /* ================= 18) 撞针弹力分档 ================= */
-section('19) ★ 撞针 4 档弹力：颜色区分 · 每局分布随机 · 超弹把球顶回上方');
+section('20) ★ 撞针 4 档弹力：颜色区分 · 每局分布随机 · 超弹把球顶回上方');
 {
   reset(1);
   const s = M();
@@ -1074,7 +1185,7 @@ section('19) ★ 撞针 4 档弹力：颜色区分 · 每局分布随机 · 超�
 }
 
 /* ================= 19) 看门狗 C：垂直弹跳死循环 ================= */
-section('20) ★ 看门狗 C：撞顶会清掉旧计时器，靠「整秒位移」把垂直弹跳救出来');
+section('21) ★ 看门狗 C：撞顶会清掉旧计时器，靠「整秒位移」把垂直弹跳救出来');
 {
   reset(5);
   win.__marblePegMix([0, 0, 1, 0], 0);          // 全是弹钉：最容易「天花板↔钉顶」垂直弹跳
@@ -1090,7 +1201,7 @@ section('20) ★ 看门狗 C：撞顶会清掉旧计时器，靠「整秒位移�
 }
 
 /* ================= 20) ★ 容器尺寸兜底（黑屏事故） ================= */
-section('21) ★ 布局兜底：容器尺寸为 0 / 太矮，都不能变成「一片黑只剩按钮」');
+section('22) ★ 布局兜底：容器尺寸为 0 / 太矮，都不能变成「一片黑只剩按钮」');
 {
   const sg = M();
   ok(sg.MIN_STAGE_H === 320, '最小画布高度常数 MIN_STAGE_H=320（' + sg.MIN_STAGE_H + '）');
