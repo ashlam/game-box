@@ -198,57 +198,64 @@ function ok(cond, name, detail) {
 }
 function section(t) { console.log('\n== ' + t + ' =='); }
 
-/* ================= 1) 规则（用户原话逐条） ================= */
-section('1) ★ 规则：初始 5 / 发射扣 1 / 桶数字原样加 / 0 不加 / 归 0 结束');
+/* ================= 1) 规则（★ 生命与分数分开后） ================= */
+section('1) ★ 规则：初始 10 条命 / 发射扣命 / 落桶得分（不再加命）/ 命归 0 结束');
 {
   reset(1);
   const s = M();
-  ok(s.balls === 5, '★ 初始 5 个球（' + s.balls + '）');
+  const L0 = s.START_LIVES;
+  ok(L0 === 10, '★ 初始 ' + L0 + ' 条生命（用户指定 10）');
+  ok(s.lives === 10 && s.score === 0, '★ 开局：生命 10、分数 0（两者独立）');
+  ok(s.START_BALLS === L0, 'START_BALLS 与 START_LIVES 一致（兼容旧名）');
   ok(s.state === 'ready', '开局状态 ready');
   ok(JSON.stringify(s.NUMS) === JSON.stringify([1,0,2,4,8,4,2,0,1]),
      '★ 9 桶数字与参考图一致 1·0·2·4·8·4·2·0·1（' + s.NUMS.join('·') + '）');
-  ok(s.START_BALLS === 5, '常数 START_BALLS=5');
 
-  // 蓄力松手 = 发一颗，扣 1
+  // 蓄力松手 = 发一颗，扣 1 条命（分数不动）
   press();
   ok(M().charging, '按住进入蓄力');
   setCharge(0.5); release();
   const f = M();
-  ok(f.balls === 4 && f.launched === 1 && f.state === 'play',
-     '★ 发射即扣 1：5 → ' + f.balls + '（已发 ' + f.launched + ' 颗）');
+  ok(f.lives === L0 - 1 && f.launched === 1 && f.state === 'play',
+     '★ 发射即扣 1 条命：' + L0 + ' → ' + f.lives + '（已发 ' + f.launched + ' 颗）');
+  ok(f.score === 0, '★ 发射不加分（分数只来自落桶）');
 
-  // 逐桶验证「桶上的数字原样加给剩余」
+  // 逐桶验证「桶上的数字原样加进分数」，且**不加生命**
   for (let i = 0; i < 9; i++) {
     reset(1);
-    press(); setCharge(0.4); release();            // 5 → 4
-    land(i);                                        // + NUMS[i]
-    const got = M().balls, want = 4 + M().NUMS[i];
-    ok(got === want, `桶[${i}]=${M().NUMS[i]}：4 + ${M().NUMS[i]} = ${got}`, '得到 ' + got);
+    press(); setCharge(0.4); release();            // 生命 10 → 9
+    const livesAfterFire = M().lives;
+    land(i);                                        // 分数 += NUMS[i]
+    const got = M().score, want = M().NUMS[i];
+    ok(got === want, `桶[${i}]=${M().NUMS[i]}：分数 ${want}（实得 ${got}）`, '得到 ' + got);
+    ok(M().lives === livesAfterFire,
+       `  └ 落桶不加命（仍是 ${M().lives}）`, '生命被改了');
     ok(M().lastBucket === i, `  └ 记录落点桶[${i}]`, String(M().lastBucket));
   }
 
-  // 白损失：连打 5 颗全落 0 桶 → 归 0 → 结束；再按也不发
+  // 0 号桶：不得分，但照样扣命 → 打 10 发就结束
   reset(1);
   let trace = [];
-  for (let k = 1; k <= 5; k++) {
+  for (let k = 1; k <= 10; k++) {
     press(); setCharge(0.5); release();
-    const afterFire = M().balls;
+    const afterFire = M().lives;
     land(1);                                        // NUMS[1] = 0
-    trace.push(`${afterFire}/${M().balls}`);
+    trace.push(`${afterFire}/${M().lives}`);
     if (M().launched !== k) break;
   }
   const g = M();
-  ok(g.balls === 0, '★ 5 颗全落 0 号桶（每次都只扣不加）→ 0 颗', '轨迹 发射后/落桶后: ' + trace.join(' '));
-  ok(g.state === 'over', '★ 归 0 → 结束（state=' + g.state + '）');
+  ok(g.lives === 0, '★ 10 发全落 0 号桶（只扣命不得分）→ 生命归 0', '轨迹 发射后/落桶后: ' + trace.join(' '));
+  ok(g.score === 0, '★ 全程 0 分（0 号桶不得分）');
+  ok(g.state === 'over', '★ 生命归 0 → 结束（state=' + g.state + '）');
   press(); setCharge(1); release();
-  ok(M().balls === 0 && M().launched === 5, '★ 没球时按住松手也不让发（仍为 ' + M().launched + ' 颗）');
+  ok(M().lives === 0 && M().launched === 10, '★ 没命时按住松手也不让发（仍为 ' + M().launched + ' 颗）');
   reset(3);
-  ok(M().balls === 5 && M().state === 'ready', '★ 重开回到 5 颗、状态 ready');
+  ok(M().lives === 10 && M().score === 0 && M().state === 'ready', '★ 重开回到 10 条命、0 分、ready');
 
-  // 1 号桶是净持平（4+1=5，正好补回发射那颗）
+  // 落桶得分与生命彻底解耦：落头奖 8 分也不会多一条命
   reset(1);
-  press(); setCharge(0.5); release(); land(0);
-  ok(M().balls === 5, '桶=1 时 4+1=5（正好补回发射那颗，净 0）');
+  press(); setCharge(0.5); release(); land(4);
+  ok(M().score === 8 && M().lives === 9, '★ 落 8 号头奖：+8 分，但生命仍是 9（不再「加球」）');
 }
 
 /* ================= 2) 蓄力 → 力量 ================= */
@@ -436,8 +443,8 @@ section('7) 长跑：真实物理连发，不越界/不 NaN/状态合法');
   }
   ok(bad === 0, flights + ' 颗连发全程合法（不越界/不穿钉/不 NaN/球数不为负）', '异常 ' + bad);
   ok(flights >= 5, '至少打完 ' + flights + ' 颗');
-  ok(M().best >= 5 && M().best >= M().runPeak, '最高记录被正确维护（best=' + M().best + ' runPeak=' + M().runPeak + '）');
-  ok(String(store['marble_best'] ?? '') === String(M().best), '★ 最高分已落盘（' + store['marble_best'] + '）');
+  ok(M().best >= 0 && M().best >= M().score, '最高分被正确维护（best=' + M().best + ' score=' + M().score + '）');
+  ok(String(store['marble_best_score'] ?? '') === String(M().best), '★ 最高分已落盘（' + store['marble_best_score'] + '）');
   const st = M().state;
   ok(st === 'ready' || st === 'over', '最终状态合法（' + st + '）');
 }
@@ -451,7 +458,8 @@ section('8) 首屏提示与重开');
   ok(M().hintOn === false, '开火后提示消失');
   run(Math.round(6 / DT));                          // 让这球打完
   reset(5);
-  ok(M().hintOn === true && M().balls === 5 && M().state === 'ready', '重开：提示回来、5 颗、ready');
+  ok(M().hintOn === true && M().lives === 10 && M().score === 0 && M().state === 'ready',
+     '重开：提示回来、10 条命、0 分、ready');
 }
 
 /* ================= ★ 转屏：关卡布局必须不变 ================= */
@@ -494,7 +502,7 @@ section('9) ★ 炮口方向控制：◀▶ 调角度，与蓄力/发射互不�
   win.__marbleAimDir(-1);
   run(30);
   ok(M().aim < 0, '★ 按住 ◀ 炮口持续左转（aim=' + M().aim.toFixed(3) + '）');
-  ok(M().state === 'ready' && M().balls === 5 && M().launched === 0,
+  ok(M().state === 'ready' && M().lives === 10 && M().launched === 0,
      '★ 转方向期间不会误发射（state=' + M().state + ' 已发=' + M().launched + '）');
   win.__marbleAimDir(0);
   const aimHeld = M().aim;
@@ -549,21 +557,21 @@ section('10) ★ Left / Right：左(右)侧加倍、另一侧变负、中间归 
   ok(JSON.stringify(M().effNums) === JSON.stringify([-1,0,-2,-4,0,8,4,0,2]),
      '★ Right：右侧加倍、左侧变负、中间归 0（' + M().effNums.join('·') + '）');
 
-  // 实打实落桶：吃 L 后落 2 号桶（底表 2）→ 得 4
+  // 实打实落桶：吃 L 后落 2 号桶（底表 2）→ 得 4 分
   reset(10);
   win.__marbleEat('L');
   const r1 = win.__marbleLand(2);
-  ok(r1.n === 4 && M().balls === 9, '★ 吃 L 后落 2 号桶：实得 4（5 → ' + M().balls + '）');
+  ok(r1.n === 4 && M().score === 4, '★ 吃 L 后落 2 号桶：得 4 分（分数 0 → ' + M().score + '）');
   /* ★ 用户改的：入口变化不再「回合结束就复原」，而是保持 ENTRANCE_LIFE 回合
    *   （旧断言是 `fx.L === 0`，已被第 17 节的寿命规则取代） */
   ok(M().fx.L === 1 && M().fx.life === M().ENTRANCE_LIFE - 1,
      '★ 回合结束：入口变化仍生效（L=1、还剩 ' + M().fx.life + ' 回合）');
 
-  // 负数：吃 R 后落 0 号桶（底表 1）→ -1
+  // 负数：吃 R 后落 0 号桶（底表 1）→ -1 分
   reset(10);
   win.__marbleEat('R');
   const r2 = win.__marbleLand(0);
-  ok(r2.n === -1 && M().balls === 4, '★ 吃 R 后落左侧 0 号桶：扣 1（5 → ' + M().balls + '）');
+  ok(r2.n === -1 && M().score === -1, '★ 吃 R 后落左侧 0 号桶：扣 1 分（分数 0 → ' + M().score + '）');
 }
 
 /* ================= 11) 错位 / 石化 ================= */
@@ -631,23 +639,26 @@ section('12) ★ 分裂球（一变 ' + 4 + '、可叠加、上限 9）· 1UP/2U
   for(let i = 0; i < 30; i++) win.__marbleEat('SPLIT', 0);
   ok(M().flyers.length <= M().MAX_FLYERS, '★ 同屏封顶 ' + M().MAX_FLYERS + ' 球（实际 ' + M().flyers.length + '）');
 
-  // 多球计分求和
+  // 多球计分求和（★ 落桶只加分数，不加生命）
   reset(12);
   win.__marbleEat('SPLIT');
   const per = M().effNums[4];
+  const livesBefore = M().lives;
   for(let i = 0; i < SN; i++) win.__marbleLand(4);
-  ok(M().balls === 5 + per * SN,
-     '★ ' + SN + ' 球全部落 8 号桶：得分按总和算（5 + ' + per + '×' + SN + ' = ' + M().balls + '）');
+  ok(M().score === per * SN,
+     '★ ' + SN + ' 球全部落 8 号桶：分数按总和算（' + per + '×' + SN + ' = ' + M().score + '）');
+  ok(M().lives === livesBefore, '★ 多球落桶也不加生命（仍是 ' + M().lives + '）');
 
-  // UP
+  // UP：★ 补的是「生命」，不是分数
   reset(12);
-  const b0 = M().balls;
+  const b0 = M().lives, s0 = M().score;
   win.__marbleEat('UP3');
-  ok(M().balls === b0 + 3, '★ 3UP 立即加 3 条命（' + b0 + ' → ' + M().balls + '）');
+  ok(M().lives === b0 + 3, '★ 3UP 立即加 3 条命（' + b0 + ' → ' + M().lives + '）');
+  ok(M().score === s0, '★ UP 不加分（分数仍是 ' + M().score + '）');
   ok(M().flyers.length === 3, '★ 3UP 同时分裂出 3 个小球（' + M().flyers.length + '）');
   reset(12);
   win.__marbleEat('UP1');
-  ok(M().balls === 6 && M().flyers.length === 1, '★ 1UP 加 1 命、分裂出 1 个球（' + M().balls + ' 命 / ' + M().flyers.length + ' 球）');
+  ok(M().lives === 11 && M().flyers.length === 1, '★ 1UP 加 1 命、分裂出 1 个球（' + M().lives + ' 命 / ' + M().flyers.length + ' 球）');
 
   /* ★ 用户要求：UP 道具牌面上写「1up / 2up / 3up」，不是原来的「+1 / +2 / +3」 */
   const upTxt = k => win.__marbleItemMeta(k).txt;
@@ -687,7 +698,10 @@ section('13) ★ 地雷（炸死球+炸钉）· 火力球（撞钉引爆）· �
   setBall({ x: p0.x, y: p0.y - 4, vy: 60 });
   win.__marbleEat('MINE');
   ok(M().state === 'ready' && M().flyers.length === 0, '★ 触碰的球被炸死，场上无球 → 该回合结束');
-  ok(M().balls === 5, '★ 被地雷炸死 = 白打一颗（弹珠 5 → ' + M().balls + '）');
+  /* ★ 被地雷炸死 = 白打一颗：这里用 __marbleSetBall 直接放球（不走 fire，所以不扣命），
+   *   所以只能断言「没得分」；「白打一条命」由下面走真实 fire 的那条验证。 */
+  ok(M().score === 0, '★ 被地雷炸死不得分（分数仍是 ' + M().score + '）');
+  ok(M().lives === 10, '（说明）setBall 不走发射流程，生命不扣（仍是 ' + M().lives + '）');
   ok(M().pegs.filter(p => p.dead).length > 0,
      '★ 它是场上唯一的球 → 回合立即结束，但被炸掉的钉仍保持碎（寿命机制）');
 
@@ -1491,6 +1505,142 @@ section('23) ★ 布局兜底：容器尺寸为 0 / 太矮，都不能变成「�
   ok(typeof M().cannonX === 'number' && M().cannonX > 0, '★ 炮台坐标有效（cannonX=' + M().cannonX + '）');
   win.__marbleSetStage(390, 700);
   ok(M().squeezed === false, '（复位）恢复常规尺寸');
+}
+
+/* ===== 24) ★ 爆炸炸道具 + 炸到地雷引发连环爆炸 ===== */
+section('24) ★ 爆炸炸掉范围内道具 · 炸到地雷 → 连环爆炸');
+{
+  const put = (kind, x, y) => win.__marblePutItem(kind, x, y);
+  const ids = () => M().items.map(i => i.id);
+  const near = (r) => ({ x: M().fieldL + 60, y: M().fieldT + 140, r });
+
+  // ---- 爆炸炸掉范围内的道具 ----
+  reset(61); win.__marbleClearItems(); win.__marbleClearFx();
+  const p = near();
+  const idIn = put('SPLIT', p.x, p.y);                        // 正中心
+  const idIn2 = put('L', p.x + 20, p.y + 10);                 // 半径内
+  const idOut = put('R', p.x + 400, p.y);                     // 远远在外（会被 clamp 到场地内，但仍在半径外）
+  const before = ids().length;
+  const r = win.__marbleExplode(p.x, p.y, 48, false);
+  ok(r.killedItems >= 2, '★ 爆炸炸掉范围内的道具（' + r.killedItems + ' 个）');
+  ok(ids().indexOf(idIn) < 0 && ids().indexOf(idIn2) < 0, '★ 半径内的两个道具都没了');
+  ok(ids().indexOf(idOut) >= 0, '★ 半径外的道具还在（没有全屏清空）');
+  ok(ids().length === before - r.killedItems, '★ 只少了被炸掉的那么多（' + before + ' → ' + ids().length + '）');
+
+  // ---- 炸到地雷 → 连环爆炸（链上的地雷也炸掉自己范围里的东西）----
+  reset(62); win.__marbleClearItems(); win.__marbleClearFx();
+  const c0 = near();
+  const mineId = put('MINE', c0.x + 30, c0.y);                // 第一颗地雷（在爆炸半径内）
+  // 第二颗地雷放在「第一颗地雷的爆炸半径内、但不在初始爆炸半径内」
+  const c1x = c0.x + 30 + 40, c1y = c0.y;
+  const mine2Id = put('MINE', c1x, c1y);
+  // 第三颗放在「第二颗的半径内、前两颗都够不到」→ 验证真的连锁了两层
+  const c2x = c1x + 40, c2y = c1y;
+  const mine3Id = put('MINE', c2x, c2y);
+  const bystander = put('ICE', c2x + 20, c2y + 12);           // 只有第三颗炸得到
+
+  const r2 = win.__marbleExplode(c0.x, c0.y, 48, false);
+  ok(r2.killedItems >= 3, '★ 连锁把三颗地雷都炸掉了（' + r2.killedItems + ' 个道具）');
+  ok(r2.chained >= 2, '★ 确实发生了连环爆炸（连锁引爆 ' + r2.chained + ' 颗）');
+  ok(ids().indexOf(mineId) < 0 && ids().indexOf(mine2Id) < 0 && ids().indexOf(mine3Id) < 0,
+     '★ 三颗地雷全部被引爆（含只够得着的第三颗）');
+  ok(ids().indexOf(bystander) < 0,
+     '★ 第三颗地雷的爆炸也炸到了它旁边的道具（证明连锁真的扩散了）');
+  ok(M().items.length === 0, '★ 场上道具被清干净（' + M().items.length + '）');
+
+  // ---- 连锁也炸钉子：范围明显比单次爆炸更大 ----
+  reset(63); win.__marbleClearItems(); win.__marbleClearFx();
+  const d0 = near();
+  put('MINE', d0.x + 36, d0.y);
+  const rSingle = win.__marbleExplode(d0.x, d0.y, 48, false);
+  reset(63); win.__marbleClearItems(); win.__marbleClearFx();
+  const e0 = near();
+  put('MINE', e0.x + 36, e0.y); put('MINE', e0.x + 36 + 40, e0.y);
+  const rChain = win.__marbleExplode(e0.x, e0.y, 48, false);
+  ok(rChain.killedPegs > rSingle.killedPegs,
+     '★ 连锁炸掉的钉子比单次爆炸多（' + rChain.killedPegs + ' > ' + rSingle.killedPegs + '）');
+
+  // ---- 不会无限递归：一堆地雷挤在一起也只炸有限次 ----
+  reset(64); win.__marbleClearItems(); win.__marbleClearFx();
+  const f0 = near();
+  for(let i = 0; i < 10; i++) put('MINE', f0.x + i * 4, f0.y + (i % 3) * 4);   // 10 颗挤成一坨
+  const rMany = win.__marbleExplode(f0.x, f0.y, 48, false);
+  ok(M().items.length === 0, '★ 10 颗地雷挤在一起也全部引爆（剩 ' + M().items.length + '）');
+  ok(rMany.chained <= win.__marbleChainMax() + 1,
+     '★ 连锁次数有上限（' + rMany.chained + ' ≤ ' + (win.__marbleChainMax() + 1) + '）—— 不会无限递归');
+
+  // ---- 球被炸死时也照样炸道具（地雷吃到的场景）----
+  reset(65); win.__marbleClearItems(); win.__marbleClearFx();
+  const g0 = M().pegs[12];
+  const gId = put('SPLIT', g0.x + 8, g0.y + 8);
+  setBall({ x: g0.x, y: g0.y - 4, vy: 60 });
+  win.__marbleEat('MINE');
+  /* ⚠️ 不能断言 items.length === 0：地雷炸死场上唯一的球 → 回合立刻结束 →
+   *   newRound 又按 80% 概率刷了新道具。所以要认 id，看「那一个」是不是没了。 */
+  ok(ids().indexOf(gId) < 0, '★ 地雷被球吃到时，范围内的那个道具也被炸掉了');
+}
+
+/* ===== 25) ★ 生命与分数分离 ===== */
+section('25) ★ 生命与分数分离：落桶得分、发射扣命、UP 补命、命归 0 结束');
+{
+  reset(71); win.__marbleClearFx(); win.__marbleClearItems();
+  const s = M();
+  ok(s.START_LIVES === 10, '★ 初始生命 10（用户指定）');
+  ok(s.lives === 10 && s.score === 0, '★ 开局 生命=10 / 分数=0');
+
+  // 发射只扣命、不加分
+  press(); setCharge(0.5); release();
+  ok(M().lives === 9 && M().score === 0, '★ 发射：生命 10 → 9，分数仍 0');
+
+  // 落桶只加分、不加命
+  land(4);
+  ok(M().score === 8 && M().lives === 9, '★ 落 8 号桶：分数 +8，生命不动（仍是 9）');
+
+  // 连续落桶：分数累加，生命只随发射减少
+  const lv = M().lives, sc = M().score;
+  press(); setCharge(0.5); release();
+  land(0);
+  ok(M().score === sc + 1 && M().lives === lv - 1,
+     '★ 再发一颗落 0 号桶：分数 +1（' + M().score + '）、生命 -1（' + M().lives + '）');
+
+  // UP 补命、不加分
+  const lv2 = M().lives, sc2 = M().score;
+  win.__marbleEat('UP3');
+  ok(M().lives === lv2 + 3 && M().score === sc2,
+     '★ 3UP：生命 +3（' + M().lives + '）、分数不变（' + M().score + '）');
+
+  // 分数可以为负（R 道具把左侧打成负数）
+  reset(72); win.__marbleClearFx(); win.__marbleClearItems();
+  win.__marbleEat('R');
+  land(0);
+  ok(M().score < 0, '★ 分数可以为负（落被打成负数的桶，分数 ' + M().score + '）');
+  /* ⚠️ __marbleEat 不走 fire()，所以这里生命不会被扣 —— 正好用来证明
+   *   「分数变负」和「生命」完全是两回事。 */
+  ok(M().lives === 10, '★ 分数为负也不影响生命（仍是 ' + M().lives + '）');
+
+  // 命归 0 → 结束；分数保留
+  reset(73); win.__marbleClearFx(); win.__marbleClearItems();
+  for(let k = 0; k < 10; k++){ press(); setCharge(0.5); release(); land(4); }
+  const g = M();
+  ok(g.lives === 0, '★ 打满 10 发 → 生命归 0（' + g.lives + '）');
+  ok(g.score === 80, '★ 分数保留下来（10 × 8 = ' + g.score + '）');
+  ok(g.state === 'over', '★ 生命归 0 → 结束（state=' + g.state + '）');
+
+  // 最高分落盘用的是分数
+  ok(M().best >= 80, '★ 最高分按「分数」记（best=' + M().best + '）');
+  ok(String(store['marble_best_score'] ?? '') === String(M().best),
+     '★ 落盘键是 marble_best_score（' + store['marble_best_score'] + '）');
+
+  // 最高分与生命无关：生命很高但分数低，不该刷新纪录
+  reset(74); win.__marbleClearFx(); win.__marbleClearItems();
+  const bestBefore = M().best;
+  win.__marbleEat('UP3'); win.__marbleEat('UP3');     // 生命堆到 16
+  ok(M().lives === 16 && M().score === 0, '★ 生命堆到 ' + M().lives + '、分数仍是 0');
+  ok(M().best === bestBefore, '★ 生命高但分数 0 → 不刷新最高分（仍是 ' + M().best + '）');
+
+  // 分数是「本局累计」，重开归零
+  reset(75); win.__marbleClearFx(); win.__marbleClearItems();
+  ok(M().score === 0 && M().lives === 10, '★ 重开：分数归 0、生命回 10');
 }
 
 /* ================= 汇总 ================= */

@@ -100,30 +100,31 @@
 <div id="dbg"></div>
 
 <div id="over"><div class="panel">
-  <h2 id="overTitle">弹珠用完了</h2>
+  <h2 id="overTitle">生命用完了</h2>
   <div class="big" id="overScore">0</div>
-  <div class="unit">本局最高弹珠</div>
+  <div class="unit">本局得分</div>
   <p id="overText"></p>
-  <div class="rule">落桶规则：桶上的数字加给剩余弹珠<br>0 号桶不加 —— 这颗就白打了</div>
-  <button class="pri" id="overRetry">再来一次 · 5 颗</button>
+  <div class="rule">落桶得分：桶上是几就得几分（0 号桶不得分）<br>生命每发扣 1，只有 1up / 2up / 3up 能补</div>
+  <button class="pri" id="overRetry">再来一次 · 10 条命</button>
 </div></div>
 
 <script>
 (function(){
   'use strict';
   /* ============================================================
-     弹珠乐园 —— 蓄力发射 · 撞钉反弹 · 落桶加球
+     弹珠乐园 —— 蓄力发射 · 撞钉反弹 · 落桶得分
 
      规则（用户定的，逐条）：
-       1. 初始 5 颗弹珠
-       2. 按住蓄力，松手后按力量弹出
+       1. 初始 10 条生命（★ 生命与分数是两套独立数值）
+       2. 按住蓄力，松手后按力量弹出；**发射扣 1 条命**
        3. 落下去会撞「弹性障碍物（钉子）」或墙壁 → 反弹
        4. 最后看落到哪个桶
-       5. 桶上的数字加给剩余弹珠数；0 不加（即白损失一颗）
+       5. 桶上是几就得几分（0 号桶不得分）—— **落桶只加分数，不加生命**
+       6. 补命只有 1up / 2up / 3up 道具；生命归 0 结束
 
      界面参考用户给的实拍图（嘉年华风格弹珠机）：
        顶部中间炮口朝下的发射器（趴只小熊）、圆角玻璃场地（天空+白云+粉钉）、
-       底部 9 桶 1·0·2·4·8·4·2·0·1（中间 8 金冠）、左侧蓝色「可用弹珠」胶囊、
+       底部 9 桶 1·0·2·4·8·4·2·0·1（中间 8 金冠）、左侧蓝色「生命」胶囊 + 右侧「分数」胶囊、
        红色机框 + 底部灯泡。
        ⚠️ 参考图是横屏投影；本作按用户真机（竖屏手机）排布：
           信息做顶部两枚胶囊，不放左右侧栏。
@@ -170,7 +171,14 @@
   }
 
   /* ---------- 规则常数（★ 全部来自用户原话） ---------- */
-  const START_BALLS = 5;                                   // 初始 5 个球
+  /* ★ 生命与分数是两套独立的数值（用户要求分开）：
+   *   - 生命 lives：开局 START_LIVES 条，**发射扣 1**，只有 1up/2up/3up 能补；归 0 即结束。
+   *   - 分数 score：**只有落桶得分**（桶上是几就得几分，被 L/R 改成负数就扣分）；
+   *     分数只增不减地累计，不会被消耗，最高分记进 localStorage。
+   *   以前两者是同一个「弹珠」数（落桶加球 = 加命），现在拆开：
+   *   落桶不再补命，所以「打得好」体现在分数上，而不是「能多打几发」。 */
+  const START_LIVES = 10;                                  // ★ 初始 10 条生命（用户指定）
+  const START_BALLS = START_LIVES;                         // 兼容旧名（测试/旧代码仍在用）
   const NUMS = [1, 0, 2, 4, 8, 4, 2, 0, 1];                // 9 桶数字（参考图原样，对称，中间 8 头奖）
   const WIN_I = 4;                                         // 金冠在中间
 
@@ -276,8 +284,9 @@
 
   /* ---------- 状态 ---------- */
   let state = 'ready';             // ready | play | over   （play = 有球在飞）
-  let balls = START_BALLS;         // 剩余弹珠（含此刻在飞的这颗已扣掉）
-  let launched = 0, gain = 0, runPeak = START_BALLS, best = 0;
+  let lives = START_LIVES;         // ★ 剩余生命（含此刻在飞的这颗已扣掉）—— 发射扣 1，只有 UP 道具能补
+  let score = 0;                   // ★ 本局分数（落桶累计；被 L/R 改成负数时可为负）
+  let launched = 0, gain = 0, best = 0;   // gain = 本局累计得分（= score 的正向累计，展示用）
   let lastBucket = -1, pegHits = 0, flights = 0;
   let flyers = [];                 // ★ 在飞的小球（可多个：分裂 / UP 道具）
   let pegs = [];
@@ -287,7 +296,7 @@
 
   /* ★ 本回合生效的效果（回合结束全部复原） */
   let fx = { L:0, R:0, perm:null, sealed:[], life:0 };
-  let roundGain = 0;               // 本回合累计（多球求和），回合结束才加进 balls
+  let roundGain = 0;               // 本回合累计得分（多球求和），回合结束才加进 score
   let roundPegHits = 0, clownDone = false;
   let items = [];                  // 场上道具（回合结束清空）
   let itemsOn = false;             // 本局开局有没有刷出道具（30%）
@@ -300,7 +309,7 @@
   let soundOn = true, bgmTimer = null, bgmNext = 0, bgmStep = 0, bgmGain = null;
   let lastPegSnd = 0, lastWallSnd = 0;   // 音效节流（连撞时别糊成一片）
 
-  best = parseInt(localStorage.getItem('marble_best') || '0', 10) || 0;
+  best = parseInt(localStorage.getItem('marble_best_score') || '0', 10) || 0;
 
   function mulberry32(a){
     return function(){
@@ -315,8 +324,9 @@
   function reset(seed){
     fieldSeed = (seed === undefined) ? ((Math.random() * 1e9) | 0) : seed;
     rng = mulberry32(fieldSeed);
-    balls = START_BALLS;
-    launched = 0; gain = 0; runPeak = START_BALLS;
+    lives = START_LIVES;
+    score = 0;
+    launched = 0; gain = 0;
     lastBucket = -1; pegHits = 0; flights = 0;
     flyers = []; charge = 0; charging = false;
     effects = []; floats = []; cannonShake = 0;
@@ -500,19 +510,19 @@
     }
   }
 
-  /** 结算：把本回合累计（可能是多球之和、也可能是负数）加进弹珠数 */
+  /** 结算：把本回合累计得分（可能是多球之和、也可能是负数）加进分数。
+   *  ★ 生命与分数分开：落桶只加分数，**不加生命**（补命只有 1up/2up/3up）。 */
   function endRound(){
-    balls = Math.max(0, balls + roundGain);
-    gain += roundGain;
-    runPeak = Math.max(runPeak, balls);
-    if(runPeak > best){
-      best = runPeak;
-      try{ localStorage.setItem('marble_best', String(best)); }catch(e){}
+    score += roundGain;
+    gain += roundGain;                       // gain = 累计得分（含负数），展示用
+    if(score > best){
+      best = score;
+      try{ localStorage.setItem('marble_best_score', String(best)); }catch(e){}
     }
     const gained = roundGain;
     newRound(false);
     state = 'ready';
-    if(balls <= 0) gameOver();
+    if(lives <= 0) gameOver();
     return gained;
   }
   /** 飞行的球全部落定 → 收尾 */
@@ -567,8 +577,15 @@
   }
 
   /* ---------- 爆炸 / 分裂 ---------- */
-  function explode(x, y, r, killBalls){
-    let killedPegs = 0, killedBalls = 0;
+  /** ★ 爆炸：炸钉子 +（可选）炸球 + ★炸掉范围内的道具；范围内有地雷 → 连环爆炸。
+   *   ⚠️ 连锁是**同步递归**完成的（不是 setTimeout）：本作的物理/结算全靠手工步进驱动，
+   *   延迟爆炸会脱离这一帧的状态（可能拖到回合结束之后才炸），而且测试没法确定性断言。
+   *   所以伤害立即结算，只把「音效」错开一点点，听感上仍有「一个接一个」的层次。
+   *   depth 是连锁深度，用来防地雷互相引爆形成无限递归。 */
+  const CHAIN_MAX = 12;                       // 一次爆炸最多连锁引爆几颗地雷
+  function explode(x, y, r, killBalls, depth){
+    depth = depth | 0;
+    let killedPegs = 0, killedBalls = 0, killedItems = 0, chained = 0;
     for(const p of pegs){
       if(p.dead) continue;
       const dx = p.x - x, dy = p.y - y;
@@ -581,12 +598,31 @@
         if(dx * dx + dy * dy <= (r + RB) * (r + RB)){ b.dead = true; killedBalls++; }   // 被炸死 = 白打
       }
     }
+    /* ★ 炸掉范围内的道具（用户要求）。炸到的若是地雷 → 连环爆炸。
+     *   倒序遍历（splice 会挪动下标），并先把「要连锁引爆的地雷」收集起来，
+     *   等本轮 splice 全部做完再递归 —— 否则会在遍历中途改动 items 数组。 */
+    const chain = [];
+    for(let i = items.length - 1; i >= 0; i--){
+      const it = items[i];
+      const dx = it.x - x, dy = it.y - y;
+      if(dx * dx + dy * dy > (r + ITEM_R) * (r + ITEM_R)) continue;
+      items.splice(i, 1);
+      killedItems++;
+      if(it.kind === 'MINE' && depth < CHAIN_MAX) chain.push({ x: it.x, y: it.y });
+    }
     effects.push({ kind:'boom', x, y, t:0, r });
     if(effects.length > 80) effects.shift();
     shake = Math.max(shake, 0.7);
-    tone(120, 0.34, { type:'sawtooth', to:44, gain:0.13 });
+    tone(120, 0.34, { type:'sawtooth', to:44, gain:0.13, at: depth * 0.07 });
     noiseBurst(0.34, { type:'lowpass', freq:900, to:120, gain:0.11, decay:1.6 });
-    return { killedPegs, killedBalls };
+    /* ★ 连环爆炸：链上的地雷以自身为中心再炸一次（半径用 MINE_R），同步递归 */
+    for(const c of chain){
+      chained++;
+      const sub = explode(c.x, c.y, MINE_R, killBalls, depth + 1);
+      killedPegs += sub.killedPegs; killedBalls += sub.killedBalls;
+      killedItems += sub.killedItems; chained += sub.chained;
+    }
+    return { killedPegs, killedBalls, killedItems, chained };
   }
   let shake = 0;
 
@@ -677,9 +713,7 @@
     }
     else if(kind === 'UP1' || kind === 'UP2' || kind === 'UP3'){
       const n = kind === 'UP1' ? 1 : kind === 'UP2' ? 2 : 3;
-      balls += n;
-      runPeak = Math.max(runPeak, balls);
-      if(runPeak > best){ best = runPeak; try{ localStorage.setItem('marble_best', String(best)); }catch(e){} }
+      lives += n;                                          // ★ UP 道具补的是「生命」
       spawnExtra(b, n - 1);
       label = '+' + n + ' 命';
     }
@@ -689,7 +723,7 @@
     return label;
   }
 
-  /** 落桶结算：本回合累计（多球求和），回合结束才真正加进弹珠数 */
+  /** 落桶结算：本回合累计得分（多球求和），回合结束才真正加进分数 */
   function landBucket(b, i){
     const n = fx.sealed[i] ? 0 : effNums()[i];
     lastBucket = i;
@@ -844,9 +878,9 @@
     charge = 0;
   }
   function fire(c){
-    if(balls <= 0){ gameOver(); return; }                  // ★ 没球就不让发
+    if(lives <= 0){ gameOver(); return; }                  // ★ 没命就不让发
     const v = MINV + c * (MAXV - MINV);                    // ★ 力量 → 出膛速度（线性）
-    balls--;                                               // ★ 发射即扣 1
+    lives--;                                               // ★ 发射即扣 1 条命
     launched++; flights++;
     /* ★ 炮口角度：方向由 ◀▶ 控制，力度由发射键控制，两者互不干扰 */
     flyers = [ mkBall(CANNON_X, CANNON_MOUTH, Math.sin(aim) * v, Math.cos(aim) * v) ];
@@ -903,12 +937,13 @@
     charging = false; chargeOff();
     stopBgm();
     sndOver();
-    const isRec = runPeak >= best && runPeak > START_BALLS;
+    /* ★ 分数与生命分开后，「新纪录」看的是分数 */
+    const isRec = score > 0 && score >= best;
     overTimer = setTimeout(() => {
-      $('overTitle').textContent = isRec ? '新纪录' : '弹珠用完了';
-      $('overScore').textContent = runPeak;
-      $('overText').textContent = '发射 ' + launched + ' 颗 · 累计加球 +' + gain +
-        ' · 最高 ' + best + (best > runPeak ? ' · 差 ' + (best - runPeak) + ' 颗' : '');
+      $('overTitle').textContent = isRec ? '新纪录' : '生命用完了';
+      $('overScore').textContent = score;
+      $('overText').textContent = '发射 ' + launched + ' 颗 · 累计得分 ' + (gain >= 0 ? '+' : '') + gain +
+        ' · 最高分 ' + best + (best > score ? ' · 差 ' + (best - score) + ' 分' : '');
       $('overText').className = isRec ? 'rec' : '';
       $('over').classList.add('on');
     }, 640);
@@ -1427,7 +1462,7 @@
     roundRect(-10, 3, 20, 20, 5); ctx.stroke();
     roundRect(-14, 14, 28, 9, 4); ctx.stroke();
     // 装填好的球（有球可发时才显示）
-    if(state !== 'play' && balls > 0){
+    if(state !== 'play' && lives > 0){
       const g = ctx.createRadialGradient(-2, 16, 1, 0, 18, 7.5);
       g.addColorStop(0, '#8f9dff'); g.addColorStop(1, '#3b4bd8');
       ctx.fillStyle = g;
@@ -1689,36 +1724,46 @@
     roundRect(x, y, w, h, 9); ctx.stroke();
   }
   function drawUI(){
-    // 左：可用弹珠（参考图的蓝色胶囊）
-    pill(6, 6, 112, 36);
-    const gx = 24, gy = 24;
-    const gg = ctx.createRadialGradient(gx - 2, gy - 2, 1, gx, gy, 9);
-    gg.addColorStop(0, '#a9b5ff'); gg.addColorStop(1, '#3b4bd8');
-    ctx.fillStyle = gg;
-    ctx.beginPath(); ctx.arc(gx, gy, 8.5, 0, 7); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.8)';
-    ctx.beginPath(); ctx.arc(gx - 2.4, gy - 2.6, 2.2, 0, 7); ctx.fill();
+    /* ★ 生命与分数分开显示（用户要求）：
+     *   左 = 生命（红心，发射扣 1、只有 UP 能补）
+     *   右 = 分数（落桶累计）
+     *   最高分用小字放在分数胶囊下面（HUD 里不再把「能打几发」当成绩） */
+    const PW = 104;
+    // 左：生命
+    pill(6, 6, PW, 36);
+    ctx.fillStyle = '#ff5b6e';
+    ctx.beginPath();                       // 红心
+    const hx = 24, hy = 24, hr = 7;
+    ctx.moveTo(hx, hy + hr * 0.75);
+    ctx.bezierCurveTo(hx - hr * 1.5, hy - hr * 0.45, hx - hr * 0.5, hy - hr * 1.5, hx, hy - hr * 0.35);
+    ctx.bezierCurveTo(hx + hr * 0.5, hy - hr * 1.5, hx + hr * 1.5, hy - hr * 0.45, hx, hy + hr * 0.75);
+    ctx.fill();
+    ctx.fillStyle = '#ffd3d9';
+    ctx.beginPath(); ctx.arc(hx - 3.4, hy - 3.6, 1.9, 0, 7); ctx.fill();
     ctx.fillStyle = '#cfe0ff'; ctx.font = '600 9.5px ' + UI;
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText('可用弹珠', 40, 19);
+    ctx.fillText('生命', 40, 19);
     ctx.fillStyle = '#ffffff'; ctx.font = '800 17px ' + UI;
-    ctx.fillText(String(balls), 40, 36);
-    // 发射中显示扣掉后的余量（balls 已在发射时扣过，这里就是真实余量）
-    // 右：最高
-    pill(W - 6 - 84, 6, 84, 36);
+    ctx.fillText(String(lives), 40, 36);
+    // 右：分数
+    pill(W - 6 - PW, 6, PW, 36);
     ctx.fillStyle = '#cfe0ff'; ctx.font = '600 9.5px ' + UI;
     ctx.textAlign = 'right';
-    ctx.fillText('最高', W - 16, 19);
-    ctx.fillStyle = '#ffffff'; ctx.font = '800 17px ' + UI;
-    ctx.fillText(String(best), W - 16, 36);
+    ctx.fillText('分数', W - 16, 19);
+    ctx.fillStyle = score < 0 ? '#ffb3ad' : '#ffffff';
+    ctx.font = '800 17px ' + UI;
+    ctx.fillText(String(score), W - 16, 36);
+    // 最高分（小字，放在分数胶囊下方）
+    ctx.fillStyle = 'rgba(207,224,255,.72)'; ctx.font = '600 9px ' + UI;
+    ctx.fillText('最高分 ' + best, W - 16, 53);
     ctx.textAlign = 'left';
 
     // ★ 本回合生效的效果（两枚胶囊之间的空档，超宽就截断）
     const chips = fxChips();
-    let cxp = 122;
+    let cxp = 6 + PW + 6;
     for(const c of chips){
       const cw = c.t.length * 7.4 + 10;
-      if(cxp + cw > W - 92) break;
+      if(cxp + cw > W - 6 - PW - 6) break;
       ctx.fillStyle = 'rgba(18,22,30,.74)';
       roundRect(cxp, 10, cw, 16, 8); ctx.fill();
       ctx.strokeStyle = c.col; ctx.lineWidth = 1;
@@ -1771,7 +1816,7 @@
     ctx.save();
     ctx.fillStyle = 'rgba(255,252,246,.93)';
     ctx.strokeStyle = '#e0b34c'; ctx.lineWidth = 2;
-    roundRect(cx - hw, cy - 62, hw * 2, 324, 14); ctx.fill(); ctx.stroke();
+    roundRect(cx - hw, cy - 62, hw * 2, 340, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = '#c23b2c'; ctx.font = '800 24px ' + UI;
     ctx.fillText('弹珠乐园', cx, cy - 38);
@@ -1781,13 +1826,13 @@
     ctx.fillText('按住红色大键蓄力 · 松手发射', cx, cy + 2);
     ctx.fillStyle = '#8a6f52'; ctx.font = '11.5px ' + UI;
     ctx.fillText('撞到钉子和墙壁会反弹', cx, cy + 22);
-    ctx.fillText('落到桶里，桶上的数字加给你', cx, cy + 40);
+    ctx.fillText('落到桶里，桶上是几就得几分', cx, cy + 40);
     ctx.fillStyle = '#c23b2c'; ctx.font = '700 11.5px ' + UI;
-    ctx.fillText('0 号桶不加 —— 这颗就白打了', cx, cy + 58);
+    ctx.fillText('每发扣 1 条命；0 号桶不得分', cx, cy + 58);
     ctx.fillStyle = '#7a4b00'; ctx.font = '700 11.5px ' + UI;
     ctx.fillText('球撞到彩色圆牌 = 吃到道具', cx, cy + 78);
     ctx.fillStyle = '#8a6f52'; ctx.font = '11px ' + UI;
-    ctx.fillText('球变多/变火/变冰 只管这一回合', cx, cy + 94);
+    ctx.fillText('1up/2up/3up 是补命，其余只管这一回合', cx, cy + 94);
     ctx.fillStyle = '#b4483f'; ctx.font = '700 11px ' + UI;
     ctx.fillText('道具最多留 ' + ITEM_LIFE + ' 回合，最后一回合闪烁', cx, cy + 110);
     ctx.fillText('被炸掉/冻住的钉留 ' + PEG_LIFE + ' 回合才复原', cx, cy + 126);
@@ -1798,18 +1843,20 @@
     ctx.fillText('入口被改过时，外边缘会闪', cx, cy + 174);
     ctx.fillStyle = '#0d1015'; ctx.font = '700 11px ' + UI;
     ctx.fillText('黑炸弹（白骷髅）千万别碰 —— 会炸死球', cx, cy + 190);
+    ctx.fillStyle = '#8a6f52'; ctx.font = '11px ' + UI;
+    ctx.fillText('爆炸会炸掉范围内道具；炸到地雷会连环炸', cx, cy + 206);
     // ★ 撞针弹力图鉴：4 档颜色 = 4 档弹力（每局分布随机）
     ctx.fillStyle = '#7a4b00'; ctx.font = '700 11px ' + UI;
-    ctx.fillText('撞针弹力（每局随机）', cx, cy + 212);
+    ctx.fillText('撞针弹力（每局随机）', cx, cy + 228);
     const step = (hw * 2 - 24) / PEG_KINDS.length;
     let lx = cx - hw + 12 + step / 2;
     for(const K of PEG_KINDS){
       ctx.fillStyle = K.c[1];
-      ctx.beginPath(); ctx.arc(lx, cy + 226, 5, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(lx, cy + 242, 5, 0, 7); ctx.fill();
       ctx.strokeStyle = K.ring; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.arc(lx, cy + 226, 5, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(lx, cy + 242, 5, 0, 7); ctx.stroke();
       ctx.fillStyle = '#8a6f52'; ctx.font = '700 10.5px ' + UI;
-      ctx.fillText(K.name, lx, cy + 240);
+      ctx.fillText(K.name, lx, cy + 256);
       lx += step;
     }
     ctx.restore();
@@ -1954,7 +2001,8 @@
       '画布css=' + cv.style.width + '×' + cv.style.height + '  物理=' + cv.width + '×' + cv.height,
       '逻辑=' + W + '×' + Math.round(H) + '  scale=' + S.toFixed(3) + '  桶口=' + mouthY + '  桶底=' + floorY,
       '页面总高=' + document.documentElement.scrollHeight + '/' + window.innerHeight,
-      '状态=' + state + '  弹珠=' + balls + '  发射=' + launched + '  累计加球=+' + gain + '  最高=' + best,
+      '状态=' + state + '  生命=' + lives + '  分数=' + score + '  发射=' + launched +
+        '  累计得分=' + gain + '  最高分=' + best,
       '钉场=' + pegs.length + ' 颗(种子 ' + fieldSeed + ')  上一桶=' + lastBucket +
         (lastBucket >= 0 ? '(' + NUMS[lastBucket] + ')' : ''),
       '撞针分布=' + PEG_KINDS.map((K, i) => K.name + '(' + K.rest.toFixed(2) + ')×' + pegCounts()[i]).join(' ') +
@@ -2025,9 +2073,11 @@
 
   /* ---------- 测试钩子 ---------- */
   window.__marble = () => ({
-    state, balls, launched, gain, runPeak, best, lastBucket, pegHits, flights,
+    state, lives, score, launched, gain, best, lastBucket, pegHits, flights,
+    /* 兼容旧名：balls = 生命、runPeak = 分数（分数与生命分开前的旧语义） */
+    balls: lives, runPeak: score,
     lastSpeed, charge, charging, hintOn, soundOn,
-    NUMS: NUMS.slice(), START_BALLS, MINV, MAXV, CHARGE_T,
+    NUMS: NUMS.slice(), START_BALLS, START_LIVES, MINV, MAXV, CHARGE_T,
     G, RB, RP, REST_PEG, REST_WALL, FLIGHT_CAP,
     W, H, fieldL, fieldR, fieldT, mouthY, floorY, slotW, cannonX: CANNON_X,
     pegCount: pegs.length, fieldSeed,
@@ -2062,7 +2112,7 @@
     if(!flyers.length) flyers = [mkBall(CANNON_X, CANNON_MOUTH, 0, 0)];
     const n = landBucket(flyers[0], clamp(i | 0, 0, NUMS.length - 1));
     settleFlyers();
-    return { n, balls, gain, roundGain };
+    return { n, lives, balls: lives, score, gain, roundGain };
   };
   window.__marbleSetBall = o => {                     // 测物理用（卡死看门狗等）
     flyers = [ mkBall(o.x, o.y, o.vx || 0, o.vy || 0) ];
@@ -2092,6 +2142,7 @@
   };
   window.__marbleAddPegHits = n => { roundPegHits += (n | 0); return roundPegHits; };
   window.__marbleExplode = (x, y, r, kill) => explode(x, y, r === undefined ? MINE_R : r, !!kill);
+  window.__marbleChainMax = () => CHAIN_MAX;
   window.__marbleEndRound = () => endRound();
   window.__marbleDraw = () => { draw(); return true; };
   window.__marbleSpawnItems = k => { spawnItems(k); return items.length; };
