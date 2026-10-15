@@ -30,14 +30,32 @@
   .top button:active{background:var(--acc);border-color:var(--acc);color:#fff}
 
   /* ★ 方向控制与发射键物理分离：左边 ◀▶ 只管调角度，右边大键只管蓄力/发射。
-     这样「调方向」永远不会占用「发射时机」——手指在左边转炮口时，右边的大键照样随时能按。 */
-  .ctl{width:100%;max-width:420px;flex:0 0 auto;display:flex;gap:8px;margin-top:8px;height:58px}
-  .ctl .aim{width:54px;flex:0 0 auto;font-size:20px;line-height:1;border-radius:13px;
-            border:1px solid var(--line);background:var(--card);color:var(--txt);font-family:inherit;touch-action:none}
+     这样「调方向」永远不会占用「发射时机」——手指在左边转炮口时，右边的大键照样随时能按。
+
+     ★ 用户反馈：竖屏手机上方向键太小、按着别扭、容易按错。原因是原来只有 54×58px，
+       而且 ◀ 与 ▶ 之间只隔 8px —— 拇指点下去很容易落进中间那道缝里（按错方向）。
+       现在：① 按钮放大到 76×72；② **两个方向键之间额外留 14px**（`.aim + .aim`），
+       与发射键之间只有 10px —— 把「最容易按错的那一对」拉开，而不是平均用力；
+       ③ 箭头字号 20 → 28px，按下去看得更清楚。 */
+  .ctl{width:100%;max-width:420px;flex:0 0 auto;display:flex;gap:10px;margin-top:8px;height:72px}
+  .ctl .aim{width:76px;flex:0 0 auto;font-size:28px;line-height:1;border-radius:15px;
+            border:1px solid var(--line);background:var(--card);color:var(--txt);font-family:inherit;
+            touch-action:none;padding:0}
+  /* ◀ 与 ▶ 之间再拉开一点（方向键是最容易按错的一对） */
+  .ctl .aim + .aim{margin-left:14px}
   .ctl .aim:active{background:var(--acc);border-color:var(--acc);color:#fff}
-  .ctl .fire{flex:1;font-size:15px;font-weight:600;border-radius:13px;border:1px solid #e0b34c;
-             background:#d24534;color:#fff;font-family:inherit;letter-spacing:2px;touch-action:none}
+  /* 发射键：文字用 clamp 随屏宽收，窄屏（320px）也不会换行顶破按钮 */
+  .ctl .fire{flex:1;min-width:0;font-size:clamp(12px,3.6vw,15px);font-weight:600;border-radius:15px;
+             border:1px solid #e0b34c;background:#d24534;color:#fff;font-family:inherit;
+             letter-spacing:clamp(0px,0.45vw,2px);touch-action:none;padding:0 4px}
   .ctl .fire:active{filter:brightness(.9)}
+  /* 极窄屏（<330px）再收一档，保证三个键都放得下 */
+  @media (max-width:330px){
+    .ctl{gap:8px;height:66px}
+    .ctl .aim{width:64px;font-size:24px;border-radius:13px}
+    .ctl .aim + .aim{margin-left:10px}
+    .ctl .fire{border-radius:13px}
+  }
 
   #stage{width:100%;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;touch-action:none}
   /* ★ 嵌在很矮的容器里（预览面板的小 iframe）时放开滚动：否则画布被压成一条缝，

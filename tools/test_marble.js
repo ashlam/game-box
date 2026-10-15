@@ -22,7 +22,8 @@ const path = require('path');
 const vm = require('vm');
 
 const HTML = process.argv[2] || path.join(__dirname, '..', 'web', 'marble', 'index.html');
-const script = fs.readFileSync(HTML, 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
+const RAW_HTML = fs.readFileSync(HTML, 'utf8');
+const script = RAW_HTML.match(/<script>([\s\S]*?)<\/script>/)[1];
 
 /* ---------------- 桩 ---------------- */
 const gradient = { addColorStop() {} };
@@ -2076,6 +2077,59 @@ section('30) ★ 金冠每局重掷 · 启动用随机种子（修「从没见�
   const a = M().crownI;
   reset(12345);
   ok(M().crownI === a, '★ 显式传种子仍可复现同一局（crownI=' + a + '）');
+}
+
+/* ===== 31) ★ 方向键尺寸（竖屏手机按着别扭/容易按错）===== */
+section('31) ★ 炮口方向键：竖屏手机上够大、两键之间够开（用户反馈）');
+{
+  /* ⚠️ 这几条是**源码级**断言，不是像素测量 —— 本测试跑在假 DOM 里，
+   *   CSS 完全不生效（clientWidth 都是写死的）。真正的尺寸由
+   *   tools/test_marble_ui.js（真 Chrome 无头测量）负责，两者互补：
+   *   这里守住「别把关键样式删掉/改小」，那边守住「真机上确实够大」。 */
+  const css = RAW_HTML.match(/<style>([\s\S]*?)<\/style>/)[1];
+  const rule = sel => {
+    const m = new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\{([^}]*)\\}').exec(css);
+    return m ? m[1] : '';
+  };
+  const px = (txt, prop) => {
+    const m = new RegExp(prop + '\\s*:\\s*([\\d.]+)px').exec(txt);
+    return m ? parseFloat(m[1]) : NaN;
+  };
+
+  const aim = rule('.ctl .aim');
+  const aimW = px(aim, 'width');
+  ok(aimW >= 64, '★ 方向键宽度 ≥ 64px（实际 ' + aimW + 'px；原来是 54px，太小）');
+  const ctlH = px(rule('.ctl'), 'height');
+  ok(ctlH >= 64, '★ 方向键高度 ≥ 64px（控件条高 ' + ctlH + 'px；原来是 58px）');
+  const aimFont = px(aim, 'font-size');
+  ok(aimFont >= 24, '★ 箭头字号 ≥ 24px（实际 ' + aimFont + 'px；原来是 20px）');
+
+  /* ★ 关键：两键之间的间距必须**明显大于**普通 gap，
+   *   否则拇指点下去容易落进缝里 → 按错方向（用户反馈的「容易按错」）。 */
+  const pairRule = rule('.ctl .aim + .aim');
+  const pairGap = px(pairRule, 'margin-left');
+  const baseGap = px(rule('.ctl'), 'gap');
+  ok(pairGap > 0, '★ 专门给「两个方向键之间」加了间距（margin-left: ' + pairGap + 'px）');
+  ok(pairGap > baseGap,
+     '★ 方向键间距(' + pairGap + ') > 控件条基础间距(' + baseGap + ') —— 把最容易按错的那一对拉开');
+  ok(pairGap >= 10, '★ 方向键间距 ≥ 10px（实际 ' + pairGap + 'px；原来是 8px）');
+
+  // 触摸目标下限（Apple HIG / Material 都推荐 ≥44px）
+  ok(aimW >= 44 && ctlH >= 44, '★ 达到 44px 最小触摸目标（' + aimW + '×' + ctlH + '）');
+
+  // 窄屏兜底：320px 级手机也不能挤爆
+  const mq = /@media\s*\(max-width:\s*330px\)\s*\{([\s\S]*?)\n\s*\}/.exec(css);
+  ok(!!mq, '★ 有极窄屏（≤330px）的适配块');
+  if (mq) {
+    const block = mq[1];
+    const narrowAim = px(block, 'width');
+    ok(narrowAim >= 56, '★ 窄屏方向键仍有 ' + narrowAim + 'px（不会缩到按不着）');
+  }
+
+  // 发射键文字要能自适应（窄屏不换行顶破按钮）
+  ok(/font-size\s*:\s*clamp\(/.test(rule('.ctl .fire')),
+     '★ 发射键文字用 clamp() 随屏宽缩放（窄屏不换行）');
+  ok(/min-width\s*:\s*0/.test(rule('.ctl .fire')), '★ 发射键设了 min-width:0（flex 子项才肯收缩、不溢出）');
 }
 
 /* ================= 汇总 ================= */
