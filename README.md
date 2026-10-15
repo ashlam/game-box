@@ -99,7 +99,7 @@ node tools/test_blockpuzzle.js  # 96 项
 node tools/test_breakout.js     # 23 项
 node tools/test_frog.js         # 53 项
 node tools/test_klotski.js      # 190 项
-node tools/test_marble.js       # 380 项
+node tools/test_marble.js       # 399 项
 node tools/test_othello.js      # 黑白棋整局对局 + 计时断言
 node tools/test_parking.js      # 停车场华容道：77 项
 node tools/test_sokoban.js      # 两套关卡逐关重放解法：30 项
@@ -186,6 +186,24 @@ node tools/bench_marble_entrance.js 12 0.35 random   # 第 4 个参数 random = 
 > ⚠️ 教训：`bench` 的瞄准模型会显著影响结论。一开始用「随机瞄准」测，得出「新行为比旧行为差 290%」的
 > 吓人结论 —— 其实是把 `L/R` 的设计意图（左边加倍、右边变负，**本来就该往左边打**）当成了随机挨罚。
 > 换成「打最值钱的桶」后差距就消失了。
+
+### 弹珠乐园：首屏玩法提示（可关闭）
+
+用户反馈过两个问题，都已修：
+
+1. **位置太靠下**：原来 `cy = (fieldT+mouthY)*0.44` 只是个凭感觉的系数，实际上会让面板底边
+   （**507**）压过桶口（`mouthY=498`）。现在改成**按面板真实高度在场地里居中**：
+   面板变成 `132..454`、中心 293 对齐场地中心 299，完整落在场地内。
+   矩形计算抽成 `hintRect()`，**绘制与命中检测共用同一份**（避免「画在一处、点判在另一处」）。
+2. **没有关闭按钮、不能触屏关闭**：以前只能靠「按发射键/方向键」顺带关掉，
+   想先看清规则就得先开一枪。现在三种方式都能关：
+   - 右上角 **✕ 按钮**（看得见的关闭入口）
+   - **轻点画面任意处**（触屏；命中判定刻意宽松，`hintOn` 期间画布上任意轻点都关）
+   - **Esc 键**（键盘）
+
+   关闭逻辑统一走 `closeHint()`（幂等，返回是否真的关了）。
+   ⚠️ 画布的 `pointerdown` **只在 `hintOn` 时消费事件**，平时绝不拦截 ——
+   画布本身不参与蓄力（控制已分离到 ◀▶ 与发射键），所以不会和游戏操作打架。
 
 ### 弹珠乐园：会挪窝的金冠（`crownI`）
 

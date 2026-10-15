@@ -905,7 +905,7 @@
      ============================================================ */
   function pressStart(){
     if(state === 'over' || state === 'play') return;      // 有球在飞不给蓄力
-    if(hintOn){ hintOn = false; }
+    closeHint();                                          // 一开始蓄力就收起玩法提示
     if(!charging){
       charging = true; charge = 0;
       audio(); startBgm();                                 // 首次触摸解锁音频
@@ -938,7 +938,7 @@
        画布本身不再响应蓄力 —— 免得你为了调方向在画面上乱按，反而错过发射时机。 */
   function bindHold(el, dir){
     if(!el || !el.addEventListener) return;
-    const down = e => { e.preventDefault(); aimDir = dir; if(hintOn) hintOn = false; };
+    const down = e => { e.preventDefault(); aimDir = dir; closeHint(); };
     const up   = e => { e.preventDefault(); if(aimDir === dir) aimDir = 0; };
     el.addEventListener('pointerdown', down);
     el.addEventListener('pointerup', up);
@@ -958,14 +958,31 @@
       e.preventDefault();
       if(!e.repeat) pressStart();
     }
-    if(e.key === 'ArrowLeft'  || e.key === 'a' || e.key === 'A'){ aimDir = -1; if(hintOn) hintOn = false; }
-    if(e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D'){ aimDir =  1; if(hintOn) hintOn = false; }
+    if(e.key === 'ArrowLeft'  || e.key === 'a' || e.key === 'A'){ aimDir = -1; closeHint(); }
+    if(e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D'){ aimDir =  1; closeHint(); }
     if(e.key === 'r' || e.key === 'R'){ chargeOff(); reset(); }
   });
   document.addEventListener('keyup', e => {
     if(e.code === 'Space' || e.key === ' ') { e.preventDefault(); pressEnd(); }
     if(['ArrowLeft','ArrowRight','a','A','d','D'].indexOf(e.key) >= 0) aimDir = 0;
   });
+  /* ★ 关闭玩法提示：Esc 键（键盘玩家）—— 触屏/鼠标走下面的 canvas 轻点 */
+  document.addEventListener('keydown', e => {
+    if(e.key === 'Escape' && closeHint()) e.preventDefault();
+  });
+
+  /* ★ 轻点画面关闭玩法提示（用户要求「能触屏关闭」）。
+   *   命中检测刻意做得宽松：hintOn 期间面板占了大半个画面，用户要的是「轻点就能关」，
+   *   所以画布上任意轻点都关闭 —— ✕ 按钮只是给一个「看得见的关闭入口」。
+   *   ⚠️ 只在 hintOn 时消费事件，平时绝不拦截：画布本身不参与蓄力
+   *   （控制已分离到 ◀▶ 与发射键），所以这里不会和游戏操作打架。 */
+  if(cv && cv.addEventListener){
+    cv.addEventListener('pointerdown', e => {
+      if(!hintOn) return;
+      e.preventDefault();
+      closeHint();
+    });
+  }
 
   /* ============================================================
      物理与结算
@@ -1865,13 +1882,41 @@
     return c;
   }
 
+  /* ---------- 首屏玩法提示（可关闭） ----------
+   *  ★ 用户反馈过两个问题：
+   *    ① 位置太靠下 —— 原来 cy = (fieldT+mouthY)*0.44 只是个凭感觉的系数，
+   *       实际面板（高 306）会压到桶口以下。现在改成**按面板高度在场地里真正居中**。
+   *    ② 没有关闭按钮、也不能触屏关闭 —— 以前只能靠「按发射键/方向键」顺带关掉，
+   *       玩家想先看清规则就得先开一枪。现在：右上角 ✕ 按钮 + 轻点画面任意处 +
+   *       Esc 键，三种方式都能关。 */
+  const HINT_H = 322;                                  // 面板高（含底部「轻点关闭」那行）
+  const HINT_PAD = 62;                                 // 面板顶到「标题基线」的距离
+  /** 面板矩形（绘制与命中检测共用同一份计算，避免「画在一处、点判在另一处」） */
+  function hintRect(){
+    const hw = Math.min(132, (W - 14) / 2);            // 宽度自适应，窄屏不溢出
+    // 在「场地可视区」（fieldT..mouthY）里垂直居中；再上移 6px 给底部桶口留点余量
+    const cy = (fieldT + mouthY) / 2 - (HINT_H / 2 - HINT_PAD) - 6;
+    return { cx: W / 2, cy, hw, top: cy - HINT_PAD, h: HINT_H,
+             left: W / 2 - hw, w: hw * 2 };
+  }
+  /** ✕ 按钮的圆心与半径（放在面板右上角内侧） */
+  function hintCloseBtn(){
+    const r = hintRect();
+    return { x: r.left + r.w - 16, y: r.top + 16, rad: 9.5 };
+  }
+  function closeHint(){
+    if(!hintOn) return false;
+    hintOn = false;
+    return true;
+  }
+
   function drawHint(){
-    const cx = W / 2, cy = (fieldT + mouthY) * 0.44;
-    const hw = Math.min(132, (W - 14) / 2);          // 宽度自适应，窄屏不溢出
+    const r = hintRect();
+    const { cx, cy, hw, top } = r;
     ctx.save();
     ctx.fillStyle = 'rgba(255,252,246,.93)';
     ctx.strokeStyle = '#e0b34c'; ctx.lineWidth = 2;
-    roundRect(cx - hw, cy - 62, hw * 2, 306, 14); ctx.fill(); ctx.stroke();
+    roundRect(r.left, top, r.w, r.h, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = '#c23b2c'; ctx.font = '800 24px ' + UI;
     ctx.fillText('弹珠乐园', cx, cy - 38);
@@ -1913,6 +1958,21 @@
       ctx.fillText(K.name, lx, cy + 228);
       lx += step;
     }
+    /* ★ 底部「轻点关闭」提示 + 右上角 ✕ 按钮（用户要求能触屏关掉） */
+    ctx.fillStyle = 'rgba(90,66,49,.62)'; ctx.font = '600 10.5px ' + UI;
+    ctx.fillText('轻点画面任意处关闭', cx, cy + 248);
+    const btn = hintCloseBtn();
+    ctx.fillStyle = '#e8dcc8';
+    ctx.beginPath(); ctx.arc(btn.x, btn.y, btn.rad, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#c9a24a'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(btn.x, btn.y, btn.rad, 0, 7); ctx.stroke();
+    ctx.strokeStyle = '#7a5a2e'; ctx.lineWidth = 1.9; ctx.lineCap = 'round';
+    const d = btn.rad * 0.42;
+    ctx.beginPath();
+    ctx.moveTo(btn.x - d, btn.y - d); ctx.lineTo(btn.x + d, btn.y + d);
+    ctx.moveTo(btn.x + d, btn.y - d); ctx.lineTo(btn.x - d, btn.y + d);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
     ctx.restore();
     ctx.textAlign = 'left';
   }
@@ -2132,7 +2192,7 @@
     state, lives, score, launched, gain, best, lastBucket, pegHits, flights,
     /* 兼容旧名：balls = 生命、runPeak = 分数（分数与生命分开前的旧语义） */
     balls: lives, runPeak: score,
-    lastSpeed, charge, charging, hintOn, soundOn,
+    lastSpeed, charge, charging, hintOn, soundOn, HINT_H,
     NUMS: NUMS.slice(), START_BALLS, START_LIVES, MINV, MAXV, CHARGE_T,
     WIN_I, crownI, CROWN_DEF_I, CROWN_MOVE_CHANCE, crownFlash,
     G, RB, RP, REST_PEG, REST_WALL, FLIGHT_CAP,
@@ -2176,7 +2236,9 @@
     state = 'play';
   };
   window.__marbleSetAim = a => { aim = clamp(+a || 0, -AIM_MAX, AIM_MAX); return aim; };
-  window.__marbleAimDir = d => { aimDir = +d || 0; };
+  /* ★ 模拟「按住方向键」：真实 keydown 分支是 `aimDir = dir; closeHint();`，
+   *   钩子必须照做，否则测试测的就不是真实路径了（曾经漏掉 closeHint） */
+  window.__marbleAimDir = d => { aimDir = +d || 0; if(aimDir) closeHint(); };
   window.__marbleFire = c => { fire(clamp(c === undefined ? 0 : +c, 0, 1)); return flyers.length; };
   window.__marblePutItem = (kind, x, y, life) => {
     const it = { id: ++itemSeq, x, y, kind, t: 0, life: life === undefined ? ITEM_LIFE : (life | 0) };
@@ -2202,6 +2264,11 @@
   window.__marbleChainMax = () => CHAIN_MAX;
   window.__marbleCrownText = () => crownText();
   window.__marbleSetCrown = i => { crownI = clamp(i | 0, 0, NUMS.length - 1); return crownI; };
+  /* ★ 玩法提示：位置与关闭（测试用） */
+  window.__marbleHintRect = () => hintRect();
+  window.__marbleHintCloseBtn = () => hintCloseBtn();
+  window.__marbleCloseHint = () => closeHint();
+  window.__marbleHintTap = () => closeHint();       // 模拟「轻点画面关闭」
   window.__marbleEndRound = () => endRound();
   window.__marbleDraw = () => { draw(); return true; };
   window.__marbleSpawnItems = k => { spawnItems(k); return items.length; };

@@ -1777,6 +1777,72 @@ section('26) ★ 金冠：默认在 8 号筒 · 每局 20% 移到别的筒 · �
   ok(dOk, '★ 金冠在 0/1/4/8 号格 + 被砸中的闪光，绘制都不报错', dErr);
 }
 
+/* ===== 27) ★ 首屏玩法提示：位置上移 + 可关闭（✕ 按钮 / 轻点 / Esc） ===== */
+section('27) ★ 首屏玩法提示：位置在场地内居中 · 有 ✕ 按钮 · 轻点/按键都能关');
+{
+  reset(1);
+  const s = M();
+
+  // ---- 位置：必须完整落在场地可视区内（旧算法 bottom=507 会压过桶口 498）----
+  const r = win.__marbleHintRect();
+  ok(r.top >= s.fieldT, '★ 面板顶不越出场地上沿（top=' + r.top.toFixed(1) + ' ≥ fieldT=' + s.fieldT + '）');
+  ok(r.top + r.h <= s.mouthY,
+     '★ 面板底不压到桶口（bottom=' + (r.top + r.h).toFixed(1) + ' ≤ mouthY=' + s.mouthY + '）' +
+     ' —— 旧算法是 ' + (((s.fieldT + s.mouthY) * 0.44) - 62 + 306).toFixed(1) + '，会压过桶口');
+  const panelCy = r.top + r.h / 2, fieldCy = (s.fieldT + s.mouthY) / 2;
+  ok(Math.abs(panelCy - fieldCy) < 12,
+     '★ 面板在场地里基本居中（面板中心 ' + panelCy.toFixed(1) + ' vs 场地中心 ' + fieldCy.toFixed(1) + '）');
+  ok(r.left >= 0 && r.left + r.w <= s.W, '★ 面板不越出左右边界（' + r.left.toFixed(1) + '..' + (r.left + r.w).toFixed(1) + '）');
+
+  // ---- ✕ 按钮：存在、且在面板右上角内侧 ----
+  const btn = win.__marbleHintCloseBtn();
+  ok(btn.x > r.left + r.w / 2, '★ ✕ 按钮在面板右半边（x=' + btn.x.toFixed(1) + '）');
+  ok(btn.x + btn.rad <= r.left + r.w && btn.y - btn.rad >= r.top,
+     '★ ✕ 按钮完整落在面板内（圆心 ' + btn.x.toFixed(1) + ',' + btn.y.toFixed(1) + '）');
+
+  // ---- 关闭方式 1：✕ 按钮 / 显式关闭 ----
+  reset(1);
+  ok(M().hintOn === true, '（前置）开局提示显示中');
+  ok(win.__marbleCloseHint() === true, '★ 可以显式关闭（模拟点 ✕ 按钮）');
+  ok(M().hintOn === false, '★ 关掉后 hintOn=false');
+  ok(win.__marbleCloseHint() === false, '★ 已经关了再关返回 false（幂等，不报错）');
+
+  // ---- 关闭方式 2：轻点画面 ----
+  reset(1);
+  ok(M().hintOn === true, '（前置）重开后提示又显示');
+  ok(win.__marbleHintTap() === true, '★ 轻点画面即可关闭（用户要求的触屏关闭）');
+  ok(M().hintOn === false, '★ 轻点后提示消失');
+
+  // ---- 关闭方式 3：原有路径仍然有效（发射 / 方向键）----
+  reset(1);
+  press();
+  ok(M().hintOn === false, '★ 按住发射键也会收起提示（原有路径保留）');
+  reset(1);
+  win.__marbleAimDir(-1); run(2); win.__marbleAimDir(0);
+  ok(M().hintOn === false, '★ 按方向键也会收起提示（原有路径保留）');
+
+  // ---- 关掉之后不会再画（不再挡住画面）----
+  reset(1);
+  win.__marbleCloseHint();
+  resetDrawRec();
+  win.__marbleDraw();
+  ok(!drawRec.texts.some(t => t.txt === '弹珠乐园'),
+     '★ 关掉后不再绘制提示面板（画面不被挡住）');
+  // 显示时则会画（含新增的「轻点画面任意处关闭」和 ✕ 的两笔交叉线）
+  reset(1);
+  resetDrawRec();
+  win.__marbleDraw();
+  ok(drawRec.texts.some(t => t.txt === '弹珠乐园'), '★ 提示显示时会画面板标题');
+  ok(drawRec.texts.some(t => t.txt === '轻点画面任意处关闭'),
+     '★ 面板底部有「轻点画面任意处关闭」提示文案');
+
+  // ---- 绘制不报错（含 ✕ 按钮）----
+  let dOk = true, dErr = '';
+  try{ for(let f = 0; f < 4; f++){ run(1); win.__marbleDraw(); } }
+  catch(e){ dOk = false; dErr = e.message; }
+  ok(dOk, '★ 提示面板（含 ✕ 按钮）绘制不报错', dErr);
+}
+
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');
