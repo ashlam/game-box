@@ -40,6 +40,9 @@
   .ctl .fire:active{filter:brightness(.9)}
 
   #stage{width:100%;flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;touch-action:none}
+  /* ★ 嵌在很矮的容器里（预览面板的小 iframe）时放开滚动：否则画布被压成一条缝，
+     看着就是「一整片黑 + 底下只剩按钮」 */
+  html.squeezed, html.squeezed body{overflow:auto}
   canvas{display:block;border-radius:14px;border:1px solid var(--line);touch-action:none;
           box-shadow:0 10px 30px rgba(0,0,0,.45)}
 
@@ -78,7 +81,7 @@
 </head>
 <body>
 
-<div class="top">
+<div class="top" id="topbar">
   <a href="/">‹</a>
   <h1>弹珠乐园</h1>
   <button id="btnSound">🔊 音效</button>
@@ -87,7 +90,7 @@
 
 <div id="stage"><canvas id="cv"></canvas></div>
 
-<div class="ctl">
+<div class="ctl" id="ctlbar">
   <button id="btnLeft" class="aim" aria-label="炮口左转">◀</button>
   <button id="btnRight" class="aim" aria-label="炮口右转">▶</button>
   <button id="btnFire" class="fire">按住蓄力 · 松手发射</button>
@@ -145,6 +148,7 @@
    *     生成区间 y0=126 > y1=95 → 一颗钉都放不下（浏览器里实测 钉 0 颗，已复现）。
    *   固定高之后：H 恒为 560 → 场地恒为 100..498，任何屏幕宽高比都能放下 10 行钉。 */
   const HFIX = 560;            // 逻辑高固定
+  const MIN_STAGE_H = 320;     // ★ 画布区域的最小可用高度（低于它就硬撑 + 放开滚动，见 layout）
   const WFIX = 360;            // ★ 逻辑宽也固定（竖屏比例）——转屏/换设备都不再改变关卡布局
   let W = WFIX;                // 逻辑宽 = 固定值（不再随屏幕比例变化）
   let H = HFIX, S = 1, OFFX = 0, OFFY = 0;   // OFFX/OFFY = 横屏时的留边偏移
@@ -1536,7 +1540,7 @@
     ctx.save();
     ctx.fillStyle = 'rgba(255,252,246,.93)';
     ctx.strokeStyle = '#e0b34c'; ctx.lineWidth = 2;
-    roundRect(cx - hw, cy - 62, hw * 2, 212, 14); ctx.fill(); ctx.stroke();
+    roundRect(cx - hw, cy - 62, hw * 2, 236, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = '#c23b2c'; ctx.font = '800 24px ' + UI;
     ctx.fillText('弹珠乐园', cx, cy - 38);
@@ -1553,20 +1557,20 @@
     ctx.fillText('球撞到彩色圆牌 = 吃到道具', cx, cy + 78);
     ctx.fillStyle = '#8a6f52'; ctx.font = '11px ' + UI;
     ctx.fillText('效果只管这一回合，回合结束复原', cx, cy + 94);
-    ctx.fillStyle = '#b4483f'; ctx.font = '11px ' + UI;
+    ctx.fillStyle = '#b4483f'; ctx.font = '700 11px ' + UI;
     ctx.fillText('道具最多留 ' + ITEM_LIFE + ' 回合，最后一回合闪烁', cx, cy + 110);
     // ★ 撞针弹力图鉴：4 档颜色 = 4 档弹力（每局分布随机）
     ctx.fillStyle = '#7a4b00'; ctx.font = '700 11px ' + UI;
-    ctx.fillText('撞针弹力（每局随机）', cx, cy + 112);
+    ctx.fillText('撞针弹力（每局随机）', cx, cy + 132);
     const step = (hw * 2 - 24) / PEG_KINDS.length;
     let lx = cx - hw + 12 + step / 2;
     for(const K of PEG_KINDS){
       ctx.fillStyle = K.c[1];
-      ctx.beginPath(); ctx.arc(lx, cy + 124, 5, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(lx, cy + 146, 5, 0, 7); ctx.fill();
       ctx.strokeStyle = K.ring; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.arc(lx, cy + 124, 5, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(lx, cy + 146, 5, 0, 7); ctx.stroke();
       ctx.fillStyle = '#8a6f52'; ctx.font = '700 10.5px ' + UI;
-      ctx.fillText(K.name, lx, cy + 138);
+      ctx.fillText(K.name, lx, cy + 160);
       lx += step;
     }
     ctx.restore();
@@ -1604,10 +1608,51 @@
   }
 
   /* ---------- 布局（height:100% + 溢出兜底） ---------- */
+  let layoutRetry = 0;               // 拿不到 stage 尺寸时的重试计数
+  let layoutEstimated = false;       // 上一次布局是不是用「估算尺寸」画的
+  let layoutSqueezed = false;        // 上一次布局有没有走「容器太矮」的兜底
+
+  /** 容器太矮时给 <html> 挂个 class（CSS 里放开滚动）。classList 缺失的环境直接跳过 */
+  function setSqueezed(on){
+    const root = document.documentElement;
+    if(!root || !root.classList) return;
+    if(on) root.classList.add('squeezed'); else root.classList.remove('squeezed');
+  }
+
+  /** 顶部栏 + 底部控制条一共占掉多少竖高（兜底估算画布可用高度时要用） */
+  function chromeHeight(){
+    let h = 0;
+    const t = $('topbar'), c = $('ctlbar');
+    if(t) h += t.offsetHeight || 0;
+    if(c) h += c.offsetHeight || 0;
+    return h;
+  }
+
   function layout(){
     const stage = $('stage');
-    const availW = stage.clientWidth, availH = stage.clientHeight;
-    if(!availW || !availH) return;
+    let availW = stage.clientWidth, availH = stage.clientHeight;
+    /* ★ 黑屏兜底：预览面板（iframe）/ WebView 的首帧里 stage 常常还没尺寸。
+     *   以前这里直接 return → 画布永远空着，用户看到的就是「一整片深色，底下只有按钮」。
+     *   现在：① 拿窗口尺寸估一版先画出来；② 再排几次重试，等真实布局就位后重算。 */
+    const noSize = !availW || !availH;
+    if(noSize){
+      if(!availW) availW = Math.max(240, (window.innerWidth || 360) - 8);
+      if(!availH) availH = Math.max(240, (window.innerHeight || 640) - chromeHeight() - 10);
+      if(layoutRetry < 40) setTimeout(() => { layoutRetry++; layout(); }, 80);
+    }else{
+      layoutRetry = 0;
+    }
+    /* ★ 容器太矮（预览面板塞在矮 iframe / 嵌入式视图里）：硬撑一块完整的场地出来，
+     *   并放开页面滚动 —— 用户滚一下就能看到整个机台，而不是一片黑只剩按钮。 */
+    const squeezed = availH < MIN_STAGE_H;
+    if(squeezed){
+      availH = MIN_STAGE_H;
+      stage.style.height = MIN_STAGE_H + 'px';
+    }else if(stage.style.height){
+      stage.style.height = '';
+    }
+    setSqueezed(squeezed);
+    layoutSqueezed = squeezed;
     // ★ 固定逻辑高：缩放由高度决定，逻辑宽随屏宽反推（见坐标系注释）
     // ★ 固定逻辑尺寸 + 居中留边：竖屏比例恒定，横屏时左右加黑边（关卡数据因此永远有效）
     S = Math.min(availH / HFIX, availW / WFIX);
@@ -1632,6 +1677,10 @@
       if(nh >= prevH) break;
       prevH = nh;
     }
+    /* 尺寸从「估算」变成「真实」：钉场是按旧场地生成的，重生成一次
+     *   （只在开局、还没发球时做，避免打断这一发） */
+    if(layoutEstimated && !noSize && state === 'ready' && !flyers.length) genPegs();
+    layoutEstimated = noSize;
     if(/[?&]debug/.test(location.search)) showDbg();
   }
 
@@ -1726,6 +1775,10 @@
   reset(1);                          // 固定种子起步（首局可预期），重开时随机
   window.addEventListener('resize', layout);
   window.addEventListener('orientationchange', () => setTimeout(layout, 250));
+  /* ★ 预览面板（iframe）里 window 不一定 resize，但 stage 的尺寸会变 —— 盯住它 */
+  if(window.ResizeObserver){
+    try{ new ResizeObserver(() => layout()).observe($('stage')); }catch(e){}
+  }
   if(!raf) raf = requestAnimationFrame(frame);
 
   /* ---------- 测试钩子 ---------- */
@@ -1740,7 +1793,7 @@
                            dead: !!p.dead, frozen: !!p.frozen })),
     pegMix: pegMix.slice(), pegDist: pegCounts(), pegTilt,
     PEG_KINDS: PEG_KINDS.map(k => ({ key: k.key, name: k.name, rest: k.rest })), PEG_CAP: PEG_CAP.slice(),
-    SPD_CAP, ITEM_RUN_CHANCE, ITEM_ROUND_CHANCE,
+    SPD_CAP, ITEM_RUN_CHANCE, ITEM_ROUND_CHANCE, MIN_STAGE_H, squeezed: layoutSqueezed,
     flyers: flyers.map(b => ({ x: b.x, y: b.y, vx: b.vx, vy: b.vy, flightT: b.flightT,
                                fire: b.fire, iceT: b.iceT, splitLv: b.splitLv, dead: b.dead })),
     ball: flyers[0] ? { x: flyers[0].x, y: flyers[0].y, vx: flyers[0].vx, vy: flyers[0].vy,

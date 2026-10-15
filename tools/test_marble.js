@@ -54,6 +54,10 @@ function mkCtx() {
     },
   });
 }
+function mkClassList() {
+  const s = new Set();
+  return { add: c => s.add(c), remove: c => s.delete(c), contains: c => s.has(c), _all: () => [...s] };
+}
 function mkEl(tag) {
   const set = new Set();
   const el = {
@@ -103,7 +107,7 @@ const sandbox = {
   document: {
     getElementById: id => els[id] || (els[id] = mkEl('div')),
     createElement: mkEl, addEventListener() {}, removeEventListener() {},
-    documentElement: { scrollHeight: 700 }, body: mkEl('body'),
+    documentElement: { scrollHeight: 700, classList: mkClassList() }, body: mkEl('body'),
     querySelector: () => null, querySelectorAll: () => [],
   },
   navigator: { userAgent: 'node-test' },
@@ -985,6 +989,35 @@ section('19) ★ 看门狗 C：撞顶会清掉旧计时器，靠「整秒位移�
   run(Math.round(0.6 / DT));
   const b = M().ball;
   ok(b && Math.abs(b.vx) > 10, '★ 1.5s 内被踢出垂直死循环（vx=' + (b ? b.vx.toFixed(1) : 'null') + '）');
+}
+
+/* ================= 20) ★ 容器尺寸兜底（黑屏事故） ================= */
+section('20) ★ 布局兜底：容器尺寸为 0 / 太矮，都不能变成「一片黑只剩按钮」');
+{
+  const sg = M();
+  ok(sg.MIN_STAGE_H === 320, '最小画布高度常数 MIN_STAGE_H=320（' + sg.MIN_STAGE_H + '）');
+  ok(sg.squeezed === false, '（前置）默认尺寸下没走兜底');
+
+  // 容器太矮（预览面板的小 iframe）：硬撑一块场地 + 放开滚动，别把画布压成一条缝
+  win.__marbleSetStage(390, 200);
+  ok(M().squeezed === true, '★ 容器只有 200px 高 → 判定为太矮');
+  ok(stageEl.style.height === '320px', '★ 画布区域硬撑到 320px（实际 ' + JSON.stringify(stageEl.style.height) + '）');
+  ok(sandbox.document.documentElement.classList.contains('squeezed'), '★ <html> 挂上 squeezed（CSS 里放开滚动）');
+  ok(M().W === sg.W && M().H === sg.H, '逻辑尺寸不受影响（' + M().W + '×' + M().H + '）');
+
+  // 恢复正常尺寸：撤掉硬撑
+  win.__marbleSetStage(390, 700);
+  ok(M().squeezed === false, '★ 高度够用 → 兜底撤销');
+  ok(!stageEl.style.height, '★ 硬撑的高度清掉（' + JSON.stringify(stageEl.style.height) + '）');
+  ok(!sandbox.document.documentElement.classList.contains('squeezed'), '★ <html> 的 squeezed 也摘掉');
+
+  // 尺寸为 0（首帧拿不到）：用窗口尺寸估算，先画出来 + 排重试，绝不 return 掉
+  win.__marbleSetStage(390, 0);
+  ok(M().W > 0 && M().H > 0 && sg.W > 0, '★ stage 高 0 时也照常画（逻辑 ' + M().W + '×' + M().H + '）');
+  ok(M().pegs.length > 20, '★ 钉场照常生成（' + M().pegs.length + ' 颗，没有因为尺寸 0 就空场）');
+  ok(typeof M().cannonX === 'number' && M().cannonX > 0, '★ 炮台坐标有效（cannonX=' + M().cannonX + '）');
+  win.__marbleSetStage(390, 700);
+  ok(M().squeezed === false, '（复位）恢复常规尺寸');
 }
 
 /* ================= 汇总 ================= */
