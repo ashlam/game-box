@@ -304,6 +304,25 @@ section('3) 几何不变量');
   ok(nearCenter === 0, '★ 炮口正下方无钉（否则球会原地上下打摆）（命中 ' + nearCenter + '）');
   ok(overlap === 0, '钉与钉不重叠（重叠对 ' + overlap + '）→ 球不会被夹死');
 
+  /* ★ 用户反馈：两侧有几颗钉离墙太近，弹力不够时球会被挤在钉与墙之间卡住。
+   *   几何下限：钉心距墙 < 2*RB + RP 时，贴墙的球（球心 x = fieldL+RB）必然与该钉重叠 ——
+   *   墙把球钳住、钉把球推出去，两边解算打架。所以生成时必须留够 WALL_PEG_GAP。 */
+  const CRIT = 2 * s.RB + s.RP;
+  ok(s.WALL_PEG_GAP >= CRIT,
+     '★ 留出的墙边距 ≥ 理论下限 2*RB+RP=' + CRIT + '（WALL_PEG_GAP=' + s.WALL_PEG_GAP + '）');
+  let tooNear = 0, nearest = 999;
+  for (let sd = 1; sd <= 60; sd++) {
+    reset(sd * 17 + 3);
+    for (const p of M().pegs) {
+      const d = Math.min(p.x - M().fieldL, M().fieldR - p.x);
+      nearest = Math.min(nearest, d);
+      if (d < CRIT) tooNear++;
+    }
+  }
+  ok(tooNear === 0,
+     '★ 60 局里没有任何一颗钉落在「危险区」（距墙 < ' + CRIT + ' 的钉 ' + tooNear +
+     ' 颗，最近的一颗距墙 ' + nearest.toFixed(1) + '）');
+
   // 同种子两次生成的钉场必须一模一样（确定性测试的前提）
   reset(9); const a = M().pegs.map(p => p.x.toFixed(3) + ',' + p.y.toFixed(3)).join('|');
   reset(9); const b = M().pegs.map(p => p.x.toFixed(3) + ',' + p.y.toFixed(3)).join('|');
@@ -1841,6 +1860,85 @@ section('27) ★ 首屏玩法提示：位置在场地内居中 · 有 ✕ 按钮
   try{ for(let f = 0; f < 4; f++){ run(1); win.__marbleDraw(); } }
   catch(e){ dOk = false; dErr = e.message; }
   ok(dOk, '★ 提示面板（含 ✕ 按钮）绘制不报错', dErr);
+}
+
+/* ===== 28) ★ 墙边撞针：球不会被挤在钉与墙之间 ===== */
+section('28) ★ 墙边撞针留距：小球不会被挤在「钉与墙」之间卡住（用户反馈）');
+{
+  reset(1);
+  const s0 = M();
+  const CRIT = 2 * s0.RB + s0.RP;
+
+  ok(s0.WALL_PEG_GAP >= CRIT,
+     '★ 墙边距 ≥ 理论下限（WALL_PEG_GAP=' + s0.WALL_PEG_GAP + ' ≥ 2*RB+RP=' + CRIT + '）');
+
+  /* 动态验证：真跑几十局，逐帧检查两种「被挤住」的病征：
+   *   ① 球贴墙的同时又紧贴某颗活钉（用户描述的状态）
+   *   ② 球心被推到墙内界之外（x < fieldL+RB）—— 墙与钉同帧各推一次的具体表现，
+   *      也是上面反证里确认过的机制。 */
+  const DT = 1 / 60;
+  let squeezedShots = 0, pushedShots = 0, shots = 0, worstFrames = 0, deepest = 999;
+  for (let r = 0; r < 40; r++) {
+    reset(3000 + r * 977); win.__marbleClearItems();
+    for (let shot = 0; shot < 12; shot++) {
+      if (M().state === 'over') break;
+      win.__marbleClearItems();
+      win.__marbleSetAim((shot % 7 - 3) / 6);
+      win.__marbleFire(0.35 + (shot % 5) * 0.15);
+      shots++;
+      let f = 0, frames = 0, hit = false, pushed = false;
+      while (M().state === 'play' && f < 1500) {
+        perfNow += 16; step(DT); f++;
+        const b = M().ball; if (!b) break;
+        const st = M();
+        if (b.x < st.fieldL + st.RB - 0.01) { pushed = true; deepest = Math.min(deepest, b.x); }
+        if ((b.x - st.fieldL < st.RB + 1.2) || (st.fieldR - b.x < st.RB + 1.2)) {
+          for (const p of st.pegs) {
+            if (p.dead) continue;
+            if (Math.hypot(b.x - p.x, b.y - p.y) < st.RB + st.RP + 1.0) { hit = true; break; }
+          }
+        }
+        if (hit) frames++;
+      }
+      if (hit) { squeezedShots++; worstFrames = Math.max(worstFrames, frames); }
+      if (pushed) pushedShots++;
+    }
+  }
+  ok(squeezedShots === 0,
+     '★ ' + shots + ' 发真实物理里没有一发出现「贴墙且紧贴钉」（出现 ' + squeezedShots +
+     ' 发；旧参数下约 4.7%）', squeezedShots ? '最长被挤 ' + worstFrames + ' 帧' : '');
+  ok(pushedShots === 0,
+     '★ ' + shots + ' 发里也没有一发的球心被顶到墙内界之外（出现 ' + pushedShots +
+     ' 发）', pushedShots ? '最深 x=' + deepest.toFixed(2) : '');
+
+  /* 反证：把一颗钉摆到墙边「危险区」以内，球塞进墙与钉之间 —— 必须能观察到
+   *   「钉把球推到墙内界之外」的现象，否则上面那条 0 发可能只是采样太少。
+   *   ⚠️ 断言的是「现象确实出现」（不是 ok(true) 走过场）。
+   *
+   *   注意这里**不能**用「球心贴墙且与钉重叠」当判据：物理每子步都会把重叠推出，
+   *   稳态下 d 恒等于 RB+RP（不重叠）。真正的病征是**球心被推到墙内界之外**
+   *   （x < fieldL + RB）—— 墙和钉在同一帧里各推一次，钉把球顶穿了墙。 */
+  reset(1); win.__marbleClearFx(); win.__marbleClearItems();
+  const st = M();
+  const probeY = st.fieldT + 120;
+  const victim = M().pegs.find(p => p.y > st.fieldT + 60 && p.y < st.mouthY - 60);
+  ok(!!victim, '（反证前置）找到一颗可用于挪位的钉');
+  if (victim) {
+    // 钉心距墙 15（< CRIT=18，正是旧参数允许、仍会把球顶穿墙的距离）
+    win.__marbleSetPegPos(victim.i, st.fieldL + 15, probeY);
+    const pAt = M().pegs[victim.i];
+    win.__marbleSetBall({ x: st.fieldL + st.RB, y: probeY, vx: 0, vy: 0 });
+    let pushedIntoWall = 0, deepest = st.fieldL + st.RB;
+    for (let f = 0; f < 240 && M().flyers.length; f++) {
+      perfNow += 16; step(DT);
+      const b = M().ball; if (!b) break;
+      if (b.x < st.fieldL + st.RB - 0.01) { pushedIntoWall++; deepest = Math.min(deepest, b.x); }
+    }
+    ok(pushedIntoWall > 0,
+       '★ 反证成立：钉距墙 ' + (pAt.x - st.fieldL).toFixed(0) + ' < ' + CRIT +
+       ' 时，钉会把球顶到墙内界之外（' + pushedIntoWall + ' 帧，最深的球心 x=' +
+       deepest.toFixed(2) + ' < 合法下限 ' + (st.fieldL + st.RB).toFixed(2) + '）→ 留距是必要的');
+  }
 }
 
 /* ================= 汇总 ================= */

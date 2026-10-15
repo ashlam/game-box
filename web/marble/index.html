@@ -203,6 +203,18 @@
   const FLIGHT_CAP = 14;            // 单球超时兜底（正常远小于此值）
   const CANNON_MOUTH = 92;
   const SPD_CAP = 820;              // ★ 速度上限：超弹钉会「加能量」，封顶防穿钉（820/120=6.8 < r球+r钉=11.5）
+  /* ★ 撞针离左右墙的最小距离（用户反馈：两侧有几颗钉离墙太近，弹力不够时
+   *   小球会被挤在「钉与墙」之间卡住）。
+   *
+   *   几何推导：球贴墙时球心 x = fieldL + RB = 12.5；球与钉不重叠要求中心距 ≥ RB+RP = 11.5。
+   *   所以钉心距墙若 < 2*RB + RP = 18，贴墙的球**必然**与这颗钉重叠 —— 两边解算互相打架：
+   *   墙把球钳回 x=12.5，钉又把球推出去，弹力不足（软钉泄能）时就出不来。
+   *
+   *   取值：扫了 12/18/20/22/24/26/30，用 200 局 × 12 发实测「被挤住」的发数：
+   *     12 → 104/2223（4.7%）  18 → 31/2236  20 → **0/2225**  22 → 0，更大也都 0。
+   *   所以取刚好够用的 20（不再往上加）：钉数只从 70 降到 67，
+   *   钉档占比分布与原来基本一致（rMax p95 53.8% vs 旧 53.7%），手感改动最小。 */
+  const WALL_PEG_GAP = 20;          // 撞针距左右墙的最小距离
 
   /* ---------- ★ 撞针（钉子）分 4 档弹力：颜色区分，每局分布随机 ----------
    *   rest < 1 泄能（球越弹越弱）→ rest > 1 加能（球会被顶回上方）
@@ -419,7 +431,7 @@
    *  规则：
    *    · 交错行、带抖动（参考图那种散布感）
    *    · ★ 炮口正下方 ±3.2 内不能有钉：完全正对会「原路弹回 → 上下打摆」卡死
-   *    · 距左右墙 ≥ 12、距炮口 ≥ 24、距桶口 ≥ 26（留出落桶缓冲）
+   *    · ★ 距左右墙 ≥ WALL_PEG_GAP、距炮口 ≥ 24、距桶口 ≥ 26（留出落桶缓冲）
    *    · 钉不能互相重叠（d ≥ 2*RP + 3），否则会把球直接卡住 */
   function genPegs(){
     pegs = [];
@@ -432,7 +444,7 @@
       for(let x = fieldL + 16 + off; x <= fieldR - 16; x += colGap){
         const jx = x + (rng() * 2 - 1) * 9;
         const jy = y + (rng() * 2 - 1) * 7;
-        if(jx < fieldL + 12 || jx > fieldR - 12) continue;
+        if(jx < fieldL + WALL_PEG_GAP || jx > fieldR - WALL_PEG_GAP) continue;
         if(Math.abs(jx - CANNON_X) < 3.2) continue;   // ★ 避开正下方
         if(jy < fieldT + 22 || jy > mouthY - 26) continue;
         let ok = true;
@@ -2194,6 +2206,7 @@
     balls: lives, runPeak: score,
     lastSpeed, charge, charging, hintOn, soundOn, HINT_H,
     NUMS: NUMS.slice(), START_BALLS, START_LIVES, MINV, MAXV, CHARGE_T,
+    WALL_PEG_GAP,
     WIN_I, crownI, CROWN_DEF_I, CROWN_MOVE_CHANCE, crownFlash,
     G, RB, RP, REST_PEG, REST_WALL, FLIGHT_CAP,
     W, H, fieldL, fieldR, fieldT, mouthY, floorY, slotW, cannonX: CANNON_X,
@@ -2264,6 +2277,13 @@
   window.__marbleChainMax = () => CHAIN_MAX;
   window.__marbleCrownText = () => crownText();
   window.__marbleSetCrown = i => { crownI = clamp(i | 0, 0, NUMS.length - 1); return crownI; };
+  /* 把某颗钉挪到指定坐标（测试「墙边钉挤住球」的反证场景用） */
+  window.__marbleSetPegPos = (idx, x, y) => {
+    const p = pegs[idx]; if(!p) return null;
+    p.x = +x; p.y = +y;
+    return { x: p.x, y: p.y };
+  };
+
   /* ★ 玩法提示：位置与关闭（测试用） */
   window.__marbleHintRect = () => hintRect();
   window.__marbleHintCloseBtn = () => hintCloseBtn();
