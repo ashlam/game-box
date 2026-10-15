@@ -104,7 +104,7 @@
   <div class="big" id="overScore">0</div>
   <div class="unit">本局得分</div>
   <p id="overText"></p>
-  <div class="rule">落桶得分：桶上是几就得几分（0 号桶不得分）<br>生命每发扣 1，只有 1up / 2up / 3up 能补</div>
+  <div class="rule">落桶得分：桶上是几就得「几 × 100」分（0 号桶不得分）<br>生命每发扣 1，只有 1up / 2up / 3up 能补</div>
   <button class="pri" id="overRetry">再来一次 · 10 条命</button>
 </div></div>
 
@@ -179,15 +179,21 @@
    *   落桶不再补命，所以「打得好」体现在分数上，而不是「能多打几发」。 */
   const START_LIVES = 10;                                  // ★ 初始 10 条生命（用户指定）
   const START_BALLS = START_LIVES;                         // 兼容旧名（测试/旧代码仍在用）
+  /* ★ 分数倍率（用户要求）：桶上是几就得「几 × 100」分。
+   *   原因是个位数/十位数的分数看着不好看 —— 8 分、16 分太寒酸，800、1600 才有感觉。
+   *   实现放在**计分那一刻**（landBucket）而不是只改显示：
+   *   这样 score / best / localStorage / 结算面板 / 本回合累计 全都是同一套数值，
+   *   不会出现「界面显示 ×100、实际存的却是原始值」那种两套账。 */
+  const SCORE_MULT = 100;                                  // 分数倍率
   const NUMS = [1, 0, 2, 4, 8, 4, 2, 0, 1];                // 9 桶数字（参考图原样，对称，中间 8 头奖）
   /* ⚠️ WIN_I 是**几何中心**（9 格的中间那格），effNums() 的 L/R 分界、makePerm() 的
    *   「中间不动」都靠它 —— 这两处必须永远是 4，不能跟着金冠跑。
    *   金冠位置是**另一个**变量 crownI（见下），两者以前是同一个常量，现已拆开。 */
   const WIN_I = 4;                                         // 几何中心格（固定）
-  /* ★ 金冠（用户要求）：默认在 8 号筒，每局有 20% 几率移到别的筒上；
+  /* ★ 金冠（用户要求）：默认在 8 号筒，每局有 40% 几率移到别的筒上；
    *   小球落进金冠筒 = 正常得分 + 额外 1up（加一条命）。 */
   const CROWN_DEF_I = 4;                                   // 默认：8 号筒（中间）
-  const CROWN_MOVE_CHANCE = 0.2;                           // 每局移动的几率
+  const CROWN_MOVE_CHANCE = 0.4;                           // 每局移动的几率（用户从 20% 提到 40%）
 
   /* ---------- 手感 / 物理常数 ---------- */
   const MINV = 150, MAXV = 660;     // 蓄力 0%/100% 的出膛速度（线性）
@@ -365,9 +371,9 @@
   }
   let rng = mulberry32(1);
 
-  /** ★ 本局金冠位置：默认 8 号筒（CROWN_DEF_I）；20% 几率移到**别的**筒上。
+  /** ★ 本局金冠位置：默认 8 号筒（CROWN_DEF_I）；40% 几率移到**别的**筒上。
    *   移动时从「除默认筒以外」的 8 个筒里等概率挑一个 —— 不会出现「移到原地」
-   *   那种白白消耗掉 20% 几率的情况（观感上也就真的「有 20% 会看到它挪窝」）。 */
+   *   那种白白消耗掉概率的情况（观感上也就真的「有 40% 会看到它挪窝」）。 */
   function rollCrown(){
     if(rng() >= CROWN_MOVE_CHANCE) return CROWN_DEF_I;
     const others = [];
@@ -761,16 +767,21 @@
   }
 
   /** 落桶结算：本回合累计得分（多球求和），回合结束才真正加进分数。
-   *  ★ 金冠筒：除了拿到这一筒的分数，还额外 +1 命（用户要求）。 */
+   *  ★ 金冠筒：除了拿到这一筒的分数，还额外 +1 命（用户要求）。
+   *  ★ 分数倍率：桶上是几就得「几 × SCORE_MULT」分（用户要求 ×100）。
+   *    注意 n 仍是**桶上的原始数字**（绘制桶面 / 音高 / 返回给测试都用它），
+   *    只有加进 roundGain 的「得分」才是乘过倍率的 —— 两者不能混。 */
   function landBucket(b, i){
-    const n = fx.sealed[i] ? 0 : effNums()[i];
+    const n = fx.sealed[i] ? 0 : effNums()[i];          // 桶上的数字（原始）
+    const gained = n * SCORE_MULT;                      // 实际得分（×倍率）
     lastBucket = i;
-    roundGain += n;
+    roundGain += gained;
     b.dead = true;
     sndBucket(n);
     const cx = fieldL + (i + 0.5) * slotW;
     floats.push({ x: cx, y: mouthY - 8, t: 0,
-                  txt: (n > 0 ? '+' + n : String(n)), color: n > 0 ? '#fff8e0' : '#ffb3ad' });
+                  txt: (gained > 0 ? '+' + gained : String(gained)),
+                  color: gained > 0 ? '#fff8e0' : '#ffb3ad' });
     /* ★ 落进金冠筒 = 得分 + 1up（加一条命）。
      *   注意：加的是「命」不是分，所以直接改 lives，不进 roundGain。
      *   命立即到账（不是回合末），这样「最后一发靠金冠续命」的手感才成立。
@@ -1835,11 +1846,16 @@
     ctx.textAlign = 'right';
     ctx.fillText('分数', W - 16, 19);
     ctx.fillStyle = score < 0 ? '#ffb3ad' : '#ffffff';
-    ctx.font = '800 17px ' + UI;
-    ctx.fillText(String(score), W - 16, 36);
-    // 最高分（小字，放在分数胶囊下方）
-    ctx.fillStyle = 'rgba(207,224,255,.72)'; ctx.font = '600 9px ' + UI;
-    ctx.fillText('最高分 ' + best, W - 16, 53);
+    /* ★ 分数 ×SCORE_MULT 之后位数变多，字号要随位数收，否则会顶出胶囊
+     *   （4800 用 17px，6 位以上逐级缩小；实测 8 位也不溢出） */
+    const scStr = String(score);
+    ctx.font = '800 ' + (scStr.length <= 5 ? 17 : scStr.length <= 7 ? 14 : 11.5) + 'px ' + UI;
+    ctx.fillText(scStr, W - 16, 36);
+    // 最高分（小字，放在分数胶囊下方；同样按位数收字号）
+    ctx.fillStyle = 'rgba(207,224,255,.72)';
+    const bestStr = '最高分 ' + best;
+    ctx.font = '600 ' + (bestStr.length <= 11 ? 9 : 7.6) + 'px ' + UI;
+    ctx.fillText(bestStr, W - 16, 53);
     ctx.textAlign = 'left';
 
     // ★ 本回合生效的效果（两枚胶囊之间的空档，超宽就截断）
@@ -1937,7 +1953,7 @@
     ctx.fillStyle = '#5a4231'; ctx.font = '700 12.5px ' + UI;
     ctx.fillText('按住红色大键蓄力 · 松手发射', cx, cy + 2);
     ctx.fillStyle = '#8a6f52'; ctx.font = '11.5px ' + UI;
-    ctx.fillText('撞钉/撞墙会反弹 → 落桶得分', cx, cy + 22);
+    ctx.fillText('撞钉/撞墙会反弹 → 落桶得分（桶面 ×' + SCORE_MULT + '）', cx, cy + 22);
     ctx.fillStyle = '#c23b2c'; ctx.font = '700 11.5px ' + UI;
     ctx.fillText('每发扣 1 条命；0 号桶不得分', cx, cy + 40);
     ctx.fillStyle = '#7a4b00'; ctx.font = '700 11.5px ' + UI;
@@ -2190,7 +2206,20 @@
   /* ---------- 启动 ---------- */
   setSoundLabel();
   layout();
-  reset(1);                          // 固定种子起步（首局可预期），重开时随机
+  /* ⚠️ 这里原来是 reset(1)（固定种子「首局可预期」）—— 那是个**真 bug**：
+   *   玩家反馈「玩了好久都没见过金冠改变位置」，根因就在这 ——
+   *   固定种子意味着**每次刷新页面/第一次打开看到的都是同一局**：
+   *   同一个钉阵、同一个金冠位置（永远 8 号筒）。
+   *   只在手机上用「刷新」而很少点「再来一次」的玩家，就永远看不到金冠挪窝。
+   *   现在改成：首次进页面也用**随机种子**（跟「再来一次」一致）。
+   *   要复现某一局时，用 __marbleReset(seed) 或 URL 上的 ?seed= 即可。 */
+  const urlSeed = (function(){
+    try{
+      const m = /[?&]seed=(-?\d+)/.exec(location.search);
+      return m ? (parseInt(m[1], 10) | 0) : null;
+    }catch(e){ return null; }
+  })();
+  reset(urlSeed === null ? undefined : urlSeed);   // 无参 → 随机种子（每局都不同）
   window.addEventListener('resize', layout);
   window.addEventListener('orientationchange', () => setTimeout(layout, 250));
   /* ★ 预览面板（iframe）里 window 不一定 resize，但 stage 的尺寸会变 —— 盯住它 */
@@ -2205,7 +2234,7 @@
     /* 兼容旧名：balls = 生命、runPeak = 分数（分数与生命分开前的旧语义） */
     balls: lives, runPeak: score,
     lastSpeed, charge, charging, hintOn, soundOn, HINT_H,
-    NUMS: NUMS.slice(), START_BALLS, START_LIVES, MINV, MAXV, CHARGE_T,
+    NUMS: NUMS.slice(), START_BALLS, START_LIVES, SCORE_MULT, MINV, MAXV, CHARGE_T,
     WALL_PEG_GAP,
     WIN_I, crownI, CROWN_DEF_I, CROWN_MOVE_CHANCE, crownFlash,
     G, RB, RP, REST_PEG, REST_WALL, FLIGHT_CAP,
@@ -2237,12 +2266,14 @@
   window.__marblePress = () => pressStart();
   window.__marbleRelease = () => pressEnd();
   window.__marbleSetCharge = c => { charge = clamp(c, 0, 1); };
-  /* 直接按桶结算（测规则用）：落桶 + 收尾，语义和「这一发打完」一致 */
+  /* 直接按桶结算（测规则用）：落桶 + 收尾，语义和「这一发打完」一致。
+   * 返回的 n = 桶上的原始数字；gained = 实际得分（n × SCORE_MULT）。两者都要给，
+   * 测试才能同时验证「桶面数字」和「乘过倍率的分数」。 */
   window.__marbleLand = i => {
     if(!flyers.length) flyers = [mkBall(CANNON_X, CANNON_MOUTH, 0, 0)];
     const n = landBucket(flyers[0], clamp(i | 0, 0, NUMS.length - 1));
     settleFlyers();
-    return { n, lives, balls: lives, score, gain, roundGain };
+    return { n, gained: n * SCORE_MULT, lives, balls: lives, score, gain, roundGain };
   };
   window.__marbleSetBall = o => {                     // 测物理用（卡死看门狗等）
     flyers = [ mkBall(o.x, o.y, o.vx || 0, o.vy || 0) ];

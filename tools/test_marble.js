@@ -152,6 +152,10 @@ vm.runInContext(script, sandbox, { filename: 'marble-inline.js' });
 /* ---------------- 驱动 ---------------- */
 const win = sandbox.window;
 const M = () => win.__marble();
+/* ★ 抓住「脚本刚加载完」那一局的种子 —— 这就是玩家首次打开页面看到的那一局。
+ *   必须在任何 reset() 之前读，否则会被后面的操作覆盖（曾经因此写出假绿断言）。 */
+const BOOT_SEED = M().fieldSeed;
+const BOOT_CROWN = M().crownI;
 const step = dt => win.__marbleStep(dt);
 const press = () => win.__marblePress();
 const release = () => win.__marbleRelease();
@@ -228,8 +232,8 @@ section('1) ★ 规则：初始 10 条命 / 发射扣命 / 落桶得分（不再
     const livesAfterFire = M().lives;
     const isCrown = (i === M().crownI);
     land(i);                                        // 分数 += NUMS[i]（金冠另 +1 命）
-    const got = M().score, want = M().NUMS[i];
-    ok(got === want, `桶[${i}]=${M().NUMS[i]}：分数 ${want}（实得 ${got}）`, '得到 ' + got);
+    const got = M().score, want = M().NUMS[i] * M().SCORE_MULT;
+    ok(got === want, `桶[${i}]=${M().NUMS[i]}：分数 ${want}（= ${M().NUMS[i]} × ${M().SCORE_MULT}）`, '得到 ' + got);
     ok(M().lives === livesAfterFire + (isCrown ? 1 : 0),
        `  └ ${isCrown ? '金冠筒额外 +1 命' : '非金冠筒不加命'}（${livesAfterFire} → ${M().lives}）`,
        '生命被改了');
@@ -584,7 +588,8 @@ section('10) ★ Left / Right：左(右)侧加倍、另一侧变负、中间归 
   reset(10);
   win.__marbleEat('L');
   const r1 = win.__marbleLand(2);
-  ok(r1.n === 4 && M().score === 4, '★ 吃 L 后落 2 号桶：得 4 分（分数 0 → ' + M().score + '）');
+  ok(r1.n === 4 && M().score === 4 * M().SCORE_MULT,
+     '★ 吃 L 后落 2 号桶：桶面 4 → 得 ' + (4 * M().SCORE_MULT) + ' 分（分数 0 → ' + M().score + '）');
   /* ★ 用户改的：入口变化不再「回合结束就复原」，而是保持 ENTRANCE_LIFE 回合
    *   （旧断言是 `fx.L === 0`，已被第 17 节的寿命规则取代） */
   ok(M().fx.L === 1 && M().fx.life === M().ENTRANCE_LIFE - 1,
@@ -594,7 +599,8 @@ section('10) ★ Left / Right：左(右)侧加倍、另一侧变负、中间归 
   reset(10);
   win.__marbleEat('R');
   const r2 = win.__marbleLand(0);
-  ok(r2.n === -1 && M().score === -1, '★ 吃 R 后落左侧 0 号桶：扣 1 分（分数 0 → ' + M().score + '）');
+  ok(r2.n === -1 && M().score === -1 * M().SCORE_MULT,
+     '★ 吃 R 后落左侧 0 号桶：扣 ' + M().SCORE_MULT + ' 分（分数 0 → ' + M().score + '）');
 }
 
 /* ================= 11) 错位 / 石化 ================= */
@@ -669,8 +675,9 @@ section('12) ★ 分裂球（一变 ' + 4 + '、可叠加、上限 9）· 1UP/2U
   const per = M().effNums[4];
   const livesBefore = M().lives;
   for(let i = 0; i < SN; i++) win.__marbleLand(4);
-  ok(M().score === per * SN,
-     '★ ' + SN + ' 球全部落 8 号桶：分数按总和算（' + per + '×' + SN + ' = ' + M().score + '）');
+  const SM = M().SCORE_MULT;
+  ok(M().score === per * SN * SM,
+     '★ ' + SN + ' 球全部落 8 号桶：分数按总和算（' + per + '×' + SN + '×' + SM + ' = ' + M().score + '）');
   ok(M().lives === livesBefore, '★ 非金冠筒：多球落桶也不加命（仍是 ' + M().lives + '）');
 
   // 金冠筒：多球全部落进去 → 每球各 +1 命
@@ -1626,14 +1633,15 @@ section('25) ★ 生命与分数分离：落桶得分、发射扣命、UP 补命
 
   // 落桶只加分、不加命
   land(4);
-  ok(M().score === 8 && M().lives === 9, '★ 落 8 号桶：分数 +8，生命不动（仍是 9）');
+  ok(M().score === 8 * M().SCORE_MULT && M().lives === 9,
+     '★ 落 8 号桶：分数 +' + (8 * M().SCORE_MULT) + '，生命不动（仍是 9）');
 
   // 连续落桶：分数累加，生命只随发射减少
   const lv = M().lives, sc = M().score;
   press(); setCharge(0.5); release();
   land(0);
-  ok(M().score === sc + 1 && M().lives === lv - 1,
-     '★ 再发一颗落 0 号桶：分数 +1（' + M().score + '）、生命 -1（' + M().lives + '）');
+  ok(M().score === sc + 1 * M().SCORE_MULT && M().lives === lv - 1,
+     '★ 再发一颗落 0 号桶：分数 +' + M().SCORE_MULT + '（' + M().score + '）、生命 -1（' + M().lives + '）');
 
   // UP 补命、不加分
   const lv2 = M().lives, sc2 = M().score;
@@ -1656,11 +1664,12 @@ section('25) ★ 生命与分数分离：落桶得分、发射扣命、UP 补命
   for(let k = 0; k < 10; k++){ press(); setCharge(0.5); release(); land(4); }
   const g = M();
   ok(g.lives === 0, '★ 打满 10 发 → 生命归 0（' + g.lives + '）');
-  ok(g.score === 80, '★ 分数保留下来（10 × 8 = ' + g.score + '）');
+  ok(g.score === 10 * 8 * M().SCORE_MULT,
+     '★ 分数保留下来（10 × 8 × ' + M().SCORE_MULT + ' = ' + g.score + '）');
   ok(g.state === 'over', '★ 生命归 0 → 结束（state=' + g.state + '）');
 
   // 最高分落盘用的是分数
-  ok(M().best >= 80, '★ 最高分按「分数」记（best=' + M().best + '）');
+  ok(M().best >= 10 * 8 * M().SCORE_MULT, '★ 最高分按「分数」记（best=' + M().best + '）');
   ok(String(store['marble_best_score'] ?? '') === String(M().best),
      '★ 落盘键是 marble_best_score（' + store['marble_best_score'] + '）');
 
@@ -1682,7 +1691,7 @@ section('26) ★ 金冠：默认在 8 号筒 · 每局 20% 移到别的筒 · �
   const s0 = M();
   ok(s0.CROWN_DEF_I === 4, '★ 默认筒是 4 号格 = 8 号筒（CROWN_DEF_I=' + s0.CROWN_DEF_I + '）');
   ok(s0.NUMS[s0.CROWN_DEF_I] === 8, '★ 默认筒的数字就是 8（' + s0.NUMS[s0.CROWN_DEF_I] + '）');
-  ok(s0.CROWN_MOVE_CHANCE === 0.2, '★ 移动几率 20%（' + s0.CROWN_MOVE_CHANCE + '）');
+  ok(s0.CROWN_MOVE_CHANCE === 0.4, '★ 移动几率 40%（' + s0.CROWN_MOVE_CHANCE + '）');
 
   // ---- 默认位置：不移动时必须落在 8 号筒 ----
   reset(1);
@@ -1700,7 +1709,7 @@ section('26) ★ 金冠：默认在 8 号筒 · 每局 20% 移到别的筒 · �
     if (c < 0 || c > 8) { ok(false, '金冠位置越界: ' + c); break; }
   }
   const rate = moved / N;
-  ok(rate > 0.16 && rate < 0.24, '★ 移动几率约 20%（' + N + ' 局实测 ' + (rate * 100).toFixed(1) + '%）');
+  ok(rate > 0.34 && rate < 0.46, '★ 移动几率约 40%（' + N + ' 局实测 ' + (rate * 100).toFixed(1) + '%）');
   const otherSlots = Object.keys(dist).map(Number);
   ok(otherSlots.indexOf(M().CROWN_DEF_I) < 0,
      '★ 移动时不会「移到原地」（' + otherSlots.length + ' 个别的筒都出现过）');
@@ -1717,7 +1726,7 @@ section('26) ★ 金冠：默认在 8 号筒 · 每局 20% 移到别的筒 · �
   const lv0 = M().lives;
   const r = land(2);
   ok(r.n === 2, '★ 金冠筒照样得它自己的分（' + r.n + ' 分）');
-  ok(M().score === 2, '★ 分数加上了（' + M().score + '）');
+  ok(M().score === 2 * M().SCORE_MULT, '★ 分数加上了（' + M().score + '）');
   ok(M().lives === lv0 + 1, '★ 落进金冠筒额外 +1 命（' + lv0 + ' → ' + M().lives + '）');
 
   // ---- 非金冠筒不给命 ----
@@ -1939,6 +1948,97 @@ section('28) ★ 墙边撞针留距：小球不会被挤在「钉与墙」之间
        ' 时，钉会把球顶到墙内界之外（' + pushedIntoWall + ' 帧，最深的球心 x=' +
        deepest.toFixed(2) + ' < 合法下限 ' + (st.fieldL + st.RB).toFixed(2) + '）→ 留距是必要的');
   }
+}
+
+/* ===== 29) ★ 分数 ×100（SCORE_MULT） ===== */
+section('29) ★ 分数倍率：桶上是几就得「几 × ' + 100 + '」分');
+{
+  reset(81); win.__marbleClearFx(); win.__marbleClearItems();
+  const SM = M().SCORE_MULT;
+  ok(SM === 100, '★ 分数倍率常数 SCORE_MULT=100（' + SM + '）');
+  ok(M().score === 0, '（前置）开局 0 分');
+
+  // 每个桶都得「桶面数字 × 倍率」
+  for (const i of [0, 2, 4, 8]) {
+    reset(81); win.__marbleClearFx(); win.__marbleClearItems();
+    win.__marbleSetCrown(0);                    // 挪开金冠，隔离出「纯得分」
+    const rv = win.__marbleLand(i);
+    const want = M().NUMS[i] * SM;
+    ok(M().score === want,
+       '★ 落 ' + i + ' 号桶（桶面 ' + M().NUMS[i] + '）→ 得 ' + M().score + '（= ' + want + '）');
+    ok(rv.gained === want, '  └ 返回值 gained 也是乘过倍率的（' + rv.gained + '）');
+    ok(rv.n === M().NUMS[i], '  └ 但 n 仍是桶面原始数字（' + rv.n + '）—— 两者不能混');
+  }
+
+  // 头奖 8 → 800；被 L 加倍后 16 → 1600
+  reset(81); win.__marbleClearFx(); win.__marbleClearItems();
+  win.__marbleSetCrown(0);
+  win.__marbleEat('L');
+  const rL = win.__marbleLand(2);               // 底表 2 → L 加倍后 4
+  ok(rL.n === 4 && M().score === 4 * SM, '★ 被 L 加成 4 的桶 → ' + M().score + ' 分');
+  reset(81); win.__marbleClearFx(); win.__marbleClearItems();
+  win.__marbleSetCrown(0);
+  win.__marbleLand(4);
+  ok(M().score === 800, '★ 头奖 8 分 → 800（个位数看着寒酸的问题解决）');
+
+  // 负分也乘倍率
+  reset(81); win.__marbleClearFx(); win.__marbleClearItems();
+  win.__marbleSetCrown(0);
+  win.__marbleEat('R');
+  win.__marbleLand(0);                          // 底表 1 → R 后 -1
+  ok(M().score === -1 * SM, '★ 负分桶也乘倍率（' + M().score + '）');
+
+  // 倍率只影响「得分」，不影响生命
+  reset(81); win.__marbleClearFx(); win.__marbleClearItems();
+  win.__marbleSetCrown(0);
+  const lv0 = M().lives;
+  press(); setCharge(0.5); release();
+  land(4);
+  ok(M().lives === lv0 - 1, '★ 倍率不影响生命（发射仍只扣 1 条：' + lv0 + ' → ' + M().lives + '）');
+
+  // 金冠筒：得分 ×倍率 + 1命
+  reset(81); win.__marbleClearFx(); win.__marbleClearItems();
+  win.__marbleSetCrown(4);
+  const lv1 = M().lives;
+  win.__marbleLand(4);
+  ok(M().score === 8 * SM && M().lives === lv1 + 1,
+     '★ 金冠筒：' + (8 * SM) + ' 分 + 1 命（两者互不干扰）');
+}
+
+/* ===== 30) ★ 金冠每局重掷 + 启动不再固定种子 ===== */
+section('30) ★ 金冠每局重掷 · 启动用随机种子（修「从没见过金冠挪窝」）');
+{
+  reset(1);
+  const s0 = M();
+  ok(s0.CROWN_MOVE_CHANCE === 0.4, '★ 移动几率已提到 40%（' + s0.CROWN_MOVE_CHANCE + '）');
+
+  /* ⚠️ 这条是本次的真 bug 回归测试：
+   *   启动代码原本是 reset(1)（固定种子），导致**每次刷新页面都是同一局** ——
+   *   同一个钉阵、金冠永远在 8 号筒。只在手机上刷新、很少点「再来一次」的玩家
+   *   就永远看不到金冠挪窝（用户反馈「玩了好久都没见过」的根因）。
+   *   用的是 BOOT_SEED（脚本刚加载完就抓下来的那个值），不是临时 reset 出来的。 */
+  ok(BOOT_SEED !== 1, '★ 启动不再用固定种子 1（启动那一局的 fieldSeed=' + BOOT_SEED + '）');
+  ok(BOOT_SEED > 1000, '★ 启动种子是随机的大数（' + BOOT_SEED + '），不是可预期的小整数');
+  const seeds = [], crowns = [];
+  for (let i = 0; i < 30; i++) { reset(); seeds.push(M().fieldSeed); crowns.push(M().crownI); }
+  ok(new Set(seeds).size === 30, '★ 连续 30 次重开拿到 30 个不同种子（每局都不一样）');
+  const movedCnt = crowns.filter(c => c !== 4).length;
+  ok(movedCnt >= 5 && movedCnt <= 22,
+     '★ 30 次重开里金冠挪窝 ' + movedCnt + ' 次（40% 期望 12 次，允许随机波动）');
+  ok(new Set(crowns).size >= 3, '★ 金冠真的落到多个不同筒上（' + new Set(crowns).size + ' 种）');
+
+  // 稳定性：移动率在 2000 局里应当接近 40%
+  let moved = 0;
+  const N = 2000;
+  for (let k = 1; k <= N; k++) { reset(k * 7919); if (M().crownI !== 4) moved++; }
+  const rate = moved / N;
+  ok(rate > 0.35 && rate < 0.45, '★ 2000 局实测移动率 ' + (rate * 100).toFixed(1) + '%（目标 40%）');
+
+  // 固定种子仍然可用（需要复现某一局时）
+  reset(12345);
+  const a = M().crownI;
+  reset(12345);
+  ok(M().crownI === a, '★ 显式传种子仍可复现同一局（crownI=' + a + '）');
 }
 
 /* ================= 汇总 ================= */
