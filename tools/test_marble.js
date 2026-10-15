@@ -512,7 +512,7 @@ section('9) ★ 炮口方向控制：◀▶ 调角度，与蓄力/发射互不�
 }
 
 /* ================= 10) Left / Right 道具 ================= */
-section('10) ★ Left / Right：左(右)侧加倍、另一侧变负、中间归 0、可叠加');
+section('10) ★ Left / Right：左(右)侧加倍、另一侧变负、中间归 0、可叠加（L/R 互斥见第 16 节）');
 {
   reset(10);
   const base = M().effNums;
@@ -543,7 +543,10 @@ section('10) ★ Left / Right：左(右)侧加倍、另一侧变负、中间归 
   win.__marbleEat('L');
   const r1 = win.__marbleLand(2);
   ok(r1.n === 4 && M().balls === 9, '★ 吃 L 后落 2 号桶：实得 4（5 → ' + M().balls + '）');
-  ok(M().fx.L === 0, '★ 回合结束，入口恢复正常（L 归零）');
+  /* ★ 用户改的：入口变化不再「回合结束就复原」，而是保持 ENTRANCE_LIFE 回合
+   *   （旧断言是 `fx.L === 0`，已被第 17 节的寿命规则取代） */
+  ok(M().fx.L === 1 && M().fx.life === M().ENTRANCE_LIFE - 1,
+     '★ 回合结束：入口变化仍生效（L=1、还剩 ' + M().fx.life + ' 回合）');
 
   // 负数：吃 R 后落 0 号桶（底表 1）→ -1
   reset(10);
@@ -578,7 +581,7 @@ section('11) ★ 错位（左右各自内部打乱，不串边）· 石化（封
   let si = sealed.indexOf(true);
   const r3 = win.__marbleLand(si);
   ok(r3.n === 0, '★ 落进被封的桶：记 0 分（不白送分）');
-  ok(M().fx.sealed.every(v => !v), '★ 回合结束，水泥筒消失（入口恢复）');
+  ok(M().fx.sealed.some(Boolean), '★ 回合结束，水泥筒仍封着（保持 ' + M().ENTRANCE_LIFE + ' 回合，不再立刻消失）');
 
   // 封桶反弹：球掉到桶口被弹回场内
   reset(11);
@@ -895,8 +898,164 @@ section('15) ★ 撞针状态寿命：被炸掉/被冻住不再回合结束即�
   ok(drawOk, '★ 碎钉/冻钉/最后一回合闪红 绘制不报错', err);
 }
 
-/* ================= 16) 压力：道具全程开启 ================= */
-section('16) 压力：每回合都塞道具，连打不卡死 / 数值不坏');
+/* ===== 16) ★ 入口桶变化的寿命：L/R 倍率 · 错位 · 石化 保持 ENTRANCE_LIFE 回合 ===== */
+section('16) ★ 入口桶变化的寿命：左/右·错位·封桶 不再回合结束即复原，保持 3 回合');
+{
+  /* 用户原话：让入口桶的变化（比如错位等效果）也保持 3 回合。 */
+  reset(51);
+  const EL = M().ENTRANCE_LIFE;
+  ok(EL === 3, '★ 入口变化寿命常数 ENTRANCE_LIFE=3（' + EL + '）');
+
+  // ---- Left 倍率：寿命 3 → 2 → 1 → 0，归 0 才恢复底表 ----
+  win.__marbleClearFx();
+  win.__marbleEat('L');
+  ok(M().fx.L === 1 && M().fx.life === EL, '★ 吃到 Left → 层数 1、寿命 ' + EL);
+  ok(M().fx.active === true, '★ entranceActive() = true（有变化在生效）');
+  const effAfter = M().effNums.slice();
+  ok(JSON.stringify(effAfter) === JSON.stringify([2,0,4,8,0,-4,-2,0,-1]),
+     '（前置）生效时入口数字被放大（' + effAfter.join('·') + '）');
+
+  const alive = [];
+  for(let k = 0; k < 4; k++){
+    win.__marbleLand(4);                            // 直接落头奖，弹珠耗不光
+    const f = M().fx;
+    alive.push(f.L ? f.life : 0);
+  }
+  ok(alive[0] === EL - 1 && alive[1] === EL - 2 && alive[2] === 0,
+     '★ 每回合结束寿命 -1，第 ' + EL + ' 回合后恢复底表（' + EL + ' → ' + alive.slice(0, 3).join(' → ') + '）');
+  ok(alive[3] === 0 && M().fx.L === 0, '★ 恢复后不会「复活」（第 4 回合 L 仍为 0）');
+  ok(JSON.stringify(M().effNums) === JSON.stringify([1,0,2,4,8,4,2,0,1]),
+     '★ 恢复底表：入口数字回到 1·0·2·4·8·4·2·0·1（' + M().effNums.join('·') + '）');
+  ok(M().fx.active === false, '★ 恢复后 entranceActive() = false');
+
+  // ---- 错位也保持 3 回合 ----
+  reset(51); win.__marbleClearFx();
+  win.__marbleEat('SHUF');
+  const perm0 = M().fx.perm.join(',');
+  ok(M().fx.life === EL, '★ 吃到错位 → 寿命 ' + EL);
+  win.__marbleLand(4);
+  ok(M().fx.perm && M().fx.perm.join(',') === perm0, '★ 回合结束：错位排列仍在（没被清掉）');
+  ok(M().fx.life === EL - 1, '★ 错位寿命 -1（还剩 ' + M().fx.life + ' 回合）');
+  win.__marbleLand(4); win.__marbleLand(4);
+  ok(M().fx.perm === null, '★ 第 ' + EL + ' 回合后错位消失（恢复底表顺序）');
+
+  // ---- 石化也保持 3 回合 ----
+  reset(51); win.__marbleClearFx();
+  win.__marbleEat('STONE');
+  const sealedIdx = M().fx.sealed.map((v, i) => v ? i : -1).filter(i => i >= 0);
+  ok(sealedIdx.length >= 1, '（前置）封住了 ' + sealedIdx.length + ' 个入口');
+  win.__marbleLand(4);
+  ok(sealedIdx.every(i => M().fx.sealed[i]), '★ 回合结束：水泥筒仍封着（寿命机制）');
+  win.__marbleLand(4); win.__marbleLand(4);
+  ok(M().fx.sealed.every(v => !v), '★ 第 ' + EL + ' 回合后水泥筒全部消失');
+
+  // ---- 再吃一次 = 一次新的状态变化 → 寿命重新起算 ----
+  reset(51); win.__marbleClearFx();
+  win.__marbleEat('L');
+  win.__marbleLand(4); win.__marbleLand(4);          // 寿命掉到 1
+  ok(M().fx.life === 1, '（前置）L 只剩 1 回合寿命（' + M().fx.life + '）');
+  win.__marbleEat('SHUF');                            // 再吃到错位
+  ok(M().fx.life === EL, '★ 又吃到入口变化 → 寿命重新起算 ' + EL + '（L 和错位一起续上）');
+  ok(M().fx.L === 1 && !!M().fx.perm, '★ 两种变化同时在（L 与 错位 叠加，不是互相覆盖）');
+
+  // ---- ★ Left / Right 互斥：不会出现「L 和 R 同时在场」的全负死局 ----
+  /* 为什么必须锁住：effNums() 里 L 会让右侧变负、R 会让左侧变负，
+   *   两者同时在场 → 9 个桶全是负数（只剩 0 桶），几乎没法得分。
+   *   以前效果只活一回合，最多挨一回合；现在要保持 3 回合 → 必须先吃 L 再吃 R
+   *   就会连挨 3 回合，玩家又不能完全控制吃到哪个，所以改成互相抵消。 */
+  reset(51); win.__marbleClearFx();
+  win.__marbleEat('L');
+  ok(M().fx.L === 1 && M().fx.R === 0, '（前置）先吃 L：L=1');
+  win.__marbleEat('R');
+  ok(M().fx.R === 0 && M().fx.L === 0, '★ 再吃 R → 抵消掉 L（不是 L 和 R 并存）');
+  ok(M().effNums.filter(v => v > 0).length >= 6,
+     '★ 抵消后仍有足够正分桶（' + M().effNums.filter(v => v > 0).length + ' 个，不是全负死局）');
+  ok(M().fx.life === EL, '★ 抵消也算一次入口变化 → 寿命重新起算 ' + EL);
+
+  // 反向：先 R 后 L 同样抵消
+  reset(51); win.__marbleClearFx();
+  win.__marbleEat('R');
+  win.__marbleEat('L');
+  ok(M().fx.L === 0 && M().fx.R === 0, '★ 先 R 后 L 同样互相抵消');
+
+  // 关键：任何时刻都不该出现「L>0 且 R>0」的全负状态
+  reset(51); win.__marbleClearFx();
+  let bothSeen = 0, allNegSeen = 0;
+  for(let k = 0; k < 40; k++){
+    win.__marbleEat(k % 2 ? 'R' : 'L');
+    const f = M().fx;
+    if(f.L > 0 && f.R > 0) bothSeen++;
+    if(M().effNums.filter(v => v > 0).length === 0) allNegSeen++;
+    if(k % 5 === 4) win.__marbleLand(4);              // 偶尔推进回合
+  }
+  ok(bothSeen === 0, '★ 连吃 40 次 L/R，从未出现「L 与 R 同时 > 0」（' + bothSeen + ' 次）');
+  ok(allNegSeen === 0, '★ 连吃 40 次 L/R，从未出现「一个正分桶都没有」（' + allNegSeen + ' 次）');
+
+  // 同向叠加仍然正常（L 叠 L 是加倍，不是抵消）
+  reset(51); win.__marbleClearFx();
+  win.__marbleEat('L'); win.__marbleEat('L');
+  ok(M().fx.L === 2 && M().fx.R === 0, '★ 同向叠加照旧：L 吃两次 = 层数 2（' + M().fx.L + '）');
+
+  // ---- 封桶有上限：连续吃石化不会把 9 个桶全封死 ----
+  reset(51); win.__marbleClearFx();
+  for(let k = 0; k < 12; k++) win.__marbleEat('STONE');
+  const sealCnt = M().fx.sealed.filter(Boolean).length;
+  ok(sealCnt <= M().SEAL_MAX, '★ 连续吃 12 次石化，被封入口不超上限（' + sealCnt + ' ≤ ' + M().SEAL_MAX + '）');
+  const freeCnt = M().fx.sealed.filter(v => !v).length;
+  ok(freeCnt >= 6, '★ 始终留着足够的可得分入口（空着 ' + freeCnt + '/9）');
+
+  // ---- 换新局：入口整体重置 ----
+  reset(51); win.__marbleClearFx();
+  win.__marbleEat('L'); win.__marbleEat('STONE'); win.__marbleEat('SHUF');
+  ok(M().fx.active, '（前置）场上有入口变化');
+  win.__marbleReset(51);
+  ok(M().fx.L === 0 && M().fx.R === 0 && M().fx.perm === null &&
+     M().fx.sealed.every(v => !v) && M().fx.life === 0,
+     '★ 换新局：入口变化全部清空、寿命归 0');
+
+  // ---- 结算真的跟着走：跨回合落桶仍按被改过的数字算 ----
+  /* 语义（跟道具一致）：life=ENTRANCE_LIFE 表示「含吃到的那一回合，共 3 个回合生效」。
+   *   吃后 life=3 → 第 1 回合生效；回合末 -1 → 2
+   *   第 2 回合生效（life=2）→ 回合末 -1 → 1
+   *   第 3 回合生效（life=1）→ 回合末 -1 → 0 → 清空
+   *   第 4 回合起恢复底表 */
+  reset(51); win.__marbleClearFx();
+  win.__marbleEat('L');
+  const r1st = win.__marbleLand(2);
+  ok(r1st.n === 4, '★ 第 1 回合（吃到的这回合）落 2 号桶按「×2」结算（得 4）');
+  const r2nd = win.__marbleLand(2);
+  ok(r2nd.n === 4, '★ 第 2 回合仍按「×2」结算（得 4，不是底表的 2）');
+  const r3rd = win.__marbleLand(2);
+  ok(r3rd.n === 4, '★ 第 3 回合（最后一回合）仍按「×2」结算（得 4）');
+  ok(!M().fx.L && M().fx.life === 0, '（前置）第 3 回合末寿命归 0 → 入口已恢复底表');
+  const r4th = win.__marbleLand(2);
+  ok(r4th.n === 2, '★ 第 4 回合恢复底表后落 2 号桶只得 2（确认真的复原了）');
+
+  // ---- 石化跨回合仍然物理弹球 ----
+  reset(51); win.__marbleClearFx();
+  win.__marbleEat('STONE');
+  const si2 = M().fx.sealed.indexOf(true);
+  win.__marbleLand(4);                                // 过一回合，水泥筒还在
+  ok(M().fx.sealed[si2], '（前置）第 2 回合水泥筒仍封着');
+  const s2 = M();
+  setBall({ x: s2.fieldL + (si2 + 0.5) * s2.slotW, y: s2.mouthY - 26, vy: 420 });
+  run(10);
+  const bb2 = M().ball;
+  ok(M().state === 'play' && bb2 && bb2.y < s2.mouthY - 4,
+     '★ 第 2 回合被封入口照样把球弹回场内（y=' + (bb2 ? bb2.y.toFixed(0) : '—') + '）');
+
+  // ---- 绘制：入口变化的最后一回合（整排桶红圈）不报错 ----
+  reset(51); win.__marbleClearFx();
+  win.__marbleEat('L'); win.__marbleEat('SHUF');
+  let dOk = true, dErr = '';
+  try{
+    for(let k = 0; k < 4; k++){ run(1); win.__marbleDraw(); win.__marbleLand(4); }
+  }catch(e){ dOk = false; dErr = e.message; }
+  ok(dOk, '★ 入口变化各寿命阶段（含最后一回合红圈）绘制不报错', dErr);
+}
+
+/* ================= 17) 压力：道具全程开启 ================= */
+section('17) 压力：每回合都塞道具，连打不卡死 / 数值不坏');
 {
   reset(21);
   let shots = 0, stuck = 0, bad = 0, maxFly = 0, longest = 0;
@@ -924,7 +1083,7 @@ section('16) 压力：每回合都塞道具，连打不卡死 / 数值不坏');
 }
 
 /* ================= 17) 地雷外观：黑炸弹 + 白骷髅 ================= */
-section('17) ★ 地雷外观：黑色炸弹 + 白骷髅（与其它「彩色圆牌」道具明确区分）');
+section('18) ★ 地雷外观：黑色炸弹 + 白骷髅（与其它「彩色圆牌」道具明确区分）');
 {
   const meta = win.__marbleItemMeta('MINE');
   const vis = win.__marbleMineVisual();
@@ -1017,7 +1176,7 @@ section('17) ★ 地雷外观：黑色炸弹 + 白骷髅（与其它「彩色圆
 }
 
 /* ================= 18) 绘制冒烟 ================= */
-section('18) 绘制：各种状态下画图都不报错（含道具/旋转炮口/水泥筒/负分桶）');
+section('19) 绘制：各种状态下画图都不报错（含道具/旋转炮口/水泥筒/负分桶）');
 {
   const tryDraw = label => {
     let r = 'ok';
@@ -1049,7 +1208,7 @@ section('18) 绘制：各种状态下画图都不报错（含道具/旋转炮口
 }
 
 /* ================= 17) 炮口方向 == 发射方向 ================= */
-section('19) ★ 炮口朝向与发射方向必须一致（曾经画反：往右调角度、炮口却朝左歪）');
+section('20) ★ 炮口朝向与发射方向必须一致（曾经画反：往右调角度、炮口却朝左歪）');
 {
   reset(1);
   const s0 = M();
@@ -1090,7 +1249,7 @@ section('19) ★ 炮口朝向与发射方向必须一致（曾经画反：往右
 }
 
 /* ================= 18) 撞针弹力分档 ================= */
-section('20) ★ 撞针 4 档弹力：颜色区分 · 每局分布随机 · 超弹把球顶回上方');
+section('21) ★ 撞针 4 档弹力：颜色区分 · 每局分布随机 · 超弹把球顶回上方');
 {
   reset(1);
   const s = M();
@@ -1185,7 +1344,7 @@ section('20) ★ 撞针 4 档弹力：颜色区分 · 每局分布随机 · 超�
 }
 
 /* ================= 19) 看门狗 C：垂直弹跳死循环 ================= */
-section('21) ★ 看门狗 C：撞顶会清掉旧计时器，靠「整秒位移」把垂直弹跳救出来');
+section('22) ★ 看门狗 C：撞顶会清掉旧计时器，靠「整秒位移」把垂直弹跳救出来');
 {
   reset(5);
   win.__marblePegMix([0, 0, 1, 0], 0);          // 全是弹钉：最容易「天花板↔钉顶」垂直弹跳
@@ -1201,7 +1360,7 @@ section('21) ★ 看门狗 C：撞顶会清掉旧计时器，靠「整秒位移�
 }
 
 /* ================= 20) ★ 容器尺寸兜底（黑屏事故） ================= */
-section('22) ★ 布局兜底：容器尺寸为 0 / 太矮，都不能变成「一片黑只剩按钮」');
+section('23) ★ 布局兜底：容器尺寸为 0 / 太矮，都不能变成「一片黑只剩按钮」');
 {
   const sg = M();
   ok(sg.MIN_STAGE_H === 320, '最小画布高度常数 MIN_STAGE_H=320（' + sg.MIN_STAGE_H + '）');

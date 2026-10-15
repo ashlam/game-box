@@ -239,6 +239,17 @@
    *   每回合结束 life - 1，掉到 0 才复原 —— 跟道具同一套规则、同一个节奏。
    *   life 只有一份（两种状态互斥）：冻住的钉又被撞碎 = 一次新的状态变化，寿命重新起算。 */
   const PEG_LIFE = 3;               // 撞针异常状态最多保持几回合（含出事的那一回合）
+  /* ★ 入口桶变化的寿命（用户改的：Left/Right 倍率、错位、石化 也不再「回合结束就复原」）
+   *   跟道具 / 撞针同一套规则、同一个节奏：每回合结束 life - 1，掉到 0 才恢复底表。
+   *   四种变化共用一份 life（它们本来就都作用在「入口数字」这一个东西上，
+   *   effNums() 会把倍率 + 错位 + 石化一起算进最终数字，所以当一个整体看待）。
+   *   再吃到任意一种 = 一次新的状态变化 → 寿命重新起算（跟「冻住的钉被撞碎」一致）。 */
+  const ENTRANCE_LIFE = 3;          // 入口桶变化最多保持几回合（含吃到的那一回合）
+  /* ★ 石化同时最多封几个入口。
+   *   为什么需要这个上限：石化以前是「回合结束就复原」，所以一回合最多封 2 个；
+   *   现在改成保持 3 回合后，连续吃到石化会**累积**（2 + 2 + 2 = 6/9 个桶被封），
+   *   球到处被弹回来、几乎没法得分 → 留个上限保证还玩得下去。 */
+  const SEAL_MAX = 3;               // 同时被封的入口上限（共 9 个桶）
 
   /* 道具表：txt 是画在道具上的字形（不用 emoji，字体缺失也能画）
    *   ★ shape:'bomb' = 不走「彩色圆牌」那套，改画黑色炸弹 + 白骷髅（地雷是纯负面道具，要一眼认出来） */
@@ -271,7 +282,7 @@
   let itemSeq = 0;                 // 道具自增 id（测试要认「同一个道具」有没有被清掉）
 
   /* ★ 本回合生效的效果（回合结束全部复原） */
-  let fx = { L:0, R:0, perm:null, sealed:[] };
+  let fx = { L:0, R:0, perm:null, sealed:[], life:0 };
   let roundGain = 0;               // 本回合累计（多球求和），回合结束才加进 balls
   let roundPegHits = 0, clownDone = false;
   let items = [];                  // 场上道具（回合结束清空）
@@ -431,11 +442,27 @@
     return L.concat([WIN_I], Rr);
   }
 
+  /** 一套「干净的」入口状态（底表、无倍率/错位/石化、寿命 0） */
+  function clearFx(){
+    return { L:0, R:0, perm:null, sealed:new Array(NUMS.length).fill(false), life:0 };
+  }
+  /** ★ 吃到任意一种入口变化（L / R / 错位 / 石化）→ 寿命重新起算 ENTRANCE_LIFE */
+  function touchEntrance(){ fx.life = ENTRANCE_LIFE; }
+  /** 入口还有没有生效的变化（判断要不要显示剩余回合） */
+  function entranceActive(){
+    return !!(fx.L || fx.R || fx.perm || fx.sealed.some(Boolean));
+  }
+
   /** 回合复位：入口效果、石化复位；
    *  ★ 道具不再清空 —— 寿命 -1，掉到 0 才消失（只有换新局才全清）
-   *  ★ 撞针也一样：被炸掉 / 被冻住保持 PEG_LIFE 回合，寿命 -1 掉到 0 才复原 */
+   *  ★ 撞针也一样：被炸掉 / 被冻住保持 PEG_LIFE 回合，寿命 -1 掉到 0 才复原
+   *  ★ 入口变化也一样：保持 ENTRANCE_LIFE 回合，寿命 -1 掉到 0 才恢复底表 */
   function newRound(fresh){
-    fx = { L:0, R:0, perm:null, sealed:new Array(NUMS.length).fill(false) };
+    if(fresh){
+      fx = clearFx();                              // 换新局：入口整体重置
+    }else if(fx.life > 0 && --fx.life <= 0){
+      fx = clearFx();                              // ★ 寿命耗尽才恢复底表
+    }
     for(const p of pegs){
       if(fresh){                                   // 换新局：钉场整体重置
         p.dead = false; p.frozen = false; p.life = 0;
@@ -586,9 +613,24 @@
   function applyItem(b, kind){
     const meta = ITEMS[kind];
     let label = meta.name;
-    if(kind === 'L'){ fx.L = Math.min(MAX_STACK, fx.L + 1); label = '左×' + Math.pow(2, fx.L); }
-    else if(kind === 'R'){ fx.R = Math.min(MAX_STACK, fx.R + 1); label = '右×-' + Math.pow(2, fx.R - 1); }
-    else if(kind === 'SHUF'){ fx.perm = makePerm(); label = '入口错位'; }
+    /* ★ Left / Right 是**互斥**的（方向相反），吃到相反方向 = 抵消掉对方一层。
+     *   为什么必须这样：effNums() 里「L 会让右侧变负、R 会让左侧变负」，
+     *   所以 L 与 R 同时在场 → 9 个桶全是负数（0 桶除外）。
+     *   以前效果只活一回合，这个「全负」状态最多也就挨一回合；
+     *   现在入口变化要保持 ENTRANCE_LIFE 回合 → 一旦先吃 L 再吃 R，
+     *   就会连着好几回合全是负数、几乎没法得分，而且玩家并不完全能控制吃到哪个。
+     *   改成互相抵消后：既保留了「压左边 = 右边变负」的赌注感，又不会锁死成死局。 */
+    if(kind === 'L'){
+      if(fx.R > 0){ fx.R--; label = '抵消右'; }
+      else { fx.L = Math.min(MAX_STACK, fx.L + 1); label = '左×' + Math.pow(2, fx.L); }
+      touchEntrance();
+    }
+    else if(kind === 'R'){
+      if(fx.L > 0){ fx.L--; label = '抵消左'; }
+      else { fx.R = Math.min(MAX_STACK, fx.R + 1); label = '右×-' + Math.pow(2, fx.R - 1); }
+      touchEntrance();
+    }
+    else if(kind === 'SHUF'){ fx.perm = makePerm(); touchEntrance(); label = '入口错位'; }
     else if(kind === 'SPLIT'){ splitBall(b); label = '分裂×3'; }
     else if(kind === 'MINE'){
       b.dead = true;                                   // 触碰到的球立即炸死（视为进 0 桶）
@@ -603,8 +645,10 @@
         const free = [];
         for(let j = 0; j < NUMS.length; j++) if(!fx.sealed[j]) free.push(j);
         if(!free.length) break;
+        if(fx.sealed.filter(Boolean).length >= SEAL_MAX) break;   // ★ 封桶有上限，别把桶全封死
         fx.sealed[free[Math.floor(rng() * free.length)]] = true;
       }
+      touchEntrance();
       label = '封住入口';
     }
     else if(kind === 'CLOWN'){
@@ -1270,6 +1314,16 @@
         ctx.stroke();
       }
     }
+    /* ★ 入口变化进入最后一回合（life<=1）：整排桶描一圈红色脉冲边，
+     *   提醒「下回合入口就恢复底表了」—— 跟道具/撞针的闪烁是同一套语义 */
+    if(entranceActive() && (fx.life | 0) <= 1){
+      const p = 0.5 + 0.5 * Math.sin(tGlobal * 9);
+      ctx.globalAlpha = 0.45 + 0.5 * p;
+      ctx.strokeStyle = '#ff3b30'; ctx.lineWidth = 2.4;
+      roundRect(fieldL + 1, mouthY - 1, fieldR - fieldL - 2, floorY - mouthY + 1, 6);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     // 分隔条（竖线 + 顶部圆头，物理上也是墙）
     for(let k = 0; k <= NUMS.length; k++){
       const x = fieldL + k * slotW;
@@ -1650,20 +1704,23 @@
     }
   }
 
-  /** 本回合生效的效果 → 顶部小徽章 */
+  /** 本回合生效的效果 → 顶部小徽章
+   *  ★ 入口变化（左/右/错位/封）带「还剩几回合」后缀，最后一回合闪红 */
   function fxChips(){
     const c = [];
+    const left = fx.life | 0;                    // 入口变化还剩几回合
+    const suf = entranceActive() ? (left <= 1 ? '·末' : '·' + left) : '';
     if(fx.L){
       const lm = Math.pow(2, fx.L) * (fx.R > 0 ? -Math.pow(2, fx.R - 1) : 1);
-      c.push({ t: '左' + (lm > 0 ? '+' : '') + lm, col: '#ffd166' });
+      c.push({ t: '左' + (lm > 0 ? '+' : '') + lm + suf, col: left <= 1 ? '#ff6b5e' : '#ffd166' });
     }
     if(fx.R){
       const rm = Math.pow(2, fx.R) * (fx.L > 0 ? -Math.pow(2, fx.L - 1) : 1);
-      c.push({ t: '右' + (rm > 0 ? '+' : '') + rm, col: '#ffd166' });
+      c.push({ t: '右' + (rm > 0 ? '+' : '') + rm + suf, col: left <= 1 ? '#ff6b5e' : '#ffd166' });
     }
-    if(fx.perm) c.push({ t: '错位', col: '#c2a3ff' });
+    if(fx.perm) c.push({ t: '错位' + suf, col: left <= 1 ? '#ff6b5e' : '#c2a3ff' });
     const sn = fx.sealed.filter(Boolean).length;
-    if(sn) c.push({ t: '封' + sn, col: '#cfd6e0' });
+    if(sn) c.push({ t: '封' + sn + suf, col: left <= 1 ? '#ff6b5e' : '#cfd6e0' });
     if(flyers.length > 1) c.push({ t: flyers.length + '球', col: '#7dffa0' });
     for(const b of flyers){ if(b.fire){ c.push({ t:'火', col:'#ffa04d' }); break; } }
     for(const b of flyers){ if(b.iceT > 0){ c.push({ t:'冰', col:'#7dd8ff' }); break; } }
@@ -1676,7 +1733,7 @@
     ctx.save();
     ctx.fillStyle = 'rgba(255,252,246,.93)';
     ctx.strokeStyle = '#e0b34c'; ctx.lineWidth = 2;
-    roundRect(cx - hw, cy - 62, hw * 2, 276, 14); ctx.fill(); ctx.stroke();
+    roundRect(cx - hw, cy - 62, hw * 2, 308, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = '#c23b2c'; ctx.font = '800 24px ' + UI;
     ctx.fillText('弹珠乐园', cx, cy - 38);
@@ -1692,24 +1749,27 @@
     ctx.fillStyle = '#7a4b00'; ctx.font = '700 11.5px ' + UI;
     ctx.fillText('球撞到彩色圆牌 = 吃到道具', cx, cy + 78);
     ctx.fillStyle = '#8a6f52'; ctx.font = '11px ' + UI;
-    ctx.fillText('效果只管这一回合，回合结束复原', cx, cy + 94);
+    ctx.fillText('球变多/变火/变冰 只管这一回合', cx, cy + 94);
     ctx.fillStyle = '#b4483f'; ctx.font = '700 11px ' + UI;
     ctx.fillText('道具最多留 ' + ITEM_LIFE + ' 回合，最后一回合闪烁', cx, cy + 110);
     ctx.fillText('被炸掉/冻住的钉留 ' + PEG_LIFE + ' 回合才复原', cx, cy + 126);
+    ctx.fillText('入口变化（左/右·错位·封桶）也留 ' + ENTRANCE_LIFE + ' 回合', cx, cy + 142);
+    ctx.fillStyle = '#8a6f52'; ctx.font = '11px ' + UI;
+    ctx.fillText('左和右互相抵消，不会同时生效', cx, cy + 158);
     ctx.fillStyle = '#0d1015'; ctx.font = '700 11px ' + UI;
-    ctx.fillText('黑炸弹（白骷髅）千万别碰 —— 会炸死球', cx, cy + 142);
+    ctx.fillText('黑炸弹（白骷髅）千万别碰 —— 会炸死球', cx, cy + 174);
     // ★ 撞针弹力图鉴：4 档颜色 = 4 档弹力（每局分布随机）
     ctx.fillStyle = '#7a4b00'; ctx.font = '700 11px ' + UI;
-    ctx.fillText('撞针弹力（每局随机）', cx, cy + 164);
+    ctx.fillText('撞针弹力（每局随机）', cx, cy + 196);
     const step = (hw * 2 - 24) / PEG_KINDS.length;
     let lx = cx - hw + 12 + step / 2;
     for(const K of PEG_KINDS){
       ctx.fillStyle = K.c[1];
-      ctx.beginPath(); ctx.arc(lx, cy + 178, 5, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(lx, cy + 210, 5, 0, 7); ctx.fill();
       ctx.strokeStyle = K.ring; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.arc(lx, cy + 178, 5, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(lx, cy + 210, 5, 0, 7); ctx.stroke();
       ctx.fillStyle = '#8a6f52'; ctx.font = '700 10.5px ' + UI;
-      ctx.fillText(K.name, lx, cy + 192);
+      ctx.fillText(K.name, lx, cy + 224);
       lx += step;
     }
     ctx.restore();
@@ -1869,6 +1929,7 @@
         '  道具=' + items.length + '(' + items.map(i2 => i2.kind).join(',') + ')' +
         '  回合效果=' + (fx.L ? 'L' + fx.L : '') + (fx.R ? 'R' + fx.R : '') + (fx.perm ? '错位' : '') +
         (fx.sealed.some(Boolean) ? '封' + fx.sealed.filter(Boolean).length : '') +
+        (entranceActive() ? '(还剩' + (fx.life | 0) + '回合)' : '') +
         '  本回合累计=' + roundGain + '  炮口=' + aim.toFixed(2) + 'rad',
       '区间: 力量0%=' + MINV + ' 100%=' + MAXV + '  重力=' + G + '  钉r=' + RP + ' 球r=' + RB,
       '音效=' + (soundOn ? '开' : '关') + '  BGM=' + (bgmTimer ? '播放中' : '停'),
@@ -1941,10 +2002,10 @@
     ball: flyers[0] ? { x: flyers[0].x, y: flyers[0].y, vx: flyers[0].vx, vy: flyers[0].vy,
                         flightT: flyers[0].flightT } : null,
     items: items.map(it => ({ id: it.id, x: it.x, y: it.y, kind: it.kind, life: it.life })),
-    ITEM_LIFE, ITEM_MAX, PEG_LIFE,
+    ITEM_LIFE, ITEM_MAX, PEG_LIFE, ENTRANCE_LIFE, SEAL_MAX,
     itemsOn, roundGain, roundPegHits, clownDone, aim, aimDir,
     fx: { L: fx.L, R: fx.R, shuffle: !!fx.perm, perm: fx.perm ? fx.perm.slice() : null,
-          sealed: fx.sealed.slice() },
+          sealed: fx.sealed.slice(), life: fx.life | 0, active: entranceActive() },
     effNums: effNums(),
     AIM_MAX, ITEM_R, MAX_FLYERS, MAX_STACK, MINE_R, FIRE_R, ICE_R, ICE_TIME,
     bgm: !!bgmTimer,
@@ -1999,6 +2060,8 @@
     return { key: kind, txt: m.txt, color: m.color, ink: m.ink, name: m.name, shape: m.shape || 'plate' };
   };
   window.__marbleMineVisual = () => ({ shape: ITEMS.MINE.shape, R: ITEM_R + 1.2, blastR: MINE_R, ITEM_R });
+  window.__marbleEntranceActive = () => entranceActive();
+  window.__marbleClearFx = () => { fx = clearFx(); return true; };
   window.__marblePegStateLast = life => pegStateLast({ life: life | 0, dead: true });
   window.__marblePegPulse = () => pegStatePulse({ i: 0 });
   /* 直接给某颗钉设置状态（测「寿命保持」用，绕开物理的不确定性） */
