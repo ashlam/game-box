@@ -36,7 +36,7 @@ function mkGradient() {
 /* ★ 记录型 ctx：把 save/restore/translate/rotate 记下来，
  *   用来断言「画出来的炮口朝向」和「发射方向」一致（光看数值看不出绘制反向）。
  *   另外记录 fillText 与「圆弧填充」(fillStyle + 半径)，用来断言地雷的黑色弹体 + 白骷髅。 */
-const drawRec = { frames: [], stack: [], alphas: [], texts: [], fills: [], dashes: [] };
+const drawRec = { frames: [], stack: [], alphas: [], texts: [], fills: [], dashes: [], strokes: [] };
 function mkCtx() {
   return new Proxy({}, {
     get(t, k) {
@@ -52,8 +52,19 @@ function mkCtx() {
         if (s) s.rot = a;
         drawRec.frames.push({ tx: s ? s.tx : 0, ty: s ? s.ty : 0, rot: a });
       };
-      if (k === 'fillText') return (txt, x, y) => { drawRec.texts.push({ txt: String(txt), x, y, style: t.fillStyle }); };
+      if (k === 'fillText') return (txt, x, y) => { drawRec.texts.push({ txt: String(txt), x, y, style: t.fillStyle, font: t.font }); };
       if (k === 'setLineDash') return arr => { drawRec.dashes.push(arr ? arr.slice() : []); };
+      /* ★ 记录描边路径：入口外边缘是 moveTo/lineTo + stroke 画的，
+       *   要能验证「真的画了」以及「用什么颜色/多粗」。 */
+      if (k === 'beginPath') return () => { t._path = []; };
+      if (k === 'moveTo') return (x, y) => { if (!t._path) t._path = []; t._path.push({ x, y, move: true }); };
+      if (k === 'lineTo') return (x, y) => { if (!t._path) t._path = []; t._path.push({ x, y }); };
+      if (k === 'stroke') return () => {
+        for (const p of (t._path || [])) {
+          if (p.move) continue;
+          drawRec.strokes.push({ x: p.x, y: p.y, style: t.strokeStyle, w: t.lineWidth });
+        }
+      };
       if (k === 'arc') return (x, y, r) => { t._lastR = r; t._lastX = x; t._lastY = y; };
       if (k === 'fill') return () => { drawRec.fills.push({ r: t._lastR, x: t._lastX, y: t._lastY, style: t.fillStyle, alpha: t.globalAlpha }); };
       if (k in t) return t[k];
@@ -66,7 +77,7 @@ function mkCtx() {
     },
   });
 }
-function resetDrawRec() { drawRec.texts.length = 0; drawRec.fills.length = 0; drawRec.dashes.length = 0; drawRec.alphas.length = 0; }
+function resetDrawRec() { drawRec.texts.length = 0; drawRec.fills.length = 0; drawRec.dashes.length = 0; drawRec.alphas.length = 0; drawRec.strokes.length = 0; }
 function mkClassList() {
   const s = new Set();
   return { add: c => s.add(c), remove: c => s.delete(c), contains: c => s.has(c), _all: () => [...s] };
@@ -597,18 +608,24 @@ section('11) ★ 错位（左右各自内部打乱，不串边）· 石化（封
 }
 
 /* ================= 12) 分裂 / UP ================= */
-section('12) ★ 分裂球（一变三、可叠加、上限 9）· 1UP/2UP/3UP');
+section('12) ★ 分裂球（一变 ' + 4 + '、可叠加、上限 9）· 1UP/2UP/3UP');
 {
   reset(12);
+  const SN = M().SPLIT_N;
+  ok(SN === 4, '★ 分裂常数 SPLIT_N=4（一变四，用户要求比原来多 1 个）');
   ok(M().flyers.length === 0, '开局场上没有在飞的球');
   win.__marbleEat('SPLIT');
-  ok(M().flyers.length === 3, '★ 吃到分裂：一变三（' + M().flyers.length + ' 球）');
-  ok(M().flyers.every(b => b.splitLv === 1), '三球都记了分裂层数 1');
+  ok(M().flyers.length === SN, '★ 吃到分裂：一变 ' + SN + '（' + M().flyers.length + ' 球）');
+  ok(M().flyers.every(b => b.splitLv === 1), SN + ' 球都记了分裂层数 1');
   const angs = M().flyers.map(b => Math.atan2(b.vy, b.vx));
-  ok(new Set(angs.map(a => a.toFixed(3))).size === 3, '★ 三球朝三个不同方向弹开');
+  ok(new Set(angs.map(a => a.toFixed(3))).size === SN, '★ ' + SN + ' 球朝 ' + SN + ' 个不同方向弹开');
+  /* ★ 张角没有变大：仍然铺在 ±0.55 内（只是从 3 条变 4 条） */
+  const sorted = angs.slice().sort((a, b) => a - b);
+  const spread = sorted[sorted.length - 1] - sorted[0];
+  ok(spread <= 0.55 * 2 + 1e-6, '★ 张角仍在 ±0.55 内（实测 ' + spread.toFixed(3) + ' ≤ 1.100）');
 
   win.__marbleEat('SPLIT', 0);
-  ok(M().flyers.length === 5, '★ 再吃一次继续分裂：3 → ' + M().flyers.length + ' 球');
+  ok(M().flyers.length === 2 * SN - 1, '★ 再吃一次继续分裂：' + SN + ' → ' + M().flyers.length + ' 球');
   ok(M().flyers[0].splitLv === 2, '层数累加到 2');
 
   for(let i = 0; i < 30; i++) win.__marbleEat('SPLIT', 0);
@@ -618,9 +635,9 @@ section('12) ★ 分裂球（一变三、可叠加、上限 9）· 1UP/2UP/3UP')
   reset(12);
   win.__marbleEat('SPLIT');
   const per = M().effNums[4];
-  win.__marbleLand(4); win.__marbleLand(4); win.__marbleLand(4);
-  ok(M().balls === 5 + per * 3,
-     '★ 三球全部落 8 号桶：得分按总和算（5 + ' + per + '×3 = ' + M().balls + '）');
+  for(let i = 0; i < SN; i++) win.__marbleLand(4);
+  ok(M().balls === 5 + per * SN,
+     '★ ' + SN + ' 球全部落 8 号桶：得分按总和算（5 + ' + per + '×' + SN + ' = ' + M().balls + '）');
 
   // UP
   reset(12);
@@ -631,6 +648,26 @@ section('12) ★ 分裂球（一变三、可叠加、上限 9）· 1UP/2UP/3UP')
   reset(12);
   win.__marbleEat('UP1');
   ok(M().balls === 6 && M().flyers.length === 1, '★ 1UP 加 1 命、分裂出 1 个球（' + M().balls + ' 命 / ' + M().flyers.length + ' 球）');
+
+  /* ★ 用户要求：UP 道具牌面上写「1up / 2up / 3up」，不是原来的「+1 / +2 / +3」 */
+  const upTxt = k => win.__marbleItemMeta(k).txt;
+  ok(upTxt('UP1') === '1up' && upTxt('UP2') === '2up' && upTxt('UP3') === '3up',
+     '★ UP 道具字形改成 1up / 2up / 3up（' + [upTxt('UP1'), upTxt('UP2'), upTxt('UP3')].join(' / ') + '）');
+  ok(![upTxt('UP1'), upTxt('UP2'), upTxt('UP3')].some(t => t.indexOf('+') >= 0),
+     '★ 不再是 +1/+2/+3（不带加号）');
+
+  // 3 个字要真的画得下：字号必须比单字小
+  reset(12); win.__marbleClearItems();
+  const fx1 = M().ITEM_FONT[1], fx3 = M().ITEM_FONT[3];
+  ok(fx3 < fx1, '★ 3 字字号(' + fx3 + ') < 1 字字号(' + fx1 + ') —— 塞得进 19px 圆牌');
+  const mx2 = M().fieldL + 60, my2 = M().fieldT + 150;
+  win.__marblePutItem('UP2', mx2, my2);
+  resetDrawRec();
+  win.__marbleDraw();
+  const upDraw = drawRec.texts.filter(t => t.txt === '2up');
+  ok(upDraw.length === 1, '★ 「2up」真的被画到画布上了');
+  ok(upDraw.length === 0 || parseFloat(String(upDraw[0].font).match(/([\d.]+)px/)[1]) === fx3,
+     '★ 用的是 3 字字号（' + (upDraw[0] ? upDraw[0].font : '—') + '）');
 }
 
 /* ================= 13) 地雷 / 火力球 / 冰封球 ================= */
@@ -657,9 +694,9 @@ section('13) ★ 地雷（炸死球+炸钉）· 火力球（撞钉引爆）· �
   // 地雷会连累其它球
   reset(13);
   win.__marbleEat('SPLIT');
-  ok(M().flyers.length === 3, '先裂成 3 球');
+  ok(M().flyers.length === M().SPLIT_N, '先裂成 ' + M().SPLIT_N + ' 球');
   win.__marbleEat('MINE', 0);
-  ok(M().flyers.length < 3, '★ 地雷把周围的球一起炸掉（剩 ' + M().flyers.length + '）');
+  ok(M().flyers.length < M().SPLIT_N, '★ 地雷把周围的球一起炸掉（剩 ' + M().flyers.length + '）');
 
   // 火力球
   reset(13);
@@ -1003,6 +1040,74 @@ section('16) ★ 入口桶变化的寿命：左/右·错位·封桶 不再回合
   ok(sealCnt <= M().SEAL_MAX, '★ 连续吃 12 次石化，被封入口不超上限（' + sealCnt + ' ≤ ' + M().SEAL_MAX + '）');
   const freeCnt = M().fx.sealed.filter(v => !v).length;
   ok(freeCnt >= 6, '★ 始终留着足够的可得分入口（空着 ' + freeCnt + '/9）');
+
+  // ---- ★ 入口外边缘闪烁（用户要求：L / R / 变换时闪，起提醒作用） ----
+  /* 断言方式：入口区那几条边是用 stroke 画的，且颜色/线宽会随效果和寿命变。
+   *   记录型 ctx 记了 lineWidth 与 strokeStyle，所以能验证「真的画到画布上了」。 */
+  const edgeColors = () => {
+    reset(51); win.__marbleClearFx();
+    return null;
+  };
+  reset(51); win.__marbleClearFx();
+  ok(win.__marbleEntranceEdge().key === '', '（前置）没有入口变化时，没有闪烁色');
+
+  win.__marbleEat('L');
+  ok(win.__marbleEntranceEdge().col === '#ffd166', '★ 倍率生效 → 入口边缘用金色闪（' + win.__marbleEntranceEdge().col + '）');
+  win.__marbleClearFx(); win.__marbleEat('SHUF');
+  ok(win.__marbleEntranceEdge().col === '#c2a3ff', '★ 错位生效 → 入口边缘用紫色闪（' + win.__marbleEntranceEdge().col + '）');
+  win.__marbleClearFx(); win.__marbleEat('STONE');
+  ok(win.__marbleEntranceEdge().col === '#cfd6e0', '★ 封桶生效 → 入口边缘用灰白闪（' + win.__marbleEntranceEdge().col + '）');
+  // 多种叠加取优先级最高的（错位 > 倍率 > 封桶）
+  win.__marbleClearFx(); win.__marbleEat('L'); win.__marbleEat('STONE'); win.__marbleEat('SHUF');
+  ok(win.__marbleEntranceEdge().col === '#c2a3ff', '★ 多种叠加时取优先级最高的（错位）');
+
+  /* ★ 关键：闪烁必须真的落到画布上，而且「有变化」和「没变化」要能区分开。
+   *   做法：分别在有/无入口变化时各画若干帧，统计「入口区附近被 stroke 的次数与线宽」。 */
+  const countEntranceStrokes = () => {
+    let n = 0, widths = [];
+    for (let f = 0; f < 12; f++) {
+      run(1);
+      drawRec.strokes.length = 0;
+      win.__marbleDraw();
+      for (const s of drawRec.strokes) {
+        // 入口区：y 在桶口~桶底之间，且是横贯场地的长边
+        if (s.y >= M().mouthY - 3 && s.y <= M().floorY + 3) { n++; widths.push(s.w); }
+      }
+    }
+    return { n, widths };
+  };
+  reset(51); win.__marbleClearFx(); win.__marbleClearItems();
+  const noEnt = countEntranceStrokes();
+  win.__marbleEat('SHUF');
+  const withEnt = countEntranceStrokes();
+  ok(withEnt.n > noEnt.n,
+     '★ 入口变化生效时，入口外边缘真的被画了（' + withEnt.n + ' 次 vs 无变化 ' + noEnt.n + ' 次）');
+
+  // 最后一回合要变红、加粗
+  win.__marbleClearFx(); win.__marbleEat('L');
+  win.__marbleLand(4); win.__marbleLand(4);          // 寿命掉到 1
+  ok(M().fx.life === 1, '（前置）入口变化只剩最后一回合');
+  let sawRed = false, sawThick = false;
+  for (let f = 0; f < 12; f++) {
+    run(1);
+    drawRec.strokes.length = 0;
+    win.__marbleDraw();
+    for (const s of drawRec.strokes) {
+      if (s.y >= M().mouthY - 3 && s.y <= M().floorY + 3) {
+        if (String(s.style).replace(/\s/g, '') === '#ff3b30') sawRed = true;
+        if (s.w >= 3) sawThick = true;
+      }
+    }
+  }
+  ok(sawRed, '★ 最后一回合入口边缘变红（提醒「下回合就恢复底表」）');
+  ok(sawThick, '★ 最后一回合入口边缘加粗（更醒目）');
+
+  // 恢复底表后不再闪
+  win.__marbleLand(4);                                // 寿命归 0
+  ok(!M().fx.active, '（前置）入口已恢复底表');
+  const afterRestore = countEntranceStrokes();
+  ok(afterRestore.n <= noEnt.n + 1,
+     '★ 恢复底表后入口边缘不再闪（' + afterRestore.n + ' 次 ≈ 无变化 ' + noEnt.n + ' 次）');
 
   // ---- 换新局：入口整体重置 ----
   reset(51); win.__marbleClearFx();

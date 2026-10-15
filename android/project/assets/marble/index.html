@@ -220,6 +220,7 @@
   const MAX_FLYERS = 9;             // 同屏小球上限（分裂叠加的封顶）
   const MAX_STACK = 9;              // Left / Right 最多叠加 9 层
   const SPLIT_MAX_LV = 3;           // 单球最多被分裂 3 次
+  const SPLIT_N = 4;                // ★ 分裂一次「一变几」（用户要求 +1：原来是 3，现在 4）
   const ICE_TIME = 4.0;             // 冰封球持续（秒）
   const ICE_R = 21;                 // 冰封球冻住路径上撞钉的半径
   const FIRE_R = 44;                // 火力球爆炸半径
@@ -263,11 +264,14 @@
     ICE:   { txt:'❄',  color:'#7dd8ff', ink:'#0b3d52', name:'冰封球' },
     STONE: { txt:'■',  color:'#b9c2cf', ink:'#2f3742', name:'石化' },
     CLOWN: { txt:'?',  color:'#ff8fd0', ink:'#6b1a4a', name:'小丑礼盒' },
-    UP1:   { txt:'+1', color:'#8affc1', ink:'#0d4d2e', name:'1UP' },
-    UP2:   { txt:'+2', color:'#8affc1', ink:'#0d4d2e', name:'2UP' },
-    UP3:   { txt:'+3', color:'#8affc1', ink:'#0d4d2e', name:'3UP' },
+    UP1:   { txt:'1up', color:'#8affc1', ink:'#0d4d2e', name:'1UP' },
+    UP2:   { txt:'2up', color:'#8affc1', ink:'#0d4d2e', name:'2UP' },
+    UP3:   { txt:'3up', color:'#8affc1', ink:'#0d4d2e', name:'3UP' },
   };
   const ITEM_KEYS = Object.keys(ITEMS);
+  /* ★ 道具字形字号：按字数收，保证塞得进 19px 直径的圆牌。
+   *   1 字（L / R / ⇄ / Y / F / ❄ / ■ / ?）可以很大；3 字（1up / 2up / 3up）必须明显收小。 */
+  const ITEM_FONT = { 1: 11.5, 2: 9, 3: 7.4 };
   const randInt = (a, b) => a + Math.floor(rng() * (b - a + 1));   // 走本局 rng → 可复现
 
   /* ---------- 状态 ---------- */
@@ -452,6 +456,15 @@
   function entranceActive(){
     return !!(fx.L || fx.R || fx.perm || fx.sealed.some(Boolean));
   }
+  /** ★ 入口闪烁该用什么颜色：按当前生效的变化走。
+   *   多种同时存在时取优先级最高的一个（错位 > 倍率 > 封桶），
+   *   只是为了「一眼看出入口被动过」，不必把每种颜色都画一遍。 */
+  function entranceEdge(){
+    if(fx.perm)      return { col:'#c2a3ff', key:'错位' };
+    if(fx.L || fx.R) return { col:'#ffd166', key:'倍率' };
+    if(fx.sealed.some(Boolean)) return { col:'#cfd6e0', key:'封桶' };
+    return { col:'#ffffff', key:'' };
+  }
 
   /** 回合复位：入口效果、石化复位；
    *  ★ 道具不再清空 —— 寿命 -1，掉到 0 才消失（只有换新局才全清）
@@ -577,16 +590,22 @@
   }
   let shake = 0;
 
-  /** 分裂：一变三，向三个方向弹开；可叠加（单球最多 3 层、同屏最多 9 球） */
+  /** 分裂：一变四，向四个方向弹开；可叠加（单球最多 3 层、同屏最多 9 球）
+   *  ★ 用户要求：分裂出的小球再多 +1（原来是「一变三」，现在是「一变四」）。
+   *    四个方向在**原来的张角内**均匀铺开（仍是 ±0.55 rad），
+   *    这样「散得多开」的观感不变，只是从 3 条变成 4 条。 */
   function splitBall(b){
     if(b.splitLv >= SPLIT_MAX_LV) return 0;
     const sp = Math.max(170, Math.hypot(b.vx, b.vy));
     const base = Math.atan2(b.vy, b.vx);
-    const angs = [-0.55, 0, 0.55];
+    const SPREAD = 0.55;                                  // 单侧最大张角（跟原来一致）
+    const n = SPLIT_N;                                    // 一变几
+    const angs = [];
+    for(let i = 0; i < n; i++) angs.push(-SPREAD + (2 * SPREAD) * i / (n - 1));
     b.splitLv++;
     b.vx = Math.cos(base + angs[0]) * sp; b.vy = Math.sin(base + angs[0]) * sp;
     let made = 1;
-    for(let i = 1; i < 3; i++){
+    for(let i = 1; i < n; i++){
       if(flyers.length >= MAX_FLYERS) break;
       const nb = mkBall(b.x, b.y, Math.cos(base + angs[i]) * sp, Math.sin(base + angs[i]) * sp);
       nb.splitLv = b.splitLv; nb.fire = b.fire; nb.iceT = b.iceT;
@@ -631,7 +650,7 @@
       touchEntrance();
     }
     else if(kind === 'SHUF'){ fx.perm = makePerm(); touchEntrance(); label = '入口错位'; }
-    else if(kind === 'SPLIT'){ splitBall(b); label = '分裂×3'; }
+    else if(kind === 'SPLIT'){ splitBall(b); label = '分裂×' + SPLIT_N; }
     else if(kind === 'MINE'){
       b.dead = true;                                   // 触碰到的球立即炸死（视为进 0 桶）
       explode(b.x, b.y, MINE_R, true);                 // 并炸掉周围钉子和其他球
@@ -1314,15 +1333,34 @@
         ctx.stroke();
       }
     }
-    /* ★ 入口变化进入最后一回合（life<=1）：整排桶描一圈红色脉冲边，
-     *   提醒「下回合入口就恢复底表了」—— 跟道具/撞针的闪烁是同一套语义 */
-    if(entranceActive() && (fx.life | 0) <= 1){
-      const p = 0.5 + 0.5 * Math.sin(tGlobal * 9);
-      ctx.globalAlpha = 0.45 + 0.5 * p;
-      ctx.strokeStyle = '#ff3b30'; ctx.lineWidth = 2.4;
-      roundRect(fieldL + 1, mouthY - 1, fieldR - fieldL - 2, floorY - mouthY + 1, 6);
+    /* ★ 入口外边缘闪烁（用户要求）：只要入口被 L / R / 错位 / 封桶 改过，
+     *   就把「入口外边缘」画成会呼吸的亮边，提醒玩家「现在的入口不是底表」。
+     *   - 颜色按当前生效的变化走（左/右=金、错位=紫、封桶=灰白；多种叠加时取优先级最高的那个）
+     *   - 最后一回合（life<=1）统一变红并加快节奏 —— 跟道具/撞针的「最后一回合」是同一套语义
+     *   - 加 shadowBlur 光晕：光一条细线在花花绿绿的桶排上不够显眼（实测太容易被忽略） */
+    if(entranceActive()){
+      const edge = entranceEdge();
+      const last = (fx.life | 0) <= 1;
+      const p = 0.5 + 0.5 * Math.sin(tGlobal * (last ? 13 : 7));
+      const col = last ? '#ff3b30' : edge.col;
+      ctx.save();
+      ctx.globalAlpha = (last ? 0.55 : 0.35) + 0.6 * p;
+      ctx.strokeStyle = col;
+      ctx.shadowColor = col;
+      ctx.shadowBlur = (last ? 14 : 9) * (0.55 + 0.65 * p);
+      // ① 入口「嘴」这一条线（球就是从这里落进去的）—— 加粗画在最上层
+      ctx.lineWidth = last ? 3.4 : 2.6;
+      ctx.beginPath();
+      ctx.moveTo(fieldL + 1, mouthY); ctx.lineTo(fieldR - 1, mouthY);
       ctx.stroke();
-      ctx.globalAlpha = 1;
+      // ② 外框左右两条竖边 + 底边（把整个「入口区」圈出来）
+      ctx.lineWidth = last ? 2.6 : 1.8;
+      ctx.beginPath();
+      ctx.moveTo(fieldL + 1, mouthY); ctx.lineTo(fieldL + 1, floorY + 1);
+      ctx.moveTo(fieldR - 1, mouthY); ctx.lineTo(fieldR - 1, floorY + 1);
+      ctx.moveTo(fieldL + 1, floorY + 1); ctx.lineTo(fieldR - 1, floorY + 1);
+      ctx.stroke();
+      ctx.restore();
     }
     // 分隔条（竖线 + 顶部圆头，物理上也是墙）
     for(let k = 0; k <= NUMS.length; k++){
@@ -1454,7 +1492,7 @@
     return (it.life | 0) <= 1 ? 0.26 + 0.74 * (0.5 + 0.5 * Math.sin(tGlobal * 11)) : 1;
   }
 
-  /** ★ 普通道具：彩色圆牌 + 字形（L / R / ⇄ / Y / F / ❄ / ■ / ? / +1..+3） */
+  /** ★ 普通道具：彩色圆牌 + 字形（L / R / ⇄ / Y / F / ❄ / ■ / ? / 1up / 2up / 3up） */
   function drawItemPlate(it, y, meta, last){
     ctx.fillStyle = 'rgba(255,255,255,.26)';
     ctx.beginPath(); ctx.arc(it.x, y, ITEM_R + 4.5, 0, 7); ctx.fill();
@@ -1466,7 +1504,7 @@
     ctx.lineWidth = last ? 1.8 : 1.2;
     ctx.beginPath(); ctx.arc(it.x, y, ITEM_R, 0, 7); ctx.stroke();
     ctx.fillStyle = meta.ink;
-    ctx.font = '800 ' + (meta.txt.length > 1 ? 9 : 11.5) + 'px ' + UI;
+    ctx.font = '800 ' + (ITEM_FONT[meta.txt.length] || 7) + 'px ' + UI;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(meta.txt, it.x, y + 0.5);
   }
@@ -1733,7 +1771,7 @@
     ctx.save();
     ctx.fillStyle = 'rgba(255,252,246,.93)';
     ctx.strokeStyle = '#e0b34c'; ctx.lineWidth = 2;
-    roundRect(cx - hw, cy - 62, hw * 2, 308, 14); ctx.fill(); ctx.stroke();
+    roundRect(cx - hw, cy - 62, hw * 2, 324, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = '#c23b2c'; ctx.font = '800 24px ' + UI;
     ctx.fillText('弹珠乐园', cx, cy - 38);
@@ -1756,20 +1794,22 @@
     ctx.fillText('入口变化（左/右·错位·封桶）也留 ' + ENTRANCE_LIFE + ' 回合', cx, cy + 142);
     ctx.fillStyle = '#8a6f52'; ctx.font = '11px ' + UI;
     ctx.fillText('左和右互相抵消，不会同时生效', cx, cy + 158);
+    ctx.fillStyle = '#5a4231'; ctx.font = '700 11px ' + UI;
+    ctx.fillText('入口被改过时，外边缘会闪', cx, cy + 174);
     ctx.fillStyle = '#0d1015'; ctx.font = '700 11px ' + UI;
-    ctx.fillText('黑炸弹（白骷髅）千万别碰 —— 会炸死球', cx, cy + 174);
+    ctx.fillText('黑炸弹（白骷髅）千万别碰 —— 会炸死球', cx, cy + 190);
     // ★ 撞针弹力图鉴：4 档颜色 = 4 档弹力（每局分布随机）
     ctx.fillStyle = '#7a4b00'; ctx.font = '700 11px ' + UI;
-    ctx.fillText('撞针弹力（每局随机）', cx, cy + 196);
+    ctx.fillText('撞针弹力（每局随机）', cx, cy + 212);
     const step = (hw * 2 - 24) / PEG_KINDS.length;
     let lx = cx - hw + 12 + step / 2;
     for(const K of PEG_KINDS){
       ctx.fillStyle = K.c[1];
-      ctx.beginPath(); ctx.arc(lx, cy + 210, 5, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(lx, cy + 226, 5, 0, 7); ctx.fill();
       ctx.strokeStyle = K.ring; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.arc(lx, cy + 210, 5, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(lx, cy + 226, 5, 0, 7); ctx.stroke();
       ctx.fillStyle = '#8a6f52'; ctx.font = '700 10.5px ' + UI;
-      ctx.fillText(K.name, lx, cy + 224);
+      ctx.fillText(K.name, lx, cy + 240);
       lx += step;
     }
     ctx.restore();
@@ -2008,6 +2048,7 @@
           sealed: fx.sealed.slice(), life: fx.life | 0, active: entranceActive() },
     effNums: effNums(),
     AIM_MAX, ITEM_R, MAX_FLYERS, MAX_STACK, MINE_R, FIRE_R, ICE_R, ICE_TIME,
+    SPLIT_N, SPLIT_MAX_LV, ITEM_FONT: Object.assign({}, ITEM_FONT),
     bgm: !!bgmTimer,
   });
   window.__marbleSetStage = (w, h) => { const st = document.getElementById('stage'); st.clientWidth = w; st.clientHeight = h; layout(); return { W: W, H: H, S: S }; };
@@ -2061,6 +2102,7 @@
   };
   window.__marbleMineVisual = () => ({ shape: ITEMS.MINE.shape, R: ITEM_R + 1.2, blastR: MINE_R, ITEM_R });
   window.__marbleEntranceActive = () => entranceActive();
+  window.__marbleEntranceEdge = () => entranceEdge();
   window.__marbleClearFx = () => { fx = clearFx(); return true; };
   window.__marblePegStateLast = life => pegStateLast({ life: life | 0, dead: true });
   window.__marblePegPulse = () => pegStatePulse({ i: 0 });

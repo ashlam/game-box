@@ -99,7 +99,7 @@ node tools/test_blockpuzzle.js  # 96 项
 node tools/test_breakout.js     # 23 项
 node tools/test_frog.js         # 53 项
 node tools/test_klotski.js      # 190 项
-node tools/test_marble.js       # 289 项
+node tools/test_marble.js       # 307 项
 node tools/test_othello.js      # 黑白棋整局对局 + 计时断言
 node tools/test_parking.js      # 停车场华容道：77 项
 node tools/test_sokoban.js      # 两套关卡逐关重放解法：30 项
@@ -186,6 +186,17 @@ node tools/bench_marble_entrance.js 12 0.35 random   # 第 4 个参数 random = 
 > ⚠️ 教训：`bench` 的瞄准模型会显著影响结论。一开始用「随机瞄准」测，得出「新行为比旧行为差 290%」的
 > 吓人结论 —— 其实是把 `L/R` 的设计意图（左边加倍、右边变负，**本来就该往左边打**）当成了随机挨罚。
 > 换成「打最值钱的桶」后差距就消失了。
+
+### 弹珠乐园：入口边缘闪烁 · 分裂一变四 · UP 字形
+
+- **入口外边缘闪烁**：只要入口被 `L` / `R` / `错位` / `封桶` 改过，入口区外边缘就画成会呼吸的亮边，
+  提醒「现在的入口不是底表」。颜色按生效的变化走（倍率=金 / 错位=紫 / 封桶=灰白，多种叠加取优先级最高），
+  最后一回合统一变红、加快节奏并加粗。
+  ⚠️ 只画一条细线在花花绿绿的桶排上**太容易被忽略**，所以加了 `shadowBlur` 光晕才够醒目（实测调过）。
+- **分裂一变四**（`SPLIT_N=4`）：原来是「一变三」，现在每次多裂出一个小球。
+  四个方向仍铺在**原来的张角**（±0.55 rad）内均匀分开，所以「散得多开」的观感不变，只是从 3 条变 4 条。
+- **UP 字形**：道具牌面写 `1up` / `2up` / `3up`（原来是 `+1` / `+2` / `+3`）。
+  3 个字比 1 个字宽，所以字号按字数收（`ITEM_FONT = {1:11.5, 2:9, 3:7.4}`），保证塞得进 19px 的圆牌。
 
 > 测试脚本直接读 `web/**/index.html` 里的内联 `<script>`，所以**改完游戏不用额外构建**，跑测试即可。
 
