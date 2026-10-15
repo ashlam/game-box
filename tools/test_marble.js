@@ -220,21 +220,25 @@ section('1) ★ 规则：初始 10 条命 / 发射扣命 / 落桶得分（不再
      '★ 发射即扣 1 条命：' + L0 + ' → ' + f.lives + '（已发 ' + f.launched + ' 颗）');
   ok(f.score === 0, '★ 发射不加分（分数只来自落桶）');
 
-  // 逐桶验证「桶上的数字原样加进分数」，且**不加生命**
+  /* 逐桶验证「桶上的数字原样加进分数」。
+   * ★ 金冠筒（crownI）是唯一的例外：除了得分还额外 +1 命 —— 单独断言。 */
   for (let i = 0; i < 9; i++) {
     reset(1);
     press(); setCharge(0.4); release();            // 生命 10 → 9
     const livesAfterFire = M().lives;
-    land(i);                                        // 分数 += NUMS[i]
+    const isCrown = (i === M().crownI);
+    land(i);                                        // 分数 += NUMS[i]（金冠另 +1 命）
     const got = M().score, want = M().NUMS[i];
     ok(got === want, `桶[${i}]=${M().NUMS[i]}：分数 ${want}（实得 ${got}）`, '得到 ' + got);
-    ok(M().lives === livesAfterFire,
-       `  └ 落桶不加命（仍是 ${M().lives}）`, '生命被改了');
+    ok(M().lives === livesAfterFire + (isCrown ? 1 : 0),
+       `  └ ${isCrown ? '金冠筒额外 +1 命' : '非金冠筒不加命'}（${livesAfterFire} → ${M().lives}）`,
+       '生命被改了');
     ok(M().lastBucket === i, `  └ 记录落点桶[${i}]`, String(M().lastBucket));
   }
 
-  // 0 号桶：不得分，但照样扣命 → 打 10 发就结束
+  // 0 号桶：不得分，但照样扣命 → 打 10 发就结束（seed 1 的金冠在 4 号，不影响这里）
   reset(1);
+  ok(M().crownI !== 1, '（前置）seed 1 的金冠不在 1 号桶（crownI=' + M().crownI + '）');
   let trace = [];
   for (let k = 1; k <= 10; k++) {
     press(); setCharge(0.5); release();
@@ -252,10 +256,10 @@ section('1) ★ 规则：初始 10 条命 / 发射扣命 / 落桶得分（不再
   reset(3);
   ok(M().lives === 10 && M().score === 0 && M().state === 'ready', '★ 重开回到 10 条命、0 分、ready');
 
-  // 落桶得分与生命彻底解耦：落头奖 8 分也不会多一条命
+  // 非金冠筒：只加分数、不加命（用 1 号桶，seed 1 的金冠在 4 号）
   reset(1);
-  press(); setCharge(0.5); release(); land(4);
-  ok(M().score === 8 && M().lives === 9, '★ 落 8 号头奖：+8 分，但生命仍是 9（不再「加球」）');
+  press(); setCharge(0.5); release(); land(1);
+  ok(M().score === 0 && M().lives === 9, '★ 落非金冠的 0 分筒：不加分也不加命（生命仍是 9）');
 }
 
 /* ================= 2) 蓄力 → 力量 ================= */
@@ -639,15 +643,24 @@ section('12) ★ 分裂球（一变 ' + 4 + '、可叠加、上限 9）· 1UP/2U
   for(let i = 0; i < 30; i++) win.__marbleEat('SPLIT', 0);
   ok(M().flyers.length <= M().MAX_FLYERS, '★ 同屏封顶 ' + M().MAX_FLYERS + ' 球（实际 ' + M().flyers.length + '）');
 
-  // 多球计分求和（★ 落桶只加分数，不加生命）
+  // 多球计分求和（★ 把金冠挪开，先隔离出「落桶只加分数」这件事）
   reset(12);
+  win.__marbleSetCrown(0);
   win.__marbleEat('SPLIT');
   const per = M().effNums[4];
   const livesBefore = M().lives;
   for(let i = 0; i < SN; i++) win.__marbleLand(4);
   ok(M().score === per * SN,
      '★ ' + SN + ' 球全部落 8 号桶：分数按总和算（' + per + '×' + SN + ' = ' + M().score + '）');
-  ok(M().lives === livesBefore, '★ 多球落桶也不加生命（仍是 ' + M().lives + '）');
+  ok(M().lives === livesBefore, '★ 非金冠筒：多球落桶也不加命（仍是 ' + M().lives + '）');
+
+  // 金冠筒：多球全部落进去 → 每球各 +1 命
+  reset(12);
+  win.__marbleSetCrown(4);
+  win.__marbleEat('SPLIT');
+  const lb2 = M().lives;
+  for(let i = 0; i < SN; i++) win.__marbleLand(4);
+  ok(M().lives === lb2 + SN, '★ 金冠筒：' + SN + ' 球各 +1 命（' + lb2 + ' → ' + M().lives + '）');
 
   // UP：★ 补的是「生命」，不是分数
   reset(12);
@@ -1618,8 +1631,9 @@ section('25) ★ 生命与分数分离：落桶得分、发射扣命、UP 补命
    *   「分数变负」和「生命」完全是两回事。 */
   ok(M().lives === 10, '★ 分数为负也不影响生命（仍是 ' + M().lives + '）');
 
-  // 命归 0 → 结束；分数保留
+  // 命归 0 → 结束；分数保留（★ 把金冠挪开，否则落 4 号会一直续命、永远打不完）
   reset(73); win.__marbleClearFx(); win.__marbleClearItems();
+  win.__marbleSetCrown(0);
   for(let k = 0; k < 10; k++){ press(); setCharge(0.5); release(); land(4); }
   const g = M();
   ok(g.lives === 0, '★ 打满 10 发 → 生命归 0（' + g.lives + '）');
@@ -1641,6 +1655,126 @@ section('25) ★ 生命与分数分离：落桶得分、发射扣命、UP 补命
   // 分数是「本局累计」，重开归零
   reset(75); win.__marbleClearFx(); win.__marbleClearItems();
   ok(M().score === 0 && M().lives === 10, '★ 重开：分数归 0、生命回 10');
+}
+
+/* ===== 26) ★ 金冠：默认 8 号筒 · 每局 20% 挪窝 · 落进去额外 +1 命 ===== */
+section('26) ★ 金冠：默认在 8 号筒 · 每局 20% 移到别的筒 · 落进去额外 +1 命');
+{
+  const s0 = M();
+  ok(s0.CROWN_DEF_I === 4, '★ 默认筒是 4 号格 = 8 号筒（CROWN_DEF_I=' + s0.CROWN_DEF_I + '）');
+  ok(s0.NUMS[s0.CROWN_DEF_I] === 8, '★ 默认筒的数字就是 8（' + s0.NUMS[s0.CROWN_DEF_I] + '）');
+  ok(s0.CROWN_MOVE_CHANCE === 0.2, '★ 移动几率 20%（' + s0.CROWN_MOVE_CHANCE + '）');
+
+  // ---- 默认位置：不移动时必须落在 8 号筒 ----
+  reset(1);
+  ok(M().crownI === 4, '★ 没触发移动时金冠在默认筒（crownI=' + M().crownI + '）');
+  ok(win.__marbleCrownText().indexOf('8 号筒') >= 0, '提示文案说的是 8 号筒（' + win.__marbleCrownText() + '）');
+
+  // ---- 移动几率 ≈ 20%，且只落在「别的」筒上 ----
+  const N = 2000;
+  let moved = 0, dist = {}, hitDefault = 0;
+  for (let k = 1; k <= N; k++) {
+    reset(k * 7919);                              // 换种子 → 重新 roll
+    const c = M().crownI;
+    if (c === M().CROWN_DEF_I) hitDefault++;
+    else { moved++; dist[c] = (dist[c] || 0) + 1; }
+    if (c < 0 || c > 8) { ok(false, '金冠位置越界: ' + c); break; }
+  }
+  const rate = moved / N;
+  ok(rate > 0.16 && rate < 0.24, '★ 移动几率约 20%（' + N + ' 局实测 ' + (rate * 100).toFixed(1) + '%）');
+  const otherSlots = Object.keys(dist).map(Number);
+  ok(otherSlots.indexOf(M().CROWN_DEF_I) < 0,
+     '★ 移动时不会「移到原地」（' + otherSlots.length + ' 个别的筒都出现过）');
+  ok(otherSlots.length === 8, '★ 8 个别的筒都能被选中（实测出现 ' + otherSlots.length + ' 个）');
+  const counts = otherSlots.map(k => dist[k]);
+  const mn = Math.min.apply(null, counts), mx = Math.max.apply(null, counts);
+  ok(mx < mn * 2.2, '★ 各筒被选中的次数大致均匀（' + mn + ' ~ ' + mx + '，不偏袒某一筒）');
+
+  // ---- 落进金冠筒：得分 + 额外 1 命 ----
+  reset(1);
+  win.__marbleClearFx(); win.__marbleClearItems();
+  win.__marbleSetCrown(2);                        // 挪到 2 号格（数字 2）
+  press(); setCharge(0.5); release();             // 生命 10 → 9
+  const lv0 = M().lives;
+  const r = land(2);
+  ok(r.n === 2, '★ 金冠筒照样得它自己的分（' + r.n + ' 分）');
+  ok(M().score === 2, '★ 分数加上了（' + M().score + '）');
+  ok(M().lives === lv0 + 1, '★ 落进金冠筒额外 +1 命（' + lv0 + ' → ' + M().lives + '）');
+
+  // ---- 非金冠筒不给命 ----
+  reset(1);
+  win.__marbleClearFx(); win.__marbleClearItems();
+  win.__marbleSetCrown(2);
+  press(); setCharge(0.5); release();
+  const lv1 = M().lives;
+  land(5);                                        // 5 号格不是金冠
+  ok(M().lives === lv1, '★ 落非金冠筒不加命（仍是 ' + M().lives + '）');
+
+  // ---- 金冠可以落在「底表为 0」的筒上：那时它就是「一条命的筒」 ----
+  reset(1);
+  win.__marbleClearFx(); win.__marbleClearItems();
+  win.__marbleSetCrown(1);                        // NUMS[1] = 0
+  ok(M().NUMS[1] === 0, '（前置）1 号格底表数字是 0');
+  press(); setCharge(0.5); release();
+  const lv2 = M().lives;
+  const r0 = land(1);
+  ok(r0.n === 0, '★ 金冠在 0 分筒：得分仍是 0（' + r0.n + '）');
+  ok(M().lives === lv2 + 1, '★ 但照样 +1 命（0 分筒也能是「命筒」）（' + lv2 + ' → ' + M().lives + '）');
+
+  // ---- 被封住的桶不算金冠（落不进去）----
+  /* 石化封哪几个桶是随机的，所以要挑一个「正好把金冠筒封住」的种子 —— 不能靠碰运气跳过。 */
+  let sealedCase = null;
+  for (let seed = 1; seed <= 200 && !sealedCase; seed++) {
+    reset(seed);
+    win.__marbleClearFx(); win.__marbleClearItems();
+    win.__marbleSetCrown(3);
+    win.__marbleEat('STONE');
+    if (M().fx.sealed[3]) sealedCase = seed;
+  }
+  ok(sealedCase !== null, '★ 能找到「石化正好封住金冠筒」的种子（seed=' + sealedCase + '）');
+  if (sealedCase !== null) {
+    reset(sealedCase);
+    win.__marbleClearFx(); win.__marbleClearItems();
+    win.__marbleSetCrown(3);
+    win.__marbleEat('STONE');
+    ok(M().fx.sealed[3], '（前置）3 号格（金冠）已被水泥封住');
+    press(); setCharge(0.5); release();
+    const lv3 = M().lives;
+    const rSealed = land(3);                      // 被封 → 记 0 分
+    ok(rSealed.n === 0, '★ 落进被封的金冠筒：得 0 分（' + rSealed.n + '）');
+    ok(M().lives === lv3, '★ 被封住就进不去 → 不给 +1 命（仍是 ' + M().lives + '）');
+  }
+
+  // ---- 靠金冠续命：生命只剩 1 时落金冠 → 不会立刻结束 ----
+  reset(1);
+  win.__marbleClearFx(); win.__marbleClearItems();
+  win.__marbleSetCrown(4);
+  for(let k = 0; k < 9; k++){ press(); setCharge(0.5); release(); land(0); }   // 生命掉到 1
+  ok(M().lives === 1, '（前置）生命只剩 1（' + M().lives + '）');
+  press(); setCharge(0.5); release();             // 生命 1 → 0（发射扣掉）
+  land(4);                                        // 落金冠 → +1 命
+  ok(M().lives === 1, '★ 最后一发落金冠：+1 命续上（生命回到 ' + M().lives + '）');
+  ok(M().state !== 'over', '★ 因此没有结束（state=' + M().state + '）');
+
+  // ---- 几何：金冠移动不影响 L/R 分界与错位「中间不动」 ----
+  reset(1);
+  win.__marbleSetCrown(0);
+  ok(M().WIN_I === 4, '★ WIN_I（几何中心）不跟着金冠跑（仍是 ' + M().WIN_I + '）');
+  win.__marbleClearFx();
+  win.__marbleEat('L');
+  ok(JSON.stringify(M().effNums) === JSON.stringify([2,0,4,8,0,-4,-2,0,-1]),
+     '★ L 的左右分界仍以几何中心为准（' + M().effNums.join('·') + '）');
+  win.__marbleClearFx();
+  win.__marbleEat('SHUF');
+  ok(M().fx.perm[4] === 4, '★ 错位仍然「中间不动」（perm[4]=' + M().fx.perm[4] + '）');
+
+  // ---- 绘制：金冠在任意筒（含 0 分筒）都不报错 ----
+  let dOk = true, dErr = '';
+  try{
+    for(const c of [0, 1, 4, 8]){ reset(1); win.__marbleSetCrown(c); run(1); win.__marbleDraw(); }
+    reset(1); win.__marbleSetCrown(4); run(1); land(4); win.__marbleDraw();   // 砸中金冠（闪光）
+  }catch(e){ dOk = false; dErr = e.message; }
+  ok(dOk, '★ 金冠在 0/1/4/8 号格 + 被砸中的闪光，绘制都不报错', dErr);
 }
 
 /* ================= 汇总 ================= */

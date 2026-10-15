@@ -180,7 +180,14 @@
   const START_LIVES = 10;                                  // ★ 初始 10 条生命（用户指定）
   const START_BALLS = START_LIVES;                         // 兼容旧名（测试/旧代码仍在用）
   const NUMS = [1, 0, 2, 4, 8, 4, 2, 0, 1];                // 9 桶数字（参考图原样，对称，中间 8 头奖）
-  const WIN_I = 4;                                         // 金冠在中间
+  /* ⚠️ WIN_I 是**几何中心**（9 格的中间那格），effNums() 的 L/R 分界、makePerm() 的
+   *   「中间不动」都靠它 —— 这两处必须永远是 4，不能跟着金冠跑。
+   *   金冠位置是**另一个**变量 crownI（见下），两者以前是同一个常量，现已拆开。 */
+  const WIN_I = 4;                                         // 几何中心格（固定）
+  /* ★ 金冠（用户要求）：默认在 8 号筒，每局有 20% 几率移到别的筒上；
+   *   小球落进金冠筒 = 正常得分 + 额外 1up（加一条命）。 */
+  const CROWN_DEF_I = 4;                                   // 默认：8 号筒（中间）
+  const CROWN_MOVE_CHANCE = 0.2;                           // 每局移动的几率
 
   /* ---------- 手感 / 物理常数 ---------- */
   const MINV = 150, MAXV = 660;     // 蓄力 0%/100% 的出膛速度（线性）
@@ -291,6 +298,7 @@
   let flyers = [];                 // ★ 在飞的小球（可多个：分裂 / UP 道具）
   let pegs = [];
   let pegMix = [0, 1, 0, 0];       // 本局 4 档撞针的权重（reset 时随机 roll）
+  let crownI = CROWN_DEF_I;        // ★ 本局金冠所在的筒（默认 4 = 8 号筒，每局 20% 移到别处）
   let pegTilt = PEG_TILT_DEF;      // 纵深偏置（可用 __marblePegMix 调，做实验用）
   let itemSeq = 0;                 // 道具自增 id（测试要认「同一个道具」有没有被清掉）
 
@@ -335,14 +343,31 @@
     clearTimeout(overTimer); overTimer = null;
     $('over').classList.remove('on');
     pegMix = rollPegMix();
+    crownI = rollCrown();
     genPegs();
     newRound(true);                      // 清效果 + 复钉
     /* ★ 道具刷新规则 1：每局开局 80% 概率刷 1~2 个随机道具 */
     itemsOn = rng() < ITEM_RUN_CHANCE;
     if(itemsOn) spawnItems(randInt(1, 2));
-    toast(pegMixText());
+    toast(pegMixText() + '　' + crownText());
   }
   let rng = mulberry32(1);
+
+  /** ★ 本局金冠位置：默认 8 号筒（CROWN_DEF_I）；20% 几率移到**别的**筒上。
+   *   移动时从「除默认筒以外」的 8 个筒里等概率挑一个 —— 不会出现「移到原地」
+   *   那种白白消耗掉 20% 几率的情况（观感上也就真的「有 20% 会看到它挪窝」）。 */
+  function rollCrown(){
+    if(rng() >= CROWN_MOVE_CHANCE) return CROWN_DEF_I;
+    const others = [];
+    for(let i = 0; i < NUMS.length; i++) if(i !== CROWN_DEF_I) others.push(i);
+    return others[Math.floor(rng() * others.length)];
+  }
+  /** 金冠提示文案（开局 toast / 诊断面板共用） */
+  function crownText(){
+    const v = NUMS[crownI];
+    return crownI === CROWN_DEF_I ? '金冠在 ' + v + ' 号筒（落进去 +1 命）'
+                                  : '★金冠跑到 ' + v + ' 号筒了（落进去 +1 命）';
+  }
 
   /** ★ 本局撞针分布：4 档各随机一个权重，再随机挑一档当主基调 → 每局都不一样
    *    （最后按 PEG_CAP 封顶：既保证「每局手感不同」，又不会 roll 出极端板子） */
@@ -723,18 +748,32 @@
     return label;
   }
 
-  /** 落桶结算：本回合累计得分（多球求和），回合结束才真正加进分数 */
+  /** 落桶结算：本回合累计得分（多球求和），回合结束才真正加进分数。
+   *  ★ 金冠筒：除了拿到这一筒的分数，还额外 +1 命（用户要求）。 */
   function landBucket(b, i){
     const n = fx.sealed[i] ? 0 : effNums()[i];
     lastBucket = i;
     roundGain += n;
     b.dead = true;
     sndBucket(n);
-    floats.push({ x: fieldL + (i + 0.5) * slotW, y: mouthY - 8, t: 0,
+    const cx = fieldL + (i + 0.5) * slotW;
+    floats.push({ x: cx, y: mouthY - 8, t: 0,
                   txt: (n > 0 ? '+' + n : String(n)), color: n > 0 ? '#fff8e0' : '#ffb3ad' });
+    /* ★ 落进金冠筒 = 得分 + 1up（加一条命）。
+     *   注意：加的是「命」不是分，所以直接改 lives，不进 roundGain。
+     *   命立即到账（不是回合末），这样「最后一发靠金冠续命」的手感才成立。
+     *   ⚠️ 必须排除被封住的桶：水泥筒会把球弹回去，物理上根本进不去
+     *   （但超时兜底 __marbleLand 仍可能走到这里），那种情况不该给命。 */
+    if(i === crownI && !fx.sealed[i]){
+      lives++;
+      crownFlash = 1;                                     // 金冠闪一下（视觉反馈）
+      floats.push({ x: cx, y: mouthY - 30, t: 0, txt: '1up', color: '#8affc1' });
+      sndCrown();
+    }
     effects.push({ kind:'flash', i, t: 0 });
     return n;
   }
+  let crownFlash = 0;                                     // 金冠被砸中的闪光（0..1 衰减）
 
   /* ============================================================
      音效：Web Audio 现场合成（零依赖、可静音）
@@ -819,6 +858,10 @@
   }
   function sndOver(){ [60, 57, 52].forEach((f, i) => tone(f, 0.28, { type:'triangle', gain:0.1, at: i * 0.16 })); }
   function sndRecord(){ [60, 64, 67, 72].forEach((f, i) => tone(f, 0.2, { type:'triangle', gain:0.1, at: i * 0.09 })); }
+  /** ★ 落进金冠筒：比普通头奖更亮的一段上行音（额外 +1 命） */
+  function sndCrown(){
+    [72, 76, 79, 84].forEach((f, i) => tone(f, 0.16, { type:'triangle', gain:0.11, at: i * 0.07 }));
+  }
 
   /* ---------- BGM：原创欢快循环（C 大调五声 · 112 BPM） ---------- */
   const BPM = 112, ST = 60 / BPM / 2;
@@ -1113,6 +1156,7 @@
     tGlobal += dt;
     if(cannonShake > 0) cannonShake = Math.max(0, cannonShake - dt * 3);
     if(shake > 0) shake = Math.max(0, shake - dt * 2.2);
+    if(crownFlash > 0) crownFlash = Math.max(0, crownFlash - dt * 1.8);
     /* ★ 方向键：按住持续转动，和发射键各管各的 */
     if(aimDir !== 0) aim = clamp(aim + aimDir * AIM_SPEED * dt, -AIM_MAX, AIM_MAX);
 
@@ -1341,10 +1385,20 @@
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(String(n), x0 + slotW / 2, mouthY + 24);
       ctx.textBaseline = 'alphabetic';
-      // 8 号金冠
-      if(i === WIN_I && !sealed && n !== 0){
+      /* ★ 金冠：跟着本局的 crownI 走（不再固定在第 4 格）。
+       *   ⚠️ 这里**故意不再要求 n !== 0**：金冠现在独立表示「落进去 +1 命」，
+       *   它完全可能落在底表为 0 的筒上（NUMS[1] / NUMS[7]）—— 那时它就是
+       *   「一条命的筒」，必须画出来，否则玩家看不到金冠在哪（曾经漏掉这个）。 */
+      if(i === crownI && !sealed){
         const cx = x0 + slotW / 2, cy = mouthY - 4;
-        ctx.fillStyle = '#ffd76a';
+        // 被砸中时闪一下（crownFlash 衰减）
+        const fl = crownFlash > 0 ? crownFlash : 0;
+        ctx.save();
+        if(fl > 0){
+          ctx.shadowColor = '#ffe9a8';
+          ctx.shadowBlur = 16 * fl;
+        }
+        ctx.fillStyle = fl > 0 ? '#fff6d0' : '#ffd76a';
         ctx.strokeStyle = '#b8860b'; ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(cx - 9, cy + 5);
@@ -1352,6 +1406,7 @@
         ctx.lineTo(cx, cy - 6); ctx.lineTo(cx + 4.5, cy + 0);
         ctx.lineTo(cx + 9, cy - 4); ctx.lineTo(cx + 9, cy + 5);
         ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.restore();
       }
       // ★ 石化：入口被水泥筒封死，球会弹回去
       if(sealed){
@@ -1816,7 +1871,7 @@
     ctx.save();
     ctx.fillStyle = 'rgba(255,252,246,.93)';
     ctx.strokeStyle = '#e0b34c'; ctx.lineWidth = 2;
-    roundRect(cx - hw, cy - 62, hw * 2, 340, 14); ctx.fill(); ctx.stroke();
+    roundRect(cx - hw, cy - 62, hw * 2, 306, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = '#c23b2c'; ctx.font = '800 24px ' + UI;
     ctx.fillText('弹珠乐园', cx, cy - 38);
@@ -1825,38 +1880,37 @@
     ctx.fillStyle = '#5a4231'; ctx.font = '700 12.5px ' + UI;
     ctx.fillText('按住红色大键蓄力 · 松手发射', cx, cy + 2);
     ctx.fillStyle = '#8a6f52'; ctx.font = '11.5px ' + UI;
-    ctx.fillText('撞到钉子和墙壁会反弹', cx, cy + 22);
-    ctx.fillText('落到桶里，桶上是几就得几分', cx, cy + 40);
+    ctx.fillText('撞钉/撞墙会反弹 → 落桶得分', cx, cy + 22);
     ctx.fillStyle = '#c23b2c'; ctx.font = '700 11.5px ' + UI;
-    ctx.fillText('每发扣 1 条命；0 号桶不得分', cx, cy + 58);
+    ctx.fillText('每发扣 1 条命；0 号桶不得分', cx, cy + 40);
     ctx.fillStyle = '#7a4b00'; ctx.font = '700 11.5px ' + UI;
-    ctx.fillText('球撞到彩色圆牌 = 吃到道具', cx, cy + 78);
+    ctx.fillText('落进戴金冠的筒 → 额外 +1 命', cx, cy + 58);
     ctx.fillStyle = '#8a6f52'; ctx.font = '11px ' + UI;
-    ctx.fillText('1up/2up/3up 是补命，其余只管这一回合', cx, cy + 94);
+    ctx.fillText('金冠默认在 8 号筒，每局 ' + Math.round(CROWN_MOVE_CHANCE * 100) + '% 会挪窝', cx, cy + 74);
+    ctx.fillStyle = '#7a4b00'; ctx.font = '700 11.5px ' + UI;
+    ctx.fillText('球撞彩色圆牌 = 吃道具；up 牌补命', cx, cy + 94);
+    ctx.fillStyle = '#8a6f52'; ctx.font = '11px ' + UI;
+    ctx.fillText('其余道具只管这一回合', cx, cy + 110);
     ctx.fillStyle = '#b4483f'; ctx.font = '700 11px ' + UI;
-    ctx.fillText('道具最多留 ' + ITEM_LIFE + ' 回合，最后一回合闪烁', cx, cy + 110);
-    ctx.fillText('被炸掉/冻住的钉留 ' + PEG_LIFE + ' 回合才复原', cx, cy + 126);
-    ctx.fillText('入口变化（左/右·错位·封桶）也留 ' + ENTRANCE_LIFE + ' 回合', cx, cy + 142);
+    ctx.fillText('道具/钉状态/入口变化 都留 ' + ITEM_LIFE + ' 回合（末回合闪）', cx, cy + 128);
     ctx.fillStyle = '#8a6f52'; ctx.font = '11px ' + UI;
-    ctx.fillText('左和右互相抵消，不会同时生效', cx, cy + 158);
-    ctx.fillStyle = '#5a4231'; ctx.font = '700 11px ' + UI;
-    ctx.fillText('入口被改过时，外边缘会闪', cx, cy + 174);
+    ctx.fillText('左和右互相抵消；入口被改过时外边缘会闪', cx, cy + 144);
     ctx.fillStyle = '#0d1015'; ctx.font = '700 11px ' + UI;
-    ctx.fillText('黑炸弹（白骷髅）千万别碰 —— 会炸死球', cx, cy + 190);
+    ctx.fillText('黑炸弹（白骷髅）千万别碰 —— 会炸死球', cx, cy + 162);
     ctx.fillStyle = '#8a6f52'; ctx.font = '11px ' + UI;
-    ctx.fillText('爆炸会炸掉范围内道具；炸到地雷会连环炸', cx, cy + 206);
+    ctx.fillText('爆炸会炸掉范围内道具；炸到地雷会连环炸', cx, cy + 178);
     // ★ 撞针弹力图鉴：4 档颜色 = 4 档弹力（每局分布随机）
     ctx.fillStyle = '#7a4b00'; ctx.font = '700 11px ' + UI;
-    ctx.fillText('撞针弹力（每局随机）', cx, cy + 228);
+    ctx.fillText('撞针弹力（每局随机）', cx, cy + 200);
     const step = (hw * 2 - 24) / PEG_KINDS.length;
     let lx = cx - hw + 12 + step / 2;
     for(const K of PEG_KINDS){
       ctx.fillStyle = K.c[1];
-      ctx.beginPath(); ctx.arc(lx, cy + 242, 5, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(lx, cy + 214, 5, 0, 7); ctx.fill();
       ctx.strokeStyle = K.ring; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.arc(lx, cy + 242, 5, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.arc(lx, cy + 214, 5, 0, 7); ctx.stroke();
       ctx.fillStyle = '#8a6f52'; ctx.font = '700 10.5px ' + UI;
-      ctx.fillText(K.name, lx, cy + 256);
+      ctx.fillText(K.name, lx, cy + 228);
       lx += step;
     }
     ctx.restore();
@@ -2011,6 +2065,8 @@
         '%  寿命=' + ITEM_LIFE + '回合  场上 ' + items.length + '/' + ITEM_MAX,
       '撞针状态: 碎' + pegs.filter(p => p.dead).length + ' 冻' + pegs.filter(p => p.frozen).length +
         ' / 共' + pegs.length + ' 颗  寿命=' + PEG_LIFE + '回合',
+      '金冠: ' + crownText() + '  默认筒=' + NUMS[CROWN_DEF_I] + '号(' + CROWN_DEF_I + ')' +
+        '  移动几率=' + (CROWN_MOVE_CHANCE * 100) + '%',
       '上一球: 出膛=' + lastSpeed.toFixed(0) + ' 力量=' + (lastSpeed > 0 ? Math.round((lastSpeed - MINV) / (MAXV - MINV) * 100) + '%' : '—') +
         '  撞钉=' + pegHits + '  在飞=' + (flyers.length ? flyers.length + '球 ' +
           Math.round(Math.max.apply(null, flyers.map(b2 => b2.flightT)) * 100) / 100 + 's' : '否') +
@@ -2078,6 +2134,7 @@
     balls: lives, runPeak: score,
     lastSpeed, charge, charging, hintOn, soundOn,
     NUMS: NUMS.slice(), START_BALLS, START_LIVES, MINV, MAXV, CHARGE_T,
+    WIN_I, crownI, CROWN_DEF_I, CROWN_MOVE_CHANCE, crownFlash,
     G, RB, RP, REST_PEG, REST_WALL, FLIGHT_CAP,
     W, H, fieldL, fieldR, fieldT, mouthY, floorY, slotW, cannonX: CANNON_X,
     pegCount: pegs.length, fieldSeed,
@@ -2143,6 +2200,8 @@
   window.__marbleAddPegHits = n => { roundPegHits += (n | 0); return roundPegHits; };
   window.__marbleExplode = (x, y, r, kill) => explode(x, y, r === undefined ? MINE_R : r, !!kill);
   window.__marbleChainMax = () => CHAIN_MAX;
+  window.__marbleCrownText = () => crownText();
+  window.__marbleSetCrown = i => { crownI = clamp(i | 0, 0, NUMS.length - 1); return crownI; };
   window.__marbleEndRound = () => endRound();
   window.__marbleDraw = () => { draw(); return true; };
   window.__marbleSpawnItems = k => { spawnItems(k); return items.length; };
