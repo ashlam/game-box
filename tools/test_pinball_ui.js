@@ -118,6 +118,15 @@ f.onload=()=>setTimeout(()=>{
        gainText:(E('vGain') ? E('vGain').textContent : null),
        hasBest:!!E('vBest'),
        coinLabel:(E('btnCoin') ? E('btnCoin').textContent : null),
+       /* ★ 玩法面板里应该说明出口字母（A~L）。出口字母本身画在 canvas 里，
+          由 test_pinball.js 的绘制断言覆盖；这里只确认**帮助文案**也提到了它，
+          玩家才知道那些字母是什么意思。 */
+       sheetText:(E('sheet') ? (E('sheet').textContent || '') : ''),
+       /* ★ 顺带从游戏状态里取字母表，确认页面真的初始化出了 12 个字母 */
+       slotLetters:(() => {
+         try{ const s = f.contentWindow.__pinball && f.contentWindow.__pinball();
+              return s ? s.SLOT_LETTERS : null; }catch(e){ return null; }
+       })(),
        coinW:coin.width, coinH:coin.height,
        coinTop:coin.top, coinLeft:coin.left, coinRight:coin.right,
        startW:start.width, startH:start.height,
@@ -236,6 +245,19 @@ for(const { w, h, label, r } of results){
      tag + ' 按钮文案以「投币」开头', '实际 ' + JSON.stringify(r.coinLabel));
   ok(String(r.coinLabel).indexOf('投币口') < 0,
      tag + ' 不再出现「投币口」', '实际 ' + JSON.stringify(r.coinLabel));
+}
+
+section('1.7) ★ 出口字母标注 A~L（真机确认页面里确实有这套字母）');
+for(const { w, h, label, r } of results){
+  const tag = `${label} ${w}×${h}`;
+  const L = r.slotLetters;
+  ok(Array.isArray(L) && L.length === 12,
+     tag + ' 页面里初始化出了 12 个出口字母', '实际 ' + JSON.stringify(L));
+  ok(Array.isArray(L) && L.join('') === 'ABCDEFGHIJKL',
+     tag + ' 字母是从左到右的 A~L', '实际 ' + (Array.isArray(L) ? L.join('') : '?'));
+  /* 玩法面板里要说明这些字母的用途，否则玩家看到字母会困惑 */
+  ok(String(r.sheetText).indexOf('A ~ L') >= 0 || String(r.sheetText).indexOf('A~L') >= 0,
+     tag + ' 玩法面板里说明了出口字母', '面板文本长度 ' + String(r.sheetText).length);
 }
 
 section('2) 五档倍率灯：都在、够大、不溢出');

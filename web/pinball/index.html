@@ -204,6 +204,7 @@
       <li>按住「<span class="hl">拉扳机</span>」蓄力，松手把弹珠射出去。蓄力越大球飞得越远，落点越靠左。</li>
       <li>球落进<span class="hl">亮灯的出口</span> → 返还 <span class="hl">投注 × 倍数</span> 的代币。</li>
       <li>落进<span class="rd">没亮灯的出口</span> → 本局投注不退。本局结束，重新投币开下一局。</li>
+      <li>12 个出口从左到右标着 <span class="hl">A ~ L</span>，方便对照落点和交流（比如"这次落 C 口"）。</li>
     </ol>
     <button id="btnSheetClose">知道了</button>
   </div>
@@ -402,35 +403,41 @@
 
   const ROLL_T = 0.85;               // 倍数滚动动画时长
   const LAMP_DT = 0.075;             // 逐个点亮出口灯的间隔
-  /* ---------------- 中奖演出：四段式时间轴 ----------------
-     ★★ 顺序按用户要求重排过（第二版）。用户原话：
-        「球进奖桶 -> 灯闪烁，同时播音效/音乐 -> 稍等会儿展示奖励的代币数量
-         -> 稍等会儿代币一点点加到累计代币里（做一个奖励向拥有代币位置移动的动画）
-         -> 代币全部转移完毕后，灯光和音乐渐止，开始下一局」
+  /* ---------------- 中奖演出：时间轴（第三版，按用户要求再调） ----------------
+     用户先后两次要求，最后一次是这样说的：
+       「球进奖桶 -> 灯闪烁，同时播音效/音乐 -> 稍等会儿展示奖励的代币数量
+        -> 稍等会儿代币一点点加到累计代币里（做一个奖励向拥有代币位置移动的动画效果）
+        -> 代币全部转移完毕后，灯光和音乐渐止，开始下一局」
+       「（让开始按钮变成领奖按钮，让玩家获得一些领取奖励的控制感）」
+       「**按领奖按钮后，再播转移效果动画**」   ← 本轮的关键调整
 
-     所以时间轴是：
-        ① 中奖啦       0.00 → 0.75   灯闪起来 + 号角响（**立刻**给听觉视觉反馈）
-        ② 看多少       0.75 → 1.80   才摆出「投注 × 倍数 = 奖金」这笔账
-        ③ 钱飞进来     1.80 → 3.60   金币从槽口飞向「代币」那一格，飞到才入账
-        ④ 渐止收尾     3.60 → 4.60   灯和音乐慢慢收掉，然后回投币阶段
+     ★★ 所以「转移动画」的**触发时机**从"自动播"改成了"玩家按下领奖之后"：
+        ① 中奖啦      0.00 → 0.75   球进桶立刻灯闪 + 号角（**没有任何数字**）
+        ② 看多少      0.75 → 1.80   等一拍才摆出「投注 × 倍数 = 奖金」
+        ── 停在这里等玩家按「领奖」（灯继续脉动，余额**冻结在旧值**）──
+        ③ 金币转移    按下后 0 → 1.60   金币从槽口飞进「代币」格，飞到一枚入账一枚
+        ④ 渐止收尾    1.60 → 2.40      灯与音乐渐止（fade 1→0），然后收局
 
-     ⚠️ 关键是「**先反馈、后数字**」：球一进桶就要有灯和音乐（那是击中的即时爽感），
-        数字和入账都要**等一拍**再出现 —— 一次塞完玩家来不及逐段体会。
-     ⚠️ 四段**共用一个时钟** winT，按已过去的秒数落段，不给每段各开一个定时器 ——
-        单一时间轴掉帧时也不会各段错位/重叠。 */
+     ⚠️ ①② 段共用一个时钟 winT；③④ 段共用另一个时钟 transferT。
+        为什么要两个时钟：①② 是"演出自己走"，③④ 是"玩家按了才走"，
+        两者的起点不同，用一个时钟会算不清（而且 collect 阶段可能停留任意久）。
+     ⚠️ 「余额冻结」是这条流程的核心：①② 段（含等待领奖期间）余额保持旧值，
+        直到 ③ 段金币开始飞才逐步增加 —— 否则"先看账、再转移"的顺序就废了。 */
   const SETTLE_T   = 2.2;            // 没中奖：干脆点，别拖着（失落不需要慢镜头）
-  const WIN_T      = 4.6;            // 中奖演出总时长
+  const WIN_T      = 1.80;           // ①② 段总时长（走完就进「等领奖」）
   const WIN_S1     = 0.75;           // ① 中奖啦（灯闪 + 号角）   0.00 → 0.75
-  const WIN_S2     = 1.80;           // ② 看看中了多少             0.75 → 1.80
-  const WIN_S3     = 3.60;           // ③ 金币飞进余额             1.80 → 3.60
-                                     // ④ 渐止收尾                 3.60 → 4.60
-  const GAIN_ROLL_T = WIN_S3 - WIN_S2;  // ③ 段的长度（金币飞行 / 数钱的时长）
-  /* ★ 领奖阶段（用户要的「让玩家获得一些领取奖励的控制感」）：
-     演出走完后**不自动开下一局**，而是把「开始」键变成「领奖」，等玩家自己按。
-     这样玩家对奖励有「到手了、我来收下」的掌控感，而不是被系统推着走。
+                                     // ② 看多少                   0.75 → 1.80
+  const TRANSFER_T = 1.60;           // ③ 金币转移（按下领奖后开始）
+  const FADE_T     = 0.80;           // ④ 渐止收尾
+  const GAIN_ROLL_T = TRANSFER_T;    // ③ 段的长度（金币飞行 / 入账的时长）
+  /* ★ 领奖阶段：演出走完后**不自动开下一局**，而是把「开始」键变成「领奖」，等玩家自己按。
+     这样玩家对奖励有「到手了、我来收下」的掌控感，而且**按下才播转移动画** ——
+     转移这件事由玩家触发，参与感更强。
      ⚠️ 但必须有兜底超时：玩家如果放下手机不按，游戏不能永远卡在领奖阶段
         （也会拖死测试和经济实验台）。设一个**很长**的 12 秒 ——
-        长到正常玩家根本碰不到，短到万一没人按也能自己继续。 */
+        长到正常玩家根本碰不到，短到万一没人按也能自己继续。
+        ⚠️ 超时**也要走转移动画**（见 startTransfer）：钱必须被看到进账，
+          不能因为玩家没按键就把这段演出省掉。 */
   const COLLECT_T = 12.0;
 
   /** 力度 → (释放角, 进弧速度, 出手方向抖动) —— 抽成函数，游戏与测试/实验台共用同一份。
@@ -464,7 +471,7 @@
   const randInt = (a, b) => a + Math.floor(rng() * (b - a + 1));
 
   /* ---------------- 状态 ---------------- */
-  let phase = 'bet';        // bet（投币中）| aim（已开局，等发射）| fly（球在飞）| collect（等领奖）| over（代币不够）
+  let phase = 'bet';        // bet(投币中) | aim(等发射) | fly(球在飞) | collect(等领奖) | transfer(播转移) | over(代币不够)
   let coins = START_COINS;  // 剩余代币（投币即时扣除）
   let bet = 0;              // 本局已投注（已从 coins 扣掉）
   let mult = 0;             // 本局倍数（0 = 还没开）
@@ -496,19 +503,26 @@
         而且演出期间没人调 syncUI，数字全程纹丝不动。
         改成派生值之后，**任何**对 coins 的改动都自动反映到显示上，
         pendingShow 只管「这笔奖金还要数多久」。 */
-  let pendingShow = 0;              // 演出中还没「数」出来的金额（0 = 无演出）
+  let pendingShow = 0;              // 演出中还没「飞进来」的金额（0 = 无演出）
   let gainRollT = 0, gainRollTotal = 0, gainTickAcc = 0, gainTickN = 0;
-  /* ★ 中奖演出的**单一时间轴**：winT = 从落槽中奖那一刻起的秒数。
-     四段（中奖啦 / 看多少 / 钱飞进来 / 渐止收尾）都从它算出来，
-     而不是各开一个定时器 —— 单一时间轴掉帧时不会各段错位或重叠。0 = 不在演出中。 */
+  /* ★★ 中奖演出拆成**两条时间轴**（第三版的关键改动）：
+       · winT       —— ①② 段（中奖啦 / 看多少），从落槽那一刻开始**自动**走，
+                       走完（WIN_T）就进「等领奖」，然后**冻结**在那里等玩家。
+       · transferT  —— ③④ 段（金币转移 / 渐止收尾），**玩家按下领奖才开始**走。
+     为什么要两条：①② 是"游戏演给你看"，③④ 是"你按了才演"，
+     两者起点不同，而且中间等待时长不确定（可能 0.2 秒也可能 8 秒），
+     用一条时钟根本算不出正确的段落。 */
   let winT = 0;
-  let gainStarted = false;          // 第 ③ 段的「开始转账」是否已触发（只触发一次）
+  let transferT = 0;                // > 0 表示正在播转移动画（③④ 段）
+  let gainStarted = false;          // 转移是否已启动（只触发一次）
   /* ★ 灯跟着 BGM 闪的节拍相位：让灯和硬币声**同频**，看起来像灯在跟着音乐打拍子。 */
   let lampBeatAcc = 0, lampBeatN = 0;
-  /* ★ 领奖阶段：winT 走完（= 4.6s）后进入，等玩家按「领奖」。
+  /* ★ 领奖阶段：①② 段走完后进入，等玩家按「领奖」。
      collectT 是剩余等待秒数（兜底超时，见 COLLECT_T 的注释）。 */
   let collectT = 0;
   const inCollect = () => phase === 'collect';
+  /** 正在播转移动画（③④）—— 绘制和测试都用它判断，避免各写一份判据 */
+  const inTransfer = () => transferT > 0;
 
   /* ---------------- 中奖金币飞行动画 ----------------
      ★ 用户要的：「代币一点点加到累计代币里（做一个奖励向拥有代币位置移动的动画效果）」。
@@ -570,6 +584,24 @@
                      t: -delay, dur: COIN_FLY, amt, done: false, x: sx + jx, y: sy + jy });
     }
   }
+  /** ★★ 启动「转移」演出（③④ 段）—— 这是本轮改动的核心：
+   *  它**不再由时间轴自动触发**，而是由两处调用：
+   *    · 玩家按下「领奖」按钮（collectReward）
+   *    · 领奖兜底超时（见 step 里的 collect 分支）
+   *  ⚠️ 超时也必须调它：钱必须被看到进账，不能因为玩家没按键就把这段演出省掉。
+   *  ⚠️ 只允许启动一次（gainStarted 守卫）：重复调用会让金币重新撒一遍、余额算错。 */
+  function startTransfer(){
+    if(gainStarted) return false;
+    gainStarted = true;
+    transferT = 0.0001;              // > 0 表示进入转移
+    gainRollT = TRANSFER_T;
+    gainTickAcc = 0; gainTickN = 0;
+    lampBeatAcc = 0; lampBeatN = 0;
+    startCoinFly();
+    sndTransferStart();
+    syncUI();
+    return true;
+  }
   /** 推进金币飞行：返回本帧「刚飞到」的枚数（用来放音效 / 记入余额） */
   function stepCoinFly(dt){
     if(!coinFly.length) return 0;
@@ -600,19 +632,29 @@
     return arrived;
   }
   const coinFlyDone = () => coinFly.length === 0;
-  /** 当前处于中奖演出的第几段（1~4）；不是中奖演出时返回 0。
+  /** 当前处于中奖演出的第几段（1~4）；不在演出中返回 0。
    *  抽成函数是为了让 **绘制** 和 **测试** 用同一套判据，不会各写一份阈值。
-   *  ① 中奖啦（灯闪 + 号角）② 看多少 ③ 金币飞进余额 ④ 渐止收尾 */
+   *  ★ 段号跨越**两条时间轴**：
+   *      ①② 由 winT 决定（自动走），③④ 由 transferT 决定（按下领奖才走）。
+   *    所以判据必须分开看：先看转移是否已开始，再看自动演出走到哪。
+   *  ⚠️ 在「等领奖」期间（winT 已走完、transferT 还没开始）返回 **2**，
+   *     而不是 0 —— 那时画面仍然要显示第 ② 段的账目，
+   *     返回 0 会让横幅闪一下消失（玩家正看着呢）。 */
   function winStage(){
-    if(!(winT > 0)) return 0;
-    if(winT < WIN_S1) return 1;
-    if(winT < WIN_S2) return 2;
-    if(winT < WIN_S3) return 3;
-    return 4;
+    if(transferT > 0){
+      return transferT < TRANSFER_T ? 3 : 4;
+    }
+    if(winT > 0){
+      return winT < WIN_S1 ? 1 : 2;
+    }
+    /* 等领奖阶段：账目继续挂着 */
+    if(inCollect()) return 2;
+    return 0;
   }
   /** 界面该显示多少代币（真值 − 还没飞到的部分）
-   *  ★ 第 ③ 段金币开始飞之前 pendingShow 保持**整笔奖金**，所以余额一直显示旧值 ——
-   *    这正是「先看清中了多少，再看着钱进来」的关键：账目和余额是**先后**出现的。 */
+   *  ★ 转移动画开始之前 pendingShow 保持**整笔奖金**，所以余额一直显示旧值 ——
+   *    这正是「先看清中了多少，再看着钱进来」的关键：账目和余额是**先后**出现的。
+   *    等领奖期间也保持冻结（那正是玩家"看账"的时间）。 */
   const shownCoins = () => coins - pendingShow;
 
   let fx = [], floats = [];
@@ -721,6 +763,16 @@
   function sndStage2(){
     tone(midi(67), 0.16, { type:'triangle', gain:0.075 });          // G4
     tone(midi(71), 0.22, { type:'triangle', gain:0.07, at:0.14 });  // B4
+  }
+
+  /** ★ 转移开始（玩家按下「领奖」那一刻）：一个**上扬的起手音**，
+   *  宣告"钱开始往你账户里走了"。音高走向和后面的硬币声连成一条上升线。 */
+  function sndTransferStart(){
+    tone(midi(72), 0.12, { type:'triangle', gain:0.08 });           // C5
+    tone(midi(76), 0.14, { type:'triangle', gain:0.075, at:0.09 }); // E5
+    tone(midi(79), 0.20, { type:'triangle', gain:0.07, at:0.17 });  // G5
+    tone(midi(84), 0.26, { type:'triangle', gain:0.065, at:0.25 }); // C6
+    noiseBurst(0.10, { freq: 3000, gain:0.03 });
   }
 
   /** ★ 第 ④ 段「渐止收尾」：一个**柔和**的收尾和弦（不再是炸裂的 jackpot）。
@@ -901,7 +953,7 @@
        余额慢慢爬回 200。pendingShow 归零就等于显示值立刻等于真值。 */
     pendingShow = 0;
     gainRollT = 0; gainRollTotal = 0; gainTickAcc = 0; gainTickN = 0;
-    winT = 0; gainStarted = false; lampBeatAcc = 0; lampBeatN = 0;
+    winT = 0; transferT = 0; gainStarted = false; lampBeatAcc = 0; lampBeatN = 0;
     collectT = 0; coinFly = []; credited = 0;
     banner = null; fx = []; floats = [];
     /* ★ 先挡板、后钉阵：genPegs 要拿挡板位置算安全间距（否则球会被「钉+挡板」夹死） */
@@ -958,18 +1010,20 @@
   /** 灯点完之后才算「可以拉扳机」 */
   function aimReady(){ return phase === 'aim' && rollT <= 0 && lampStep >= lampCountOf(mult); }
 
-  /* ---------------- 领奖 ----------------
-     ★ 用户的建议：「让玩家获得一些领取奖励的控制感」。
-     奖励**在结算那一刻就已经全额入账**（coins 是真值），所以这里不是"发钱"，
-     而是玩家按下「我收下了」→ 本局正式结束 → 开下一局。
+  /* ---------------- 领奖 / 转移 ----------------
+     ★ 用户的建议：「让玩家获得一些领取奖励的控制感」+「按领奖按钮后，再播转移效果动画」。
+     所以按下的动作**不是**"发钱"（奖励在结算那一刻就已经全额入账，coins 是真值），
+     而是**触发转移动画** —— 玩家亲手启动"钱进账"这件事，参与感更强。
      ⚠️ 所以这个函数**不能**再给 coins 加一次钱（会重复发放）。
-     钱和"收下"动作解耦的好处：玩家即使不按（或超时自动继续），
-     余额也不会丢 —— 控制感是演出层的，不是账务层的。 */
+        钱和"收下"动作解耦的好处：玩家即使不按（或超时自动继续），余额也不会丢。 */
   function collectReward(){
     if(!inCollect()) return false;
     sndCoin();
     collectT = 0;
-    endRound();
+    /* ★★ 关键：按下领奖 → 播转移动画（而不是直接 endRound）。
+       动画放完之后才真正收局（见 step 的 transferT 分支）。 */
+    phase = 'transfer';
+    startTransfer();
     return true;
   }
 
@@ -1221,6 +1275,16 @@
      否则画灯的地方和判落点的地方会差一点点、看起来灯和球对不上。 */
   function slotX0(i){ return fieldL + slotW * i; }              // 第 i 个出口的左沿
   function slotCX(i){ return slotX0(i) + slotW * 0.5; }         // 第 i 个出口的中心
+  /** ★ 出口的**字母代号**（用户要求：「给下面的出口标注 ABCDE 等大写字幕，
+   *  方便辨识和沟通」）。
+   *  0→A, 1→B, … 11→L。用字母而不是数字，是因为槽号（0~11）在界面里
+   *  完全没有露出过，而字母读起来更快、也更好口头交流（"打 C 口" 比 "打 2 号口" 顺）。
+   *  ⚠️ 超过 26 个出口会退回两位数，但本作固定 12 个，走不到那条路。 */
+  function slotLetter(i){
+    if(i < 26) return String.fromCharCode(65 + i);
+    return 'E' + (i - 25);      // 兜底：极少见，防御性写法
+  }
+  const SLOT_LETTERS = Array.from({ length: N_SLOT }, (_, i) => slotLetter(i));
   /** x → 出口序号（用 [fieldL, SLOT_R]，不含发射管道） */
   function slotAtX(x){
     return clamp(Math.floor((x - fieldL) / slotW), 0, N_SLOT - 1);
@@ -1252,26 +1316,33 @@
     ball.mode = 'drop';
     ball.x = slotCX(i);
     ball.vx = 0; ball.vy = Math.max(ball.vy, 140);
+    /* ★ ①② 段（中奖啦 / 看多少）的时长。
+       ③④（金币转移 / 渐止）**不在这里计时** —— 它们要等玩家按「领奖」才由
+       startTransfer() 启动（见 step 的 collect 分支）。 */
     settleT = landWin ? WIN_T : SETTLE_T;
-    /* ★★ 四段式中奖演出（用户要的：中奖啦 → 看看中了多少 → 钱一点点增加 → 真爽）。
-       第 ① 段只放「中 奖」两个大字，**先不给任何数字** ——
+    /* ★★ 中奖演出：第 ① 段只放「中 奖」两个大字，**先不给任何数字** ——
        让人先反应过来「中了」，再去关心中了多少。原来是一股脑全塞出来，
-       玩家眼睛不知道先看哪里，四个阶段的情绪就全糊在一起了。 */
+       玩家眼睛不知道先看哪里，几个阶段的情绪就全糊在一起了。 */
+    /* ⚠️ 第 ① 段必须是**空 sub**：账目要等第 ② 段才由 step 里的段切换写上。
+       这里如果直接给出账目，第 ① 段就把答案漏了，「先中奖、再看多少」的节奏全废
+       （测试里有一条专门锁这个：第 1 段横幅不许有账目）。 */
     banner = landWin
       ? { txt:'中 奖', sub:'', win:true }
-      : { txt:'未 中 奖', sub:'投注 ' + bet + ' 枚不退', win:false };
+      : { txt:'未 中 奖', sub:'落在 ' + slotLetter(i) + ' 口 · 投注 ' + bet + ' 枚不退', win:false };
     if(landWin){
-      /* ★ 音乐分两波：① 立刻响「中奖号角」；④ 收尾再补一个和弦（见 step 的段切换）。
-         这样「中奖啦」和「渐止收尾」各有一个听觉锚点，中间转账时是硬币声。 */
+      /* ★ 音乐分两波：① 立刻响「中奖号角」；按下领奖开始转移时再响硬币声，
+         收尾补一个柔和和弦（见 startTransfer / step 的段切换）。 */
       sndWin();
-      /* 中奖 → 启动四段时间轴。
+      /* 中奖 → 启动 ①② 段的时间轴。
          ⚠️ pendingShow 一开始就是**整笔奖金**（显示值 = 旧余额），
-            一直保持到第 ③ 段金币开始飞才逐步减少 ——
-            这是「先看账、后看钱进来」的实现方式。 */
-      winT = 0.0001;                   // > 0 表示进入演出
+            一直保持到金币开始飞才逐步减少 —— 这是「先看账、后看钱进来」的实现方式。
+         ⚠️ gainStarted=false + transferT=0：转移动画处于**待命**状态，
+            等玩家按领奖（或兜底超时）才由 startTransfer() 真正启动。 */
+      winT = 0.0001;                   // > 0 表示进入 ① 段
+      transferT = 0;
       pendingShow = landGain;
       gainRollTotal = landGain;
-      gainRollT = 0;                   // 第 ③ 段开始时才真正启动（见 step）
+      gainRollT = 0;                   // 转移开始时才真正启动（见 startTransfer）
       gainTickAcc = 0; gainTickN = 0;
       gainStarted = false;
       coinFly = []; credited = 0;
@@ -1279,7 +1350,8 @@
     } else {
       sndLose();
       /* 没中奖：不滚动，显示值立刻等于真值 */
-      winT = 0; gainRollT = 0; pendingShow = 0; coinFly = []; credited = 0;
+      winT = 0; transferT = 0; gainRollT = 0; pendingShow = 0;
+      coinFly = []; credited = 0; gainStarted = false;
     }
     const cx = ball.x;
     /* ★ 撒火花的随机也走 fxRand()：这些火花在**飞行途中**每帧都可能被生成，
@@ -1317,7 +1389,7 @@
     /* ★ 演出状态一并清掉：不然下一局开局时 winT 还在走，灯会莫名其妙继续闪。
        （虽然 settleT≤0 时 winT 也会归零，但 endRound 是收局的权威位置，
         在这里显式清一次才不会依赖别处的副作用。） */
-    winT = 0; gainStarted = false; gainRollT = 0; pendingShow = 0;
+    winT = 0; transferT = 0; gainStarted = false; gainRollT = 0; pendingShow = 0;
     gainTickAcc = 0; gainTickN = 0; lampBeatAcc = 0; lampBeatN = 0;
     /* ★ 金币飞行和领奖倒计时也必须清 —— 否则残留的金币会在下一局开局时
        继续往计数器飞（而那时 coins 已经变了，看着像凭空多钱）。 */
@@ -1388,51 +1460,64 @@
     /* 球 */
     if(ball) stepBall(ball, dt);
 
-    /* ★★ 四段式中奖演出。顺序按用户要求重排：
+    /* ★★ 中奖演出（第三版：转移动画改由「领奖」按钮触发）。分两段时钟：
+          ── 自动段（winT）──
           ① 中奖啦        —— 球一进桶**立刻**灯闪 + 号角（即时反馈，先不谈数字）
           ② 看看中了多少  —— 等一拍，再摆出「投注 × 倍数 = 奖金」这笔账
-          ③ 金币飞进余额  —— 金币从槽口飞向「代币」那格，飞到一枚入账一枚
-          ④ 渐止收尾      —— 灯和音乐慢慢收掉，然后进「领奖」阶段
-       四段共用 winT 这一条时间轴，按已过去的秒数落段。 */
+          ── 然后冻结，等玩家按「领奖」──
+          ── 玩家段（transferT）──
+          ③ 金币转移      —— 金币从槽口飞向「代币」那格，飞到一枚入账一枚
+          ④ 渐止收尾      —— 灯和音乐慢慢收掉，然后收局
+       ⚠️ 两条时钟必须分开：①② 自动走、③④ 按下才走，中间等待时长不确定。 */
     if(winT > 0){
       const prev = winStage();
       winT += dt;
       const now = winStage();
       if(now !== prev){
-        /* ---- 进入新段时的一次性动作（这就是「节奏感」的来源：每段都有明确的开场）---- */
         if(now === 2){
           /* ② 摆出这笔账。★ 此时**余额还是旧值**（pendingShow 未动）——
-             先让人看清「中了多少」，再让钱进来，两个信息不打架。 */
-          banner = { txt:'中 奖', sub:'投注 ' + bet + ' × ' + mult + ' 倍 = ' + landGain + ' 枚', win:true };
+             先让人看清「中了多少」，再让钱进来，两个信息不打架。
+             ★ 带上出口字母：配合槽位上的标注，玩家一眼能把"哪个口"和"拿了多少"对上。 */
+          banner = { txt:'中 奖',
+                     sub:'落在 ' + slotLetter(landSlot) + ' 口 · ' + bet + ' × ' + mult + ' 倍 = ' + landGain + ' 枚',
+                     win:true };
           sndStage2();
-        } else if(now === 3){
-          /* ③ 金币起飞：撒金币 + 启动入账 + 硬币声 + 灯跟着节拍闪 */
-          gainStarted = true;
-          gainRollT = GAIN_ROLL_T;
-          gainTickAcc = 0; gainTickN = 0;
-          lampBeatAcc = 0; lampBeatN = 0;
-          startCoinFly();
-        } else if(now === 4){
-          /* ④ 渐止收尾：不再撒新东西，让已有的灯/火花自然收掉，
-             补一个柔和的和弦当「结束哨」。 */
-          sndSettle();
         }
       }
-      if(settleT <= 0) winT = 0;       // 演出随结算结束一起收掉
+      if(settleT <= 0) winT = 0;       // ①② 段走完就停（之后由 transferT 接管）
     }
 
-    /* 结算展示 → 收局。
-       ★ 中奖时**不在这里收局**：要等 winT 走完并进入「领奖」阶段（见下）。
-         不然 4.6 秒一到就直接开下一局，玩家来不及按领奖。 */
+    /* ★ 转移动画（③④ 段）—— 由「领奖」按钮或兜底超时启动。
+       ④ 段进入时补一个柔和和弦当「结束哨」。 */
+    if(transferT > 0){
+      const prev = winStage();
+      transferT += dt;
+      const now = winStage();
+      if(now !== prev && now === 4){
+        /* ④ 渐止收尾：不再撒新东西，让已有的灯/火花自然收掉 */
+        sndSettle();
+      }
+      /* 转移演完 → 灯乐已渐止 → 正式收局 */
+      if(transferT >= TRANSFER_T + FADE_T){
+        transferT = 0;
+        pendingShow = 0;
+        coinFly = [];
+        endRound();
+      }
+    }
+
+    /* 结算展示 → 进「领奖」阶段（或没中奖直接收局）。
+       ★ 中奖时**不在这里收局**：要给玩家按「领奖」的机会。
+         不然 1.8 秒一到就直接开下一局，玩家来不及按。 */
     if(settleT > 0){
       settleT -= dt;
       if(settleT <= 0){
         if(landWin){
-          /* 中奖演出走完 → 进领奖阶段，把控制权交给玩家 */
+          /* ①② 段走完 → 进领奖阶段，把控制权交给玩家。
+             ⚠️ 此时**不要**动 pendingShow：余额要继续冻结在旧值，
+                等玩家按下领奖、金币开始飞了才逐步增加。 */
           phase = 'collect';
           collectT = COLLECT_T;
-          coinFly = [];                // 金币应该早飞完了；万一没有（掉帧）也不留残留
-          pendingShow = 0;             // 显示值确保等于真值
           syncUI();
         } else {
           endRound();
@@ -1440,10 +1525,15 @@
       }
     }
 
-    /* ★ 领奖阶段：等玩家按「领奖」，或等兜底超时（见 COLLECT_T） */
+    /* ★ 领奖阶段：等玩家按「领奖」，或等兜底超时（见 COLLECT_T）。
+       ⚠️ 超时也**必须走转移动画**（不能直接 endRound）——
+          钱要被看到进账，否则玩家会觉得奖励凭空出现。 */
     if(phase === 'collect'){
       collectT -= dt;
-      if(collectT <= 0) endRound();    // 没人按 → 自己继续，绝不卡死
+      if(collectT <= 0){
+        phase = 'transfer';
+        startTransfer();
+      }
     }
 
     /* ★ 第 ③ 段：金币飞行 + 入账。
@@ -1467,13 +1557,15 @@
          飞完了就归零（= 显示值等于真值）。 */
       pendingShow = coinFlyDone() ? 0 : Math.max(0, gainRollTotal - credited);
       syncUI();
-    } else if(pendingShow !== 0 && !(winT > 0)){
+    } else if(pendingShow !== 0 && !(winT > 0) && !inCollect()){
       /* 兜底对齐：任何**没有在走中奖演出**的路径（没中奖、重置、测试直接改 coins）
          都不能让显示值长期停在旧数字上。
-         ⚠️ 必须排除「中奖演出中但还没到第 ③ 段」的情形（winT > 0）：
-            第 ①② 段里金币还没起飞，如果这里无脑把 pendingShow 清零，
-            余额会在落槽的**那一帧**就直接变成新值 —— 那「先看清中了多少、
-            再看着钱进来」的节奏就没了。实测就是这么翻车的。 */
+         ⚠️ 必须排除两种「余额该冻结」的情形：
+            ① winT > 0：中奖演出中但金币还没起飞 —— 无脑清零会让余额在落槽那一帧
+               就变成新值，「先看清中了多少、再看着钱进来」的节奏就没了（实测翻过车）。
+            ② inCollect()：等领奖阶段是玩家「看账」的时间，余额必须继续冻结，
+               等按下领奖、金币开始飞才涨。漏掉这个排除项，一进领奖余额就跳到新值，
+               转移动画会变成「补演」。 */
       pendingShow = 0;
       syncUI();
     }
@@ -1628,18 +1720,30 @@
     if(!st) return { on:false, phase:0, idx:0, st:0, fade:0, per:0 };
     /* ③ 段的节拍周期用「金币间隔」= 飞行总时长 / 枚数，和金币落袋同频 */
     const per = st === 3 ? (GAIN_ROLL_T / N_COIN) : (st === 1 ? 0.16 : st === 2 ? 0.22 : 0.15);
-    /* 每段从自己的起点重新计时，这样「进入新段」时灯也是从第一拍干净地开始闪 */
-    const t = st === 1 ? winT
-            : st === 2 ? (winT - WIN_S1)
-            : st === 3 ? (winT - WIN_S2)
-            :            (winT - WIN_S3);
-    const idx = Math.max(0, Math.floor(t / per));
-    const phase = t / per - idx;       // 0 → 1（拍内进度）
-    /* ★ ④ 段「灯光渐止」：整段亮度从 1 线性降到 0（还叠一个 0.25 的快闪频率衰减），
+    /* ★ 每段从**自己那条时间轴**的起点重新计时，这样「进入新段」时灯从第一拍干净地开始闪。
+       ⚠️ ①② 属于 winT，③④ 属于 transferT —— 用错时钟会让拍号算到天文数字。 */
+    let t;
+    if(st === 1) t = winT;
+    else if(st === 2){
+      /* ★★ 「等领奖」阶段 winT 已经归零，此时若继续用 (winT − WIN_S1) 会得到**负数**，
+         于是 phase 变成负的、pulse = (1−phase)² 被放大成几十倍，
+         灯的半径直接炸到 185px —— 屏幕上出现一个盖住半个场地的大红圆（实测截到过）。
+         所以这个阶段改用自由时钟 tGlobal，让灯**持续轻柔地呼吸**，
+         既避开了负数，又正好提示玩家"该按领奖了"。 */
+      t = (inCollect() && !inTransfer()) ? tGlobal : (winT - WIN_S1);
+    }
+    else if(st === 3) t = transferT;
+    else t = transferT - TRANSFER_T;
+    /* ★ 兜底：时间戳永远不许为负（任何一条路径出意外，都不能让灯炸开） */
+    if(!(t >= 0)) t = 0;
+    const idx = Math.floor(t / per);
+    /* phase 必须夹在 [0,1)：它参与 (1−phase)²，一旦越界就会画出巨大的圆 */
+    const phase = clamp(t / per - idx, 0, 0.999);
+    /* ★ ④ 段「灯光渐止」：整段亮度从 1 线性降到 0，
        这样音乐淡出时灯也同步淡下去，而不是"啪"地全灭。 */
     let fade = 1;
     if(st === 4){
-      const u = clamp((winT - WIN_S3) / Math.max(0.001, WIN_T - WIN_S3), 0, 1);
+      const u = clamp((transferT - TRANSFER_T) / Math.max(0.001, FADE_T), 0, 1);
       fade = 1 - u;
     }
     return { on:true, phase, idx, st, per, fade };
@@ -1680,8 +1784,12 @@
          ④ 段不再跑马（那一段是渐止，要收掉而不是继续热闹）。 */
       const chaseOn = beat.on && beat.st === 3 && (beat.idx % N_SLOT) === i;
       if(lit){
-        /* 亮灯的口在演出期间跟着节拍脉动：光晕变大变亮 */
-        const halo = 11 + 9 * pulse;
+        /* 亮灯的口在演出期间跟着节拍脉动：光晕变大变亮。
+           ⚠️ halo 必须**夹住上限**：它由 pulse 算出来，而 pulse 一旦因为
+              时间戳异常被放大（曾经出过一次：等领奖阶段算出负数 phase →
+              pulse≈19 → 半径 185px 的大红圆盖住半个场地），
+              这里夹一下就能保证"再出错也不会画出穿帮图形"。 */
+        const halo = Math.min(22, 11 + 9 * pulse);
         ctx.beginPath(); ctx.arc(cx, ly, halo, 0, 7);
         ctx.fillStyle = 'rgba(255,60,45,' + (0.22 + 0.5 * pulse).toFixed(3) + ')'; ctx.fill();
         ctx.beginPath(); ctx.arc(cx, ly, 6.4, 0, 7);
@@ -1716,6 +1824,30 @@
         }
         ctx.stroke();
       }
+
+      /* ★★ 出口字母标注（用户要求「标注 ABCDE 等大写字幕，方便辨识和沟通」）。
+         画在**槽体内部下方**（远离 LED 和球经过的口线），所以不会和任何演出冲突。
+         设计取舍：
+           · 亮灯的口用暖金色（和 LED 呼应），没亮的用冷灰 —— 顺手多一层状态提示
+           · 落点那一个口用白底描边高亮，方便"刚才是哪个口"的复盘
+           · 字号按槽宽自适应：槽宽 25.8px 时约 13px，12 个口都放得下不挤 */
+      const letter = SLOT_LETTERS[i];
+      const lly = floorY - 17;
+      const isLand2 = (landSlot === i && settleT > 0);
+      ctx.textAlign = 'center';
+      ctx.font = '800 ' + Math.max(9, Math.round(slotW * 0.52)) + 'px ' + UI;
+      /* 先描一圈深色边，保证在红/蓝底色上都读得清（照片里的机台就是这么印的） */
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(4,8,30,.85)';
+      ctx.strokeText(letter, cx, lly);
+      if(lit){
+        ctx.fillStyle = beat.on && pulse > 0.35 ? '#fff2b0' : '#ffd76a';
+      } else {
+        ctx.fillStyle = 'rgba(150,168,215,.62)';
+      }
+      if(isLand2 && landWin) ctx.fillStyle = '#ffffff';
+      ctx.fillText(letter, cx, lly);
+      ctx.textAlign = 'left';
     }
     /* 出口口线（★ 只画到管道内壁，右边那条细缝是发射管道，不是出口） */
     ctx.beginPath();
@@ -1820,7 +1952,7 @@
 
   /** 未开局时在场地中间给的引导文字 */
   function drawGuide(){
-    if(phase === 'fly' || phase === 'collect' || settleT > 0) return;
+    if(phase === 'fly' || phase === 'collect' || phase === 'transfer' || settleT > 0) return;
     let t1 = '', t2 = '';
     if(phase === 'bet'){
       if(bet < MIN_BET){ t1 = '点「投币」投币'; t2 = '至少 ' + MIN_BET + ' 枚（现在 ' + bet + ' 枚）'; }
@@ -1845,13 +1977,14 @@
 
   /** 结算横幅（按中奖演出的阶段显示不同内容） */
   function drawBanner(){
-    /* ★ 领奖阶段也要显示横幅（此时 settleT 已归零）——
+    /* ★ 领奖 / 转移阶段也要显示横幅（此时 settleT 已归零）——
        不然演出结束那一刻横幅会「啪」地消失，玩家正看着它呢。 */
     const collecting = inCollect();
-    if(!banner || (settleT <= 0 && !collecting)) return;
+    const transferring = inTransfer();
+    if(!banner || (settleT <= 0 && !collecting && !transferring)) return;
     const st = winStage();
-    /* 渐入渐出：开场淡入；领奖阶段常驻显示 */
-    const a = collecting ? 1 : clamp(settleT / 0.35, 0, 1);
+    /* 渐入渐出：开场淡入；领奖/转移阶段常驻显示 */
+    const a = (collecting || transferring) ? 1 : clamp(settleT / 0.35, 0, 1);
     ctx.globalAlpha = a;
     ctx.textAlign = 'center';
 
@@ -1891,23 +2024,29 @@
       ctx.fillStyle = banner.win ? '#ffe89a' : 'rgba(190,205,240,.9)';
       ctx.fillText(banner.sub, ARC_CX, 362);
     }
-    /* ★ ③ 金币飞行：显示"还在飞"的提示和进度（已到账 / 总额） */
+    /* ★ ③ 金币转移：显示"还在飞"的提示和进度（已到账 / 总额） */
     if(st === 3){
       ctx.font = '700 15px ' + UI;
       ctx.fillStyle = 'rgba(120,255,210,.95)';
       ctx.fillText('金币入账中… ' + credited + ' / ' + landGain, ARC_CX, 388);
     }
-    /* ★ ④ 渐止收尾 / 领奖阶段：钱已全部到手 */
-    if(st === 4 || collecting){
+    /* ★ ④ 渐止收尾：钱已全部到手 */
+    if(st === 4){
       ctx.font = '700 15px ' + UI;
       ctx.fillStyle = 'rgba(141,255,155,.98)';
       ctx.fillText('✓ 已入账 ' + landGain + ' 枚', ARC_CX, 388);
     }
-    /* ★ 领奖阶段：明确告诉玩家「该你按了」—— 这是控制感的来源 */
+    /* ★ 领奖阶段：明确告诉玩家「该你按了」—— 这是控制感的来源。
+       ⚠️ 此时余额**还没涨**（冻结在旧值），所以要引导玩家去按，
+          而不是提前显示「已入账」（那会和余额数字自相矛盾）。 */
     if(collecting){
-      ctx.font = '600 13px ' + UI;
-      ctx.fillStyle = 'rgba(200,215,255,.85)';
-      ctx.fillText('按「领奖」收下，或继续下一局', ARC_CX, 412);
+      ctx.font = '600 14px ' + UI;
+      const blink = 0.65 + 0.35 * Math.sin(tGlobal * 4.5);
+      ctx.fillStyle = 'rgba(255,225,120,' + blink.toFixed(2) + ')';
+      ctx.fillText('▼ 按「领奖」把钱收进来', ARC_CX, 390);
+      ctx.font = '600 12px ' + UI;
+      ctx.fillStyle = 'rgba(180,200,245,.75)';
+      ctx.fillText('代币会在转移动画里一枚枚到账', ARC_CX, 412);
     }
     ctx.globalAlpha = 1;
     ctx.textAlign = 'left';
@@ -2025,13 +2164,20 @@
       : '投币<b>按住连投 +1 · 单局最多 ' + MAX_BET + ' 枚</b>';
     /* ★ 领奖阶段：「开始」键**变成「领奖」**（用户建议的两个方案之一，
        选了变形而不是弹新按钮 —— 位置固定、手指不用找，且不会多一个浮层挡住场地）。
-       平时它 disabled，领奖时必须可点，否则玩家会以为卡住了。 */
+       平时它 disabled，领奖时必须可点，否则玩家会以为卡住了。
+       ★ 转移阶段（按下之后）：按钮**变灰禁用**并显示"入账中"，
+         否则玩家会反复点（而且再次点击没有意义，转移已经开始）。 */
     const collecting = inCollect();
     if(collecting){
       $('btnStart').disabled = false;
       $('btnStart').classList.add('collect');
       $('btnStart').classList.add('hot');
       $('btnStart').textContent = '领 奖 +' + landGain;
+    } else if(inTransfer()){
+      $('btnStart').disabled = true;
+      $('btnStart').classList.remove('collect');
+      $('btnStart').classList.remove('hot');
+      $('btnStart').textContent = inTransfer() && transferT >= TRANSFER_T ? '收 尾…' : '入账中…';
     } else {
       $('btnStart').classList.remove('collect');
       const canStart = (phase === 'bet' && bet >= MIN_BET);
@@ -2185,12 +2331,14 @@
     landX,
     banner: banner ? { txt:banner.txt, sub:banner.sub, win:banner.win } : null,
     shownCoins: shownCoins(), gainRollT, GAIN_ROLL_T, pendingShow,
-    winT, winStage: winStage(), winBeat: winBeat(),
-    WIN_T, WIN_S1, WIN_S2, WIN_S3, gainStarted,
+    winT, transferT, winStage: winStage(), winBeat: winBeat(),
+    WIN_T, WIN_S1, TRANSFER_T, FADE_T, gainStarted,
     /* ★ 领奖 / 金币飞行的可观测状态（测试与实验台要断言这些） */
-    collectT, COLLECT_T, inCollect: inCollect(),
+    collectT, COLLECT_T, inCollect: inCollect(), inTransfer: inTransfer(),
     coinFly: coinFly.map(c => ({ x:+c.x.toFixed(1), y:+c.y.toFixed(1), amt:c.amt, done:c.done })),
     credited, N_COIN, winGain: (bet > 0 && mult) ? bet * mult : 0,
+    /* ★ 出口字母代号（测试与 UI 用） */
+    SLOT_LETTERS: SLOT_LETTERS.slice(), slotLetter,
     aimReady: aimReady(),
     lampCount: mult ? lampCountOf(mult) : 0,
     lampOrder: lampOrder.slice(),

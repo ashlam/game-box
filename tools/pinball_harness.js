@@ -143,9 +143,22 @@ function load(){
    *    不充值就会打到没钱、后续全部「发射失败」，量出来的分布是假的。 */
   function openRound({ seed = null, bet = 5, mult = 2, skipAnim = true, fresh = true } = {}){
     /* ★ 上一局如果是中奖，会停在「领奖」阶段等玩家按键（用户要的控制感）。
-       实验台/测试是"自动玩家"，所以这里替它按掉，否则 startRound() 会
-       因为 phase !== 'bet' 直接失败 —— 实测症状是"打了一发之后后面全失败"。 */
-    if(win.__pinball && win.__pinball().phase === 'collect') win.__pinballCollect();
+       实验台/测试是"自动玩家"，所以这里替它按掉。
+       ⚠️ 按下领奖后**不是立刻收局**：会进入 'transfer' 阶段播金币转移/渐止动画
+          （用户要求「按领奖按钮后，再播转移效果动画」），动画放完才 endRound。
+          所以这里必须把动画**推完**，否则 next 的 startRound() 会因为
+          phase 还是 'transfer' 而失败 —— 症状是"打一发之后后面全部发射失败"，
+          量出来的相关性和覆盖全是假的（实测踩到：相关从 -0.47 掉到 -0.20）。 */
+    if(win.__pinball){
+      const st0 = win.__pinball();
+      if(st0.phase === 'collect') win.__pinballCollect();
+      /* 推完转移 + 渐止（TRANSFER_T + FADE_T，多留一倍余量） */
+      if(win.__pinball().phase === 'transfer'){
+        let g = 0;
+        const cap = Math.ceil(((st0.TRANSFER_T || 1.6) + (st0.FADE_T || 0.8)) * 60 * 2) + 60;
+        while(win.__pinball().phase === 'transfer' && g++ < cap) win.__pinballStep(1/60);
+      }
+    }
     if(fresh) win.__pinballReset(seed);
     if(win.__pinballSetCoins) win.__pinballSetCoins(100000);
     if(mult) win.__pinballForceMult(mult);

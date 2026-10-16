@@ -322,8 +322,60 @@ section('5) ★ 拉扳机蓄力发射 / 力度 → 落点单调可控');
 }
 
 /* =====================================================================
-   9.6) ★ 用户报的 bug：点亮出口灯时把「发射管道」也算成一个出口
+   9.7) ★ 出口字母标注（用户要求「标注 ABCDE 等大写字幕，方便辨识和沟通」）
    ===================================================================== */
+section('9.7) ★ 12 个出口标注 A~L 字母');
+{
+  const s = M();
+  okNum(s.SLOT_LETTERS.length, 12, '★ 12 个出口各有字母');
+  ok(s.SLOT_LETTERS.join('') === 'ABCDEFGHIJKL',
+     '★★ 字母按从左到右顺序为 A~L（实际 ' + s.SLOT_LETTERS.join('') + '）');
+  okNum(new Set(s.SLOT_LETTERS).size, 12, '★ 字母互不重复（每个口都能唯一定位）');
+  ok(s.SLOT_LETTERS.every(L => /^[A-Z]$/.test(L)),
+     '★ 全部是单个大写字母（用户要的「大写字幕」）');
+  /* 映射关系：第 i 个口 → 第 i 个字母 */
+  let mapBad = 0;
+  for(let i = 0; i < 12; i++){
+    /* slotAtX(该口中心) 必须回到 i，且字母是 A+i */
+    if(s.slotAtX(s.slotCX(i)) !== i) mapBad++;
+    if(s.slotLetter(i) !== String.fromCharCode(65 + i)) mapBad++;
+  }
+  okNum(mapBad, 0, '★ 出口序号 ↔ 字母映射一一对应');
+
+  /* ★★ 绘制层面：12 个字母必须**真的画出来**了。
+     只断言 SLOT_LETTERS 数组的话，「算对了但没画出来」照样能过。 */
+  reset(1); insert(5); start(); skip();
+  drawRec.texts.length = 0;
+  win.__pinballDraw();
+  const drawn = drawRec.texts.map(t => t.txt);
+  const missing = s.SLOT_LETTERS.filter(L => drawn.indexOf(L) < 0);
+  okNum(missing.length, 0, '★★ 12 个字母都画在了画布上（' + drawn.filter(t => /^[A-L]$/.test(t)).length + ' 个）',
+        '没画出来的: ' + missing.join(','));
+  /* ★ 字母必须在**槽体范围内**（y 在口线和槽底之间），不能飘到场地中间 */
+  const letterTexts = drawRec.texts.filter(t => /^[A-L]$/.test(t.txt));
+  ok(letterTexts.every(t => t.y > s.mouthY && t.y < s.floorY),
+     '★★ 字母画在槽体内部（' + s.mouthY + ' < y < ' + s.floorY + '）—— 不挡球路、不压场地',
+     'y 范围 ' + Math.min(...letterTexts.map(t=>t.y)).toFixed(0) + ' ~ ' + Math.max(...letterTexts.map(t=>t.y)).toFixed(0));
+  /* ★ 每个字母的 x 必须落在自己那个口的区间里（标记和口对得上） */
+  let misX = 0;
+  for(const t of letterTexts){
+    const i = s.SLOT_LETTERS.indexOf(t.txt);
+    if(i >= 0 && (t.x < s.slotX0(i) - 1 || t.x > s.slotX0(i) + s.slotW + 1)) misX++;
+  }
+  okNum(misX, 0, '★★ 每个字母都画在自己那个口的上方（标记不会串口）');
+
+  /* ★ 没中奖的提示里也要带出口字母 */
+  reset(1); forceMult(2);
+  insert(5); start(); skip();
+  setLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
+  launch(0.5); land(3);
+  const loseBanner = M().banner;
+  ok(!!loseBanner && /落在 [A-L] 口/.test(loseBanner.sub || ''),
+     '★★ 没中奖时提示「落在 X 口」（方便复盘哪个口输了）',
+     '实际 sub = ' + JSON.stringify(loseBanner && loseBanner.sub));
+}
+
+
 section('9.6) ★ 回归：发射管道不能算成一个出口');
 {
   const s = M();
@@ -453,7 +505,10 @@ section('7) ★ 本局结束 → 回投币阶段，必须重新投币');
   while(M().phase === 'fly' && guard++ < 600) step();
   ok(M().inCollect, '★ 展示结束后进入「领奖」阶段（中奖不自动开下一局）');
   win.__pinballCollect();                     // 玩家按下领奖
-  ok(M().phase === 'bet', '★ 领奖后回到投币阶段');
+  ok(M().inTransfer, '★ 按下领奖 → 先播转移动画（不立刻收局）');
+  guard = 0;
+  while(M().inTransfer && guard++ < 600) step();   // 把转移播完
+  ok(M().phase === 'bet', '★ 转移播完后回到投币阶段');
   okNum(M().bet, 0, '★ 本局投注清零');
   okNum(M().mult, 0, '★ 本局倍数清零');
   ok(M().lamps.every(v => v === false), '★ 出口灯全灭（下一局重新随机点）');
@@ -506,12 +561,12 @@ section('7.5) ★ 结算演出：输赢音乐不同 + 中奖时代币逐点加�
   ok(avg(fWin) > avg(fLose) * 1.4,
      '★ 中奖的音区明显更高（' + Math.round(avg(fWin)) + 'Hz vs ' + Math.round(avg(fLose)) + 'Hz）—— 明亮 vs 低沉');
 
-  /* ---- ② ★★ 四段式节奏（顺序按用户第二次要求重排）----
+  /* ---- ② ★★ 四段式节奏（第三版：转移动画由「领奖」按钮触发）----
      用户原话：「球进奖桶 -> 灯闪烁，同时播音效/音乐 -> 稍等会儿展示奖励的代币数量
      -> 稍等会儿代币一点点加到累计代币里（做一个奖励向拥有代币位置移动的动画效果）
-     -> 代币全部转移完毕后，灯光和音乐渐止，开始下一局」。
-     对应：① 中奖啦(灯闪+号角) ② 看多少 ③ 金币飞进余额 ④ 渐止收尾。
-     下面按**时间顺序**逐段验证：每段该出现什么、且**不该**提前出现什么。 */
+     -> 代币全部转移完毕后，灯光和音乐渐止，开始下一局」
+     以及：「**按领奖按钮后，再播转移效果动画**」。
+     对应：① 中奖啦(灯闪+号角) ② 看多少 →【冻结等领奖】→ ③ 金币转移 ④ 渐止收尾。 */
   reset(1); forceMult(4);
   insert(10); start(); skip();
   setLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
@@ -521,73 +576,86 @@ section('7.5) ★ 结算演出：输赢音乐不同 + 中奖时代币逐点加�
   const st = M();
   okNum(st.coins, coinsBefore + 10 * 4, '★ 中奖时代币**真值**立刻全额入账（逻辑不受动画影响）');
   ok(st.winStage === 1, '★★ ① 一落槽先进入第 1 段「中奖啦」（winStage = ' + st.winStage + '）');
-  ok(!(st.gainRollT > 0), '  └ 此时还没开始数钱（gainRollT 未启动）');
+  ok(!(st.gainRollT > 0), '  └ 此时还没开始转账（gainRollT 未启动）');
   okNum(st.shownCoins, shownBefore, '  └ 余额还是旧值 —— 先"中奖"，钱的事后面再说');
-  /* ★★ 第 1 段**不能**出现账目：那行「投注 × 倍数 = 奖金」是第 2 段的任务。
-     截图里发现过这个问题：第 1 段就显示「返还 20 × 10 = 200」，
-     于是「中奖啦」和「看看中了多少」两段在视觉上糊成了一段，
-     四段式节奏白做了。 */
+  /* ★★ 第 1 段**不能**出现账目：那行账目是第 2 段的任务。
+     截图里发现过这个问题：第 1 段就显示账目，于是「中奖啦」和「看多少」糊成一段。 */
   ok(st.banner && st.banner.sub === '',
      '★★ 第 1 段横幅**只有「中 奖」大字、没有账目**（等第 2 段才念账）',
      '实际 sub = ' + JSON.stringify(st.banner && st.banner.sub));
 
-  /* 逐帧走完整段演出，记录每段的：阶段号、余额、横幅副标题 */
+  /* ---- ② 段走完后必须**冻结在领奖阶段**，且余额仍然不动 ---- */
+  let guard = 0;
+  while(!M().inCollect && guard++ < 600) step();
+  ok(M().inCollect, '★★ ①② 段走完 → 停在「领奖」阶段等玩家按（phase = ' + M().phase + '）');
+  ok(M().winStage === 2, '  └ 等领奖期间仍显示第 2 段（账目继续挂着，不会闪掉）');
+  okNum(M().shownCoins, shownBefore, '★★ 等领奖期间余额**继续冻结**在旧值（' + shownBefore + '）');
+  ok(!M().inTransfer, '  └ 转移动画还没开始（要等玩家按）');
+  ok(M().coinFly.length === 0, '  └ 金币还没撒出来');
+  /* ★★ 关键：不按就不动 —— 等 2 秒后依然冻结 */
+  for(let i = 0; i < 120; i++) step();
+  ok(M().inCollect && !M().inTransfer && M().coinFly.length === 0,
+     '★★ 不按「领奖」就一直是冻结状态（等 2 秒后仍无金币在飞）—— 转移由玩家触发');
+  okNum(M().shownCoins, shownBefore, '  └ 余额仍然没动');
+
+  /* ---- ★★ 按下领奖 → **这时才开始**播转移动画 ---- */
+  ok(win.__pinballCollect(), '★ 按下「领奖」');
+  ok(M().inTransfer, '★★ 按下后进入转移阶段（phase = ' + M().phase + '）—— 这就是「按了才播」');
+  ok(M().coinFly.length > 0, '★★ 金币此时才撒出来（' + M().coinFly.length + ' 枚）');
+  okNum(M().shownCoins, shownBefore, '  └ 刚按下那一帧余额仍是旧值（动画还没推进）');
+
+  /* 逐帧走完转移，记录每段的阶段号与余额 */
   const target = coinsBefore + 10 * 4;
   const timeline = [];
-  let guard = 0, overshoot = 0;
-  while(M().settleT > 0 && guard++ < 900){
+  guard = 0;
+  let overshoot = 0;
+  while(M().inTransfer && guard++ < 900){
     step();
     const s = M();
-    if(s.winT > 0){
-      timeline.push({ st: s.winStage, coins: s.shownCoins });
-      if(s.shownCoins > target) overshoot++;
-    }
+    /* ⚠️ 转移播完的那一帧 endRound() 已经把 phase 改成 bet、winStage 归 0，
+       所以要**跳过 0**，否则序列尾巴会多出一个 0（实测 3→4→0）。 */
+    if(s.winStage) timeline.push({ st: s.winStage, coins: s.shownCoins });
+    if(s.shownCoins > target) overshoot++;
   }
   const inStage = k => timeline.filter(t => t.st === k);
-  for(const k of [1,2,3,4]){
+  for(const k of [3,4]){
     ok(inStage(k).length > 0,
-       `★★ 第 ${k} 段确实出现过（${inStage(k).length} 帧）`,
-       ['', '中奖啦(灯闪+号角)', '看多少', '金币飞进余额', '渐止收尾'][k]);
+       `★★ 转移阶段第 ${k} 段确实出现过（${inStage(k).length} 帧）`,
+       ['', '', '', '金币转移', '渐止收尾'][k]);
   }
-  /* ★ 顺序必须是 1→2→3→4（不能乱序，也不能跳段） */
+  /* ★ 转移内部顺序必须是 3→4（不能乱序） */
   const seq = timeline.map(t => t.st).filter((v,i,a) => i === 0 || v !== a[i-1]);
-  ok(seq.join(',') === '1,2,3,4',
-     '★★ 四段严格按 1→2→3→4 依次出现（实际 ' + seq.join('→') + '）');
-  /* ★★ 关键：第 3 段之前余额**一动不动**（先看清中了多少，再看着钱变多） */
-  const beforeRoll = timeline.filter(t => t.st < 3);
-  const frozen = beforeRoll.every(t => t.coins === shownBefore);
-  ok(frozen,
-     '★★ 第 3 段之前余额**完全不变**（' + shownBefore + '）—— 先看清账目，再看着钱变多',
-     '第3段前的余额取值: ' + [...new Set(beforeRoll.map(t=>t.coins))].join(','));
-  /* ★ 第 3 段必须真的在涨（出现多个不同值） */
+  ok(seq.join(',') === '3,4',
+     '★★ 转移内部严格按 3→4 依次出现（实际 ' + seq.join('→') + '）');
+  /* ★ 第 3 段余额必须真的在涨 */
   const rollVals = [...new Set(inStage(3).map(t => t.coins))];
   ok(rollVals.length >= 4,
      '★★ 第 3 段余额确实在一点点增加（' + rollVals.length + ' 个不同值）',
      rollVals.slice(0, 10).join('→'));
   okNum(overshoot, 0, '★ 余额从不超过真值（不会「涨过头再退回」）');
   okNum(M().shownCoins, target, '★ 演出结束后显示值与真值对齐');
+  ok(M().phase === 'bet' || M().phase === 'over',
+     '★★ 转移＋渐止播完自动收局（phase = ' + M().phase + '）');
 
-  /* ---- ③ 每段的**时长**必须够玩家反应过来（这是「节奏再慢些」的核心）---- */
-  const durOf = k => inStage(k).length / 60;
-  ok(durOf(1) >= 0.4, '★★ ①「中奖啦」至少给 0.4 秒反应过来（实际 ' + durOf(1).toFixed(2) + 's）');
-  ok(durOf(3) >= 1.0, '★★ ③「金币飞进余额」是最爽的一段，给足时间（' + durOf(3).toFixed(2) + 's ≥ 1.0s）');
-  ok(durOf(4) >= 0.5, '★★ ④「渐止收尾」有淡出时间（' + durOf(4).toFixed(2) + 's）');
-  const total = timeline.length / 60;
-  ok(total >= 3.5, '★★ 中奖演出总长 ≥ 3.5 秒（实际 ' + total.toFixed(2) + 's）—— 原来只有 2.6 秒，来不及体会');
 
-  /* ---- ③d ★★ 金币飞行动画（用户要的「奖励向拥有代币位置移动的动画」）---- */
+  /* ---- ③d ★★ 金币飞行动画（用户要的「奖励向拥有代币位置移动的动画」）----
+     ⚠️ 金币只在**按下领奖之后**（transfer 阶段）才撒出来，所以这里必须先按。 */
   reset(1); forceMult(4);
   insert(10); start(); skip();
   setLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
   launch(0.5); land(0);
+  let g2 = 0;
+  while(!M().inCollect && g2++ < 900) step();
+  win.__pinballCollect();
   const flySamples = [];
-  let sawFly = false, coinPathBad = 0, g2 = 0;
-  while(M().settleT > 0 && g2++ < 900){
+  let sawFly = false, coinPathBad = 0;
+  g2 = 0;
+  while(M().inTransfer && g2++ < 900){
     step();
     const s = M();
     if(s.coinFly.length){
       sawFly = true;
-      /* ① 金币数 = N_COIN（一开局就撒出来） */
+      /* ① 金币数 = N_COIN（一开始就撒出来） */
       flySamples.push(s.coinFly.length);
       /* ② 每枚金币的坐标必须有限（NaN 会让整帧画不出来） */
       for(const c of s.coinFly){
@@ -595,7 +663,7 @@ section('7.5) ★ 结算演出：输赢音乐不同 + 中奖时代币逐点加�
       }
     }
   }
-  ok(sawFly, '★★ 中奖时确实有金币在飞（coinFly 非空）');
+  ok(sawFly, '★★ 转移阶段确实有金币在飞（coinFly 非空）');
   okNum(coinPathBad, 0, '★★ 金币坐标全程有限（没有 NaN）—— 否则整帧画不出来');
   ok(flySamples.length > 0 && Math.max(...flySamples) === M().N_COIN,
      '★ 撒出的金币数 = N_COIN（' + M().N_COIN + ' 枚）', '最多同时 ' + Math.max(...flySamples) + ' 枚');
@@ -617,14 +685,17 @@ section('7.5) ★ 结算演出：输赢音乐不同 + 中奖时代币逐点加�
   for(let i = 0; i < 120; i++) step();
   ok(M().inCollect && M().rounds === beforeCollectStep,
      '★★ 领奖阶段不会自己溜走（等 2 秒后仍在领奖，局数没变）—— 控制感在玩家手里');
-  /* 按下领奖 → 收局 → 回投币阶段 */
+  /* 按下领奖 → 播转移 → 收局 → 回投币阶段 */
   const coinsAfterWin = M().coins;
   ok(win.__pinballCollect(), '★ 按「领奖」有效');
-  ok(M().phase === 'bet', '  └ 领奖后回到投币阶段');
+  ok(M().inTransfer, '  └ 按下后进入转移阶段（先播动画，不是立刻收局）');
+  g2 = 0;
+  while(M().inTransfer && g2++ < 900) step();
+  ok(M().phase === 'bet', '  └ 转移播完后回到投币阶段');
   okNum(M().coins, coinsAfterWin, '★★ 领奖**不会重复发钱**（奖励在结算那刻已入账）');
   okNum(M().bet, 0, '  └ 本局投注清零');
   ok(M().rounds >= 1, '  └ 局数已计');
-  /* 兜底超时：没人按时自己继续，绝不卡死 */
+  /* 兜底超时：没人按时自己继续（**也必须播完转移**），绝不卡死 */
   reset(1); forceMult(2);
   insert(5); start(); skip();
   setLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
@@ -632,22 +703,37 @@ section('7.5) ★ 结算演出：输赢音乐不同 + 中奖时代币逐点加�
   g2 = 0;
   while(!M().inCollect && g2++ < 900) step();
   const tStart = M().collectT;
-  for(let i = 0; i < Math.ceil(tStart * 60) + 30 && M().inCollect; i++) step();
-  ok(!M().inCollect, '★★ 领奖等太久会**兜底自动继续**（不会永远卡住）—— 实测 ' + tStart.toFixed(1) + 's 后自动收局');
+  const coinsBeforeTimeout = M().shownCoins;
+  let sawTransfer = false;
+  g2 = 0;
+  while(g2++ < Math.ceil(tStart * 60) + 400 && M().phase !== 'bet' && M().phase !== 'over'){
+    step();
+    if(M().inTransfer) sawTransfer = true;
+  }
+  ok(!M().inCollect, '★★ 领奖等太久会**兜底自动继续**（不会永远卡住）—— 实测 ' + tStart.toFixed(1) + 's 后自动继续');
+  ok(sawTransfer, '★★ 超时**也要播转移动画**（钱必须被看到进账，不能因为没按键就省掉）');
   ok(M().phase === 'bet' || M().phase === 'over', '  └ 兜底后回到正常阶段（' + M().phase + '）');
+  ok(M().shownCoins > coinsBeforeTimeout, '  └ 兜底路径余额也真的涨上去了');
 
   /* ---- ③c ★★ 绘制层面：每段**画出来的文字**必须符合该段的职责 ----
      只看内部状态是抓不住「状态对了但画错了」的（第 1 段多画一行账目就是这么漏的）。
-     drawRec 记录了每次 fillText，所以可以直接检查"这一帧画了什么字"。 */
+     drawRec 记录了每次 fillText，所以可以直接检查"这一帧画了什么字"。
+     ⚠️ ③④ 段要**先按领奖**才会出现（用户要求「按领奖按钮后，再播转移效果动画」），
+        所以到达 collect 后主动按一下，再继续找目标段。 */
   const textsAt = stageWanted => {
     reset(1); forceMult(4);
     insert(10); start(); skip();
     setLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
     launch(0.5); land(0);
-    let g = 0, out = [];
-    while(M().settleT > 0 && g++ < 900){
+    let g = 0, out = [], pressed = false;
+    while(g++ < 900){
       step();
-      if(M().winStage === stageWanted){
+      const s = M();
+      /* 到了领奖阶段就按一下（否则永远走不到 ③④） */
+      if(!pressed && s.inCollect){ win.__pinballCollect(); pressed = true; continue; }
+      /* 演出彻底结束也没找到目标段，就退出（避免死循环） */
+      if(!s.inTransfer && !s.inCollect && s.winStage === 0) break;
+      if(s.winStage === stageWanted){
         drawRec.texts.length = 0;
         win.__pinballDraw();
         out = drawRec.texts.map(t => t.txt);
@@ -670,8 +756,11 @@ section('7.5) ★ 结算演出：输赢音乐不同 + 中奖时代币逐点加�
      '★★ 第 1 段**没有**漏出「+' + gainStr + '」金额（数值必须等第 2 段才揭晓）',
      t1.join(' | '));
   const t2 = textsAt(2);
-  ok(t2.some(s => s.indexOf('投注') >= 0),
-     '★★ 第 2 段画出了这笔账（含「投注」）', t2.join(' | '));
+  ok(t2.some(s => s.indexOf('落在') >= 0) && t2.some(s => s.indexOf('倍') >= 0),
+     '★★ 第 2 段画出了这笔账（含「落在 X 口」和「N 倍」）', t2.join(' | '));
+  /* ★ 账目里必须带上**出口字母**：配合槽位上的标注，玩家能把"哪个口"和"拿了多少"对上 */
+  ok(t2.some(s => /落在 [A-L] 口/.test(s)),
+     '★★ 第 2 段的账目带上了出口字母（方便辨识和沟通）', t2.join(' | '));
   const t3 = textsAt(3);
   ok(t3.some(s => s.indexOf('金币入账中') >= 0),
      '★★ 第 3 段提示「金币入账中…」并显示进度', t3.join(' | '));
@@ -681,7 +770,8 @@ section('7.5) ★ 结算演出：输赢音乐不同 + 中奖时代币逐点加�
   ok(!t4.some(s => s.indexOf('金币入账中') >= 0),
      '  └ 第 4 段不再显示「金币入账中」（该收尾了）');
 
-  /* ---- ③b ★★ DOM 层面：界面上的代币文本必须在第 3 段真的在变 ---- */
+  /* ---- ③b ★★ DOM 层面：界面上的代币文本必须在第 3 段真的在变 ----
+     ⚠️ ③ 段要按了领奖才有，所以这里要一路走到转移结束。 */
   reset(1); forceMult(4);
   insert(10); start(); skip();
   setLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
@@ -689,9 +779,13 @@ section('7.5) ★ 结算演出：输赢音乐不同 + 中奖时代币逐点加�
   const coinEl = els.vCoins;
   const domTexts = [];
   guard = 0;
-  while(M().settleT > 0 && guard++ < 900){
+  let pressed2 = false;
+  while(guard++ < 900){
     step();
-    if(M().winStage === 3) domTexts.push(coinEl.textContent);
+    const s = M();
+    if(!pressed2 && s.inCollect){ win.__pinballCollect(); pressed2 = true; continue; }
+    if(s.winStage === 3) domTexts.push(coinEl.textContent);
+    if(!s.inTransfer && !s.inCollect && s.winStage === 0) break;
   }
   const domUniq = new Set(domTexts).size;
   ok(domUniq >= 4,
@@ -707,10 +801,14 @@ section('7.5) ★ 结算演出：输赢音乐不同 + 中奖时代币逐点加�
   launch(0.5); land(0);
   const beats = [];
   guard = 0;
-  while(M().settleT > 0 && guard++ < 900){
+  let pressed3 = false;
+  while(guard++ < 900){
     step();
-    const b = M().winBeat;
+    const s = M();
+    if(!pressed3 && s.inCollect){ win.__pinballCollect(); pressed3 = true; continue; }
+    const b = s.winBeat;
     if(b && b.on) beats.push({ st: b.st, idx: b.idx, per: b.per, fade: b.fade });
+    if(!s.inTransfer && !s.inCollect && s.winStage === 0) break;
   }
   ok(beats.length > 0, '★★ 中奖演出期间灯有节拍（winBeat.on）');
   /* ★ 节拍必须在推进（idx 会变），否则就是"灯不闪" */
@@ -740,6 +838,41 @@ section('7.5) ★ 结算演出：输赢音乐不同 + 中奖时代币逐点加�
   launch(0.5); land(3);
   ok(!M().winBeat.on, '★ 没中奖时灯不闪（winBeat.on = false）—— 失落不需要热闹');
   ok(!M().inCollect, '  └ 没中奖不进「领奖」阶段（没什么可领的，直接收局）');
+
+  /* ★★ 灯的光晕半径**永远不许炸开** —— 这是截图抓到的一个真 bug：
+     「等领奖」阶段 winT 已归零，而 winBeat 还在用 (winT − WIN_S1) 算拍位，
+     得到负数 phase → pulse = (1−phase)² ≈ 19 → 灯的半径变成 **185px**，
+     屏幕上出现一个盖住半个场地的大红圆。
+     这条断言直接从**绘制记录**里量半径，比检查内部变量更贴近"玩家看到了什么"。 */
+  reset(1); forceMult(4);
+  insert(10); start(); skip();
+  setLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
+  launch(0.5); land(0);
+  let maxHalo = 0, haloBad = 0, gp = 0, pressedB = false;
+  while(gp++ < 900){
+    step();
+    const s = M();
+    if(!pressedB && s.inCollect){ win.__pinballCollect(); pressedB = true; }
+    /* 每帧都画一次，检查所有"出口灯光晕色"的圆。
+       ⚠️ 不能笼统地查"半径 > 40px 的实心圆"——场地本身就有合法的大填充
+          （圆弧区 r=159、发射管道 r=169），那样会误报几百次（踩过）。
+          所以按**颜色**筛：只有出口灯的光晕用这个红。 */
+    drawRec.fills.length = 0;
+    win.__pinballDraw();
+    for(const f of drawRec.fills){
+      const isHalo = typeof f.style === 'string' && f.style.indexOf('rgba(255,60,45,') === 0;
+      if(isHalo){
+        maxHalo = Math.max(maxHalo, f.r);
+        if(f.r > 22.5) haloBad++;
+      }
+    }
+    if(!s.inTransfer && !s.inCollect && s.winStage === 0) break;
+  }
+  ok(maxHalo > 0, '★ 演出期间确实画了出口灯光晕（最大 ' + maxHalo.toFixed(1) + 'px）');
+  ok(maxHalo <= 22.5,
+     '★★ 出口灯光晕半径不超过 22.5px（实测最大 ' + maxHalo.toFixed(1) + 'px）—— 不会炸成大圆',
+     '最大 ' + maxHalo.toFixed(1));
+  okNum(haloBad, 0, '★★ 没有任何一帧的出口灯光晕超过 22.5px（那个 185px 大红圆的回归）');
 
   /* ---- ⑤ 没中奖：不滚动，显示值与真值立刻一致 ---- */
   reset(1); forceMult(2);
@@ -1115,6 +1248,8 @@ section('12) 整局流程：投币 → 开始 → 抽倍数 → 点灯 → 发�
   while(M().phase === 'fly' && g++ < 600) step();
   ok(M().inCollect, '★ 中奖演出结束后停在「领奖」阶段');
   win.__pinballCollect();                 // 玩家按下领奖
+  g = 0;
+  while(M().inTransfer && g++ < 600) step();   // 播完转移
   ok(M().phase === 'bet', '回到投币阶段');
   okNum(M().bet, 0, '投注清零，等待重新投币');
   okNum(M().rounds, 1, '局数 = 1');
