@@ -216,37 +216,117 @@ section('5) ★ 拉扳机蓄力发射 / 力度 → 落点单调可控');
   ok(means[0] >= 7, '★ 力度 0（轻按）平均落最右几个出口（均值 ' + means[0].toFixed(1) + '）');
   ok(means[means.length-1] <= 4, '★ 力度 1（满蓄力）平均落最左几个出口（均值 ' + means[means.length-1].toFixed(1) + '）');
 
-  /* 秩相关（连续多局，不 reset） */
-  const corr = (() => {
-    reset(777);
-    const xs = [], ys = [];
-    for(let i = 0; i < 60; i++){
-      const p = i / 59;
-      const r = shoot(p, { bet: 5, mult: 2, fresh: false });
-      if(r.slot < 0) continue;
-      xs.push(p); ys.push(r.slot);
-    }
+  /* 秩相关（连续多局，不 reset）
+     ★ 用**落点连续 x** 而不是槽号来量技巧。理由（踩过的坑）：
+       槽号是连续 x 被槽宽量化后的结果，槽越窄，同样的物理散布跨过越多槽边界，
+       槽号秩相关就越低 —— 那是**量化噪声**，不是技巧变差。
+       实测差点误判：出口区右界改完之后槽号秩相关 -0.53→-0.43，
+       查下去发现基线是**虚高**的（漏进管道的低力度球全落最右假出口，
+       人为加强负相关），剔掉漏球后两版只差 0.03。
+     ★★ 为什么不只看一个种子：单种子 60 发的秩相关噪声极大
+        （实测 10 个种子的连续 x 相关在 -0.35 ~ -0.63 之间跳），
+        拿单种子卡阈值必然 flaky。所以**取多个种子的均值**作为断言对象 ——
+        均值才是「这个参数配置的技巧性」的稳定估计。 */
+  const corrOf = (pick, nShots) => {
     const rank = a => {
       const idx = a.map((v,i) => [v,i]).sort((p,q) => p[0]-q[0]);
       const rr = new Array(a.length);
       idx.forEach(([,i], k) => { rr[i] = k + 1; });
       return rr;
     };
-    const rx = rank(xs), ry = rank(ys), n = xs.length;
-    const mx = rx.reduce((a,b)=>a+b,0)/n, my = ry.reduce((a,b)=>a+b,0)/n;
-    let sxy = 0, sxx = 0, syy = 0;
-    for(let i = 0; i < n; i++){
-      const dx = rx[i]-mx, dy = ry[i]-my;
-      sxy += dx*dy; sxx += dx*dx; syy += dy*dy;
-    }
-    return (sxx && syy) ? sxy/Math.sqrt(sxx*syy) : 0;
-  })();
-  ok(corr < -0.4, '★ 力度与落点负相关（大力 → 靠左出口），秩相关 ' + corr.toFixed(3));
+    const one = seed => {
+      reset(seed);
+      const xs = [], ys = [];
+      for(let i = 0; i < nShots; i++){
+        const p = i / (nShots - 1);
+        const r = shoot(p, { bet: 5, mult: 2, fresh: false });
+        if(r.slot < 0) continue;
+        xs.push(p); ys.push(pick(r));
+      }
+      const rx = rank(xs), ry = rank(ys), n = xs.length;
+      const mx = rx.reduce((a,b)=>a+b,0)/n, my = ry.reduce((a,b)=>a+b,0)/n;
+      let sxy = 0, sxx = 0, syy = 0;
+      for(let i = 0; i < n; i++){
+        const dx = rx[i]-mx, dy = ry[i]-my;
+        sxy += dx*dy; sxx += dx*dx; syy += dy*dy;
+      }
+      return (sxx && syy) ? sxy/Math.sqrt(sxx*syy) : 0;
+    };
+    const vs = [1, 42, 777, 4242, 20261005].map(one);
+    return vs.reduce((a,b) => a+b, 0) / vs.length;
+  };
+  /* ★ 连续落点 x：这才是「物理上力度能不能控住落点」的真度量（期望负相关） */
+  const corrX = corrOf(r => r.landX, 60);
+  ok(corrX < -0.45, '★ 力度与落点（连续 x）强负相关 —— 物理上确实可控，多种子均值 ' + corrX.toFixed(3));
+  /* ★ 槽号：玩家实际看到的口，受槽宽量化影响，门槛低一点 */
+  const corr = corrOf(r => r.slot, 60);
+  ok(corr < -0.38, '★ 力度与落点槽号负相关（大力 → 靠左出口），多种子均值 ' + corr.toFixed(3));
 
   /* 未 aimReady 时发射必须失败 */
   reset(1); insert(5); start();
   ok(!launch(0.5), '★ 灯没点完就拉扳机无效');
   ok(M().phase === 'aim', '  └ 状态没变');
+}
+
+/* =====================================================================
+   9.6) ★ 用户报的 bug：点亮出口灯时把「发射管道」也算成一个出口
+   ===================================================================== */
+section('9.6) ★ 回归：发射管道不能算成一个出口');
+{
+  const s = M();
+  /* ① 出口区右界不能越过发射管道内壁 */
+  ok(s.SLOT_R <= s.LANE_WALL_X + 0.01,
+     '★ 出口区右界（' + s.SLOT_R.toFixed(1) + '）不超过管道内壁（' + s.LANE_WALL_X + '）');
+
+  /* ② 12 个出口必须**无缝铺满** [fieldL, SLOT_R]，且最后一个槽正好抵到管道壁 */
+  const span = s.fieldL + 12 * s.slotW;
+  ok(Math.abs(span - s.SLOT_R) < 1e-9,
+     '★ 12 个出口无缝铺满场地（' + s.fieldL + ' + 12×' + s.slotW.toFixed(2) + ' = ' + span.toFixed(2) + ' = 右界）');
+
+  /* ③ 「球在管道里的 x」必须**不属于任何一个出口** —— 这就是原来的 bug：
+        以前 12 个槽是按 [fieldL, fieldR] 分的，管道 x=339 落在 slot 11 里，
+        于是 slot 11 有 78% 宽度是管道、永远落不进去，却照样会被点亮。 */
+  const slotOfLaneX = s.slotAtX(s.LANE_X);
+  ok(s.fieldL + slotOfLaneX * s.slotW < s.LANE_WALL_X - s.RB ||
+     s.fieldL + (slotOfLaneX + 1) * s.slotW > s.LANE_WALL_X + s.RB,
+     '★ 管道位置不会被算进任何出口的判定范围',
+     '管道 x=' + s.LANE_X + ' 被判为 slot ' + slotOfLaneX);
+  ok(s.slotAtX(s.LANE_WALL_X) === 11, '  └ 管壁处仍归最后一个出口（球心最右落点在此）');
+
+  /* ④ 每个出口的判定区间宽度都等于 slotW，且互不重叠 */
+  let overlap = 0, widthBad = 0;
+  for(let i = 0; i < 12; i++){
+    const a = s.slotAtX(s.slotX0(i) + 0.01), b = s.slotAtX(s.slotX0(i + 1) - 0.01);
+    if(i < 11 && b !== i) widthBad++;
+    if(a !== i) overlap++;
+  }
+  okNum(widthBad, 0, '★ 每个出口的 x 区间都完整映射回自己');
+  okNum(overlap, 0, '  └ 出口区间互不重叠');
+
+  /* ⑤ ★★ 端到端：**没有任何一发球**能落进发射管道区
+        （原来低力度球会从弧区右端漏进管道、落进那个假出口，实测 9/9）。 */
+  let leaked = 0, landedInLane = 0;
+  reset(20261005);
+  for(let i = 0; i < 200; i++){
+    const st = shoot(i / 199, { bet: 5, mult: 2, fresh: false });
+    if(st.slot < 0) continue;
+    /* 落点 x 若已到管道内壁右侧，说明球「在管道里结算」了 —— 那就是漏了 */
+    if(st.landX > M().LANE_WALL_X - M().RB + 0.6) landedInLane++;
+  }
+  okNum(landedInLane, 0, '★★ 200 发里没有一发是「在发射管道里结算」的（用户报的 bug）',
+        landedInLane + ' 发落在管道区');
+
+  /* ⑥ 每个出口都是**真的能进**（含最右那个）—— 防止「点亮了一个进不去的口」 */
+  const hit = new Array(12).fill(0);
+  reset(31337);
+  for(let i = 0; i < 300; i++){
+    const st = shoot(i / 299, { bet: 5, mult: 2, fresh: false });
+    if(st.slot >= 0) hit[st.slot]++;
+  }
+  const dead = hit.map((v, i) => v === 0 ? i : -1).filter(i => i >= 0);
+  okNum(dead.length, 0, '★ 12 个出口全都真的能落进去（没有「点了灯却进不去」的口）',
+        '进不去的出口: ' + (dead.length ? dead.join(',') : '无'));
+  void leaked;
 }
 
 /* =====================================================================

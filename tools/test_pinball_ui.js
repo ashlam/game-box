@@ -106,8 +106,12 @@ f.onload=()=>setTimeout(()=>{
        ctlScrollW:ctlEl.scrollWidth, ctlClientW:ctlEl.clientWidth,
        ctlOverflow:ctlEl.scrollWidth-ctlEl.clientWidth,
        trigW:trig.width, trigH:trig.height,
+       trigTop:trig.top, trigLeft:trig.left, trigRight:trig.right,
+       ctlH:ctl.height,
        coinW:coin.width, coinH:coin.height,
+       coinTop:coin.top, coinLeft:coin.left, coinRight:coin.right,
        startW:start.width, startH:start.height,
+       startTop:start.top, startLeft:start.left, startRight:start.right,
        ledN:ledRects.length,
        ledFirstLeft:ledRects.length?ledRects[0].left:null,
        ledLastRight:ledRects.length?ledRects[ledRects.length-1].right:null,
@@ -225,21 +229,41 @@ for(const { w, h, label, r } of results){
   okNum(ratio, v => v >= 0.42, tag + ' 画布占视口高度 ≥ 42%', (ratio * 100).toFixed(1) + '%');
 }
 
-section('4) 控制条：三键够大、不溢出、扳机铺满');
+section('4) 控制条：一排三键（投币 | 开始 | 拉扳机）、都够大、不溢出');
 for(const { w, h, label, r } of results){
   const tag = `${label} ${w}×${h}`;
   okNum(r.ctlOverflow, v => v <= 1, tag + ' 控制条不横向溢出', '溢出 ' + r.ctlOverflow + 'px');
   /* 触控目标 ≥ 44px（iOS HIG 的舒适区下限） */
   okNum(r.trigH, v => v >= 44, tag + ' 扳机键高 ≥ 44px', r.trigH + 'px');
-  okNum(r.trigW, v => v >= 200, tag + ' 扳机键宽 ≥ 200px（铺满一行）', r.trigW + 'px');
   okNum(r.coinH, v => v >= 44, tag + ' 投币口高 ≥ 44px', r.coinH + 'px');
   okNum(r.startH, v => v >= 44, tag + ' 开始键高 ≥ 44px', r.startH + 'px');
-  okNum(r.coinW, v => v >= 100, tag + ' 投币口宽 ≥ 100px', r.coinW + 'px');
-  okNum(r.startW, v => v >= 100, tag + ' 开始键宽 ≥ 100px', r.startW + 'px');
-  /* 投币口与开始要在同一行且不重叠 */
-  ok(r.startLeft === undefined || true, tag + ' 投币口/开始同行');
-  okNum(r.trigFont, v => v >= 14, tag + ' 扳机键字号 ≥ 14px', r.trigFont + 'px');
-  okNum(r.coinFont, v => v >= 12, tag + ' 投币口字号 ≥ 12px', r.coinFont + 'px');
+  /* ★ 改成**一排三键**之后每个键都窄了，但每个都必须仍然好点：
+     390px 宽的手机上可用宽约 382px，减去两个 6px 间隙 = 370px，
+     按 flex 1 : 1.05 : 1.35 分 → 最窄的投币口 ≈ 108px。 */
+  /* ★ 宽度门槛按**视口比例**给，不给固定像素：320px 的窄屏上三键平分之后
+     每键必然更窄（实测扳机 100px），用固定 110px 卡会把「窄屏也能玩」误判成 bug。
+     比例门槛取 0.29（320px → 93px；390px → 113px），保证窄屏也够点。 */
+  okNum(r.coinW / r.vw, v => v >= 0.2, tag + ' 投币口宽 ≥ 视口 20%', r.coinW.toFixed(0) + 'px');
+  okNum(r.startW / r.vw, v => v >= 0.2, tag + ' 开始键宽 ≥ 视口 20%', r.startW.toFixed(0) + 'px');
+  okNum(r.trigW / r.vw, v => v >= 0.29, tag + ' 扳机键宽 ≥ 视口 29%（最常用，份额最大）', r.trigW.toFixed(0) + 'px');
+  /* 扳机必须是三键里最宽的（份额最大 = 最顺手） */
+  ok(r.trigW > r.coinW && r.trigW > r.startW,
+     tag + ' 扳机键是三键里最宽的',
+     `扳${r.trigW.toFixed(0)} 币${r.coinW.toFixed(0)} 开${r.startW.toFixed(0)}`);
+  /* ★★ 关键：三键必须**真的在同一排** —— 用 bottom 对齐来验证，
+     而不是只看宽度（原来「投币+开始」一行、扳机独占一行的老布局里宽度断言照样过）。 */
+  okNum(Math.abs(r.trigTop - r.coinTop), v => v <= 2,
+        tag + ' 三键顶端对齐 = 同一排', '差 ' + Math.abs(r.trigTop - r.coinTop).toFixed(1) + 'px');
+  okNum(Math.abs(r.trigTop - r.startTop), v => v <= 2,
+        tag + ' 扳机与开始同行', '差 ' + Math.abs(r.trigTop - r.startTop).toFixed(1) + 'px');
+  /* 三键不重叠（按水平顺序：投币 < 开始 < 扳机） */
+  ok(r.coinRight <= r.startLeft + 1 && r.startRight <= r.trigLeft + 1,
+     tag + ' 三键左右不重叠（投币→开始→扳机）',
+     `币右${r.coinRight.toFixed(0)} 开左${r.startLeft.toFixed(0)} 开右${r.startRight.toFixed(0)} 扳左${r.trigLeft.toFixed(0)}`);
+  /* ★ 一排之后控制条必须**明显变矮**（这正是改布局的目的：把高度还给场地） */
+  okNum(r.ctlH, v => v <= 72, tag + ' 控制条总高 ≤ 72px（一排的收益）', r.ctlH.toFixed(0) + 'px');
+  okNum(r.trigFont, v => v >= 12, tag + ' 扳机键字号 ≥ 12px', r.trigFont + 'px');
+  okNum(r.coinFont, v => v >= 10, tag + ' 投币口字号 ≥ 10px', r.coinFont + 'px');
 }
 
 section('5) 整页不出现滚动条（竖屏下应当刚好放下）');

@@ -64,22 +64,30 @@
          display:flex;align-items:center;justify-content:center}
   canvas{display:block;border-radius:12px;touch-action:none}
 
-  /* ---------- 控制条 ---------- */
-  .ctl{width:100%;max-width:440px;flex:0 0 auto;display:flex;flex-direction:column;gap:7px;margin-top:7px}
-  .row{display:flex;gap:7px}
+  /* ---------- 控制条（★ 一排三键：投币 | 开始 | 拉扳机） ----------
+     ★ 为什么改成一排：原来「投币+开始」一行、扳机独占一行，控制条总高 127px。
+        手机上场地是**高度受限**的（宽度反而用不满），所以这 127px 是直接
+        从机台里抠出来的 —— 改成一排后控制条只要 60px，省下的 67px 全给场地，
+        机台整体大了约 20%。 */
+  .ctl{width:100%;max-width:440px;flex:0 0 auto;display:flex;flex-direction:row;gap:6px;margin-top:6px}
   .ctl button{font-family:inherit;font-weight:600;border-radius:14px;border:1px solid var(--line);
-              background:var(--panel);color:var(--txt);touch-action:none;padding:0 4px}
+              background:var(--panel);color:var(--txt);touch-action:none;padding:0 4px;
+              flex:1 1 0;min-width:0;height:60px}
   .ctl button:disabled{opacity:.36}
   .ctl button:not(:disabled):active{filter:brightness(1.25)}
-  /* 投币口 / 开始：平分第一行 */
-  .coin{flex:1 1 0;min-width:0;height:56px;font-size:clamp(13px,3.7vw,15px);line-height:1.15}
-  .coin b{display:block;font-size:.74em;font-weight:600;color:var(--acc);letter-spacing:.5px}
-  .start{flex:1 1 0;min-width:0;height:56px;font-size:clamp(14px,4.2vw,17px);
-         background:linear-gradient(#1d7a4a,#0f4d2d);border-color:#2ea86a;letter-spacing:2px}
+  /* ⚠️ 宽度份额必须写成 `.ctl .xxx`（而不是光 `.xxx`）：
+     `.ctl button` 的特异度是 (0,1,1)，而 `.trig` 只有 (0,1,0) ——
+     光写 `.trig{flex:1.35}` 会被上面的 `flex:1 1 0` 盖掉，
+     结果三个键一样宽（实测就是这样：扳 123 / 币 123 / 开 123）。
+     加上 `.ctl` 前缀变成 (0,2,0) 才压得住。 */
+  .ctl .coin{flex:1 1 0;font-size:clamp(11px,3.1vw,13px);line-height:1.15}
+  .coin b{display:block;font-size:.72em;font-weight:600;color:var(--acc);letter-spacing:.2px}
+  .ctl .start{flex:1.05 1 0;font-size:clamp(12px,3.5vw,15px);letter-spacing:1px;
+         background:linear-gradient(#1d7a4a,#0f4d2d);border-color:#2ea86a}
   .start.hot{animation:startGlow .9s ease-in-out infinite}
   @keyframes startGlow{0%,100%{box-shadow:0 0 0 rgba(46,168,106,0)}50%{box-shadow:0 0 14px rgba(70,240,150,.85)}}
-  /* 扳机：铺满第二行，最常用的键给最大面积 */
-  .trig{width:100%;height:64px;font-size:clamp(15px,4.6vw,19px);letter-spacing:5px;
+  /* 扳机最常用，给它最大的宽度份额 */
+  .ctl .trig{flex:1.35 1 0;font-size:clamp(13px,3.9vw,16px);letter-spacing:3px;
         background:linear-gradient(#d24534,#8e1f14);border-color:#e0705f;color:#fff}
   .trig.ready{background:linear-gradient(#e5543f,#a5261a);border-color:#ff9c8c}
   .trig.charging{background:linear-gradient(#ff7a5c,#c02a18)}
@@ -114,10 +122,10 @@
          transition:opacity .22s;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
   .toast.on{opacity:1}
 
-  /* 矮屏：把两行控制条压薄，把高度还给场地 */
+  /* 矮屏：把控制条压薄，把高度还给场地 */
   @media (max-height:660px){
-    .coin,.start{height:48px}
-    .trig{height:54px;letter-spacing:3px}
+    .ctl button{height:50px}
+    .ctl .trig{letter-spacing:2px}
     .led{height:22px}
     .board{padding:6px 7px 7px;gap:5px}
     .stage{margin-top:5px}
@@ -125,7 +133,8 @@
   }
   @media (max-width:330px){
     .ctl button{border-radius:11px}
-    .trig{letter-spacing:2px}
+    .ctl .trig{letter-spacing:1px}
+    .coin b{display:none}
   }
 </style>
 </head>
@@ -158,11 +167,9 @@
 <div class="stage" id="stage"><canvas id="cv"></canvas></div>
 
 <div class="ctl" id="ctlbar">
-  <div class="row">
-    <button class="coin" id="btnCoin">投币口<b>按住连投 +1</b></button>
-    <button class="start" id="btnStart" disabled>开 始</button>
-  </div>
-  <button class="trig" id="btnTrig" disabled>拉 扳 机</button>
+  <button class="coin" id="btnCoin">投币口<b>按住连投 +1</b></button>
+  <button class="start" id="btnStart" disabled>开 始</button>
+  <button class="trig" id="btnTrig" disabled>拉扳机</button>
 </div>
 
 <div class="sheet" id="sheet">
@@ -212,8 +219,23 @@
   const cv = $('cv'), ctx = cv.getContext('2d');
   const UI = '-apple-system,"PingFang SC","Noto Sans CJK SC",sans-serif';
 
-  /* ---------------- 逻辑坐标系 ---------------- */
-  const WFIX = 360, HFIX = 640;      // 逻辑宽高（固定，不再随屏幕比例变化）
+  /* ---------------- 逻辑坐标系 ----------------
+     ★★ 两个坐标系要分清：
+        · **几何坐标系**（下面所有 ARC_/CX_/mouthY/floorY 等）：固定 360×640，永远不动。
+          钉阵、圆弧、出口槽的几何全建立在它上面，动了就会全线崩。
+        · **显示窗口** VIEW_Y0..VIEW_Y0+HFIX：只影响「画哪一块」。
+      为什么要分：几何坐标系的 y ∈ [0, ~131] 那块**完全是空的**（圆弧钢轨的最高点
+      在 y=131，上面什么都没有）。原来显示窗口 = 整个 360×640，于是每台手机上
+      机台顶部都白白空掉 131px、整体还被迫缩小（手机是**高度受限**的：
+      S = min(可用高/640, 可用宽/360)，640 这个分母太大 → 高度一卡，整机就小）。
+      现在显示窗口从 VIEW_Y0=118 开始（刚好露出钢轨），HFIX=522：
+        · 空白的 118px 不再占地方
+        · 同一块屏幕里机台放大了约 20%，顶部也不再有大片留白
+      ⚠️ 千万别把 VIEW_Y0 当成「几何偏移」去改 ARC_CY 之类的值 —— 那会把物理改坏。
+         它只在 `drawField` 和 `layout()` 的变换里出现。 */
+  const WFIX = 360, HFIX = 640;      // 几何坐标系尺寸（**永远不动**：钉阵/圆弧/出口都建立在它上面）
+  const VIEW_Y0 = 118;               // 可见窗口顶端（几何 y）—— 上面 118px 是空的
+  const VIEW_H  = HFIX - VIEW_Y0;    // 可见窗口高 = 522
   const MIN_STAGE_H = 300;           // 场地最小可用高度，低于它就硬撑 + 放开滚动
   let W = WFIX, H = HFIX, S = 1, OFFX = 0, OFFY = 0, dprNow = 1;
 
@@ -308,15 +330,41 @@
   const ARC_CX = 180, ARC_CY = 300, RC = 159;   // 顶部圆弧：球心所在半径
   const CX_MIN = ARC_CX - RC;                   // 球心 x 下限 = 21
   const CX_MAX = ARC_CX + RC;                   // 球心 x 上限 = 339
-  const fieldL = CX_MIN - RB, fieldR = CX_MAX + RB;  // 墙内表面 14.5 / 345.5
-  const mouthY = 566;                           // 出口口线：球心越过它就结算
-  const floorY = 626;                           // 出口槽底
-  const slotW  = (fieldR - fieldL) / N_SLOT;    // 每个出口的宽
+  const fieldL = CX_MIN - RB, fieldR = CX_MAX + RB;  // 左内壁 14.5 / 右外壁 345.5
 
   const LANE_X      = CX_MAX;        // 发射管道里球的 x（贴着右墙）
-  const LANE_WALL_X = 324;           // 管道内壁（竖直线段，只在 y ≥ ARC_CY 时存在）
+  const LANE_WALL_X = 324;           // 管道内壁（竖直墙）
   const LANE_Y0     = 546;           // 球在管道里的起始 y
   const LANE_LEN    = LANE_Y0 - ARC_CY;
+  /* ★ 管道内壁延长到导轨上的交点（画墙时从这儿往下画，墙上端正好「吊」在导轨上）：
+       x = 324 与球心弧（圆心 ARC_CX/ARC_CY、半径 RC）的交点
+       dy = √(RC² − (324−180)²) = 67.4 → y = 300 − 67.4 ≈ 232.6
+     换句话说「管道走廊」= x ≥ 324 且 y ≥ 232.6 的那块细长区域。 */
+  const LANE_WALL_Y0 = ARC_CY - Math.sqrt(Math.max(0,
+                         RC * RC - (LANE_WALL_X - ARC_CX) * (LANE_WALL_X - ARC_CX)));
+  /* 同一个交点对应的**画弧角度**（canvas 角度：0=右、π/2=下、π=左、3π/2=上）。
+     该点在圆心右上方 → 第四象限 → θ = −acos((324−180)/159) ≈ −0.4355。
+     画场地时弧从这里收笔，正好接上管道壁，不会在右上角多画一块「其实进不去」的区域。 */
+  const LANE_WALL_ANG = -Math.acos(clamp((LANE_WALL_X - ARC_CX) / RC, -1, 1));
+
+  /* ★★ 出口区（12 个槽）**不能把发射管道算进去** —— 用户报的「决定亮灯的时候会把
+     弹珠发射的那条道也算上」就是这条。
+     原来出口是按 [fieldL, fieldR] = [14.5, 345.5] 均分的，于是最右那个出口
+     （slot 11，x 317.9~345.5）里 **有 78% 的宽度其实是发射管道** ——
+     球根本落不进去（管道是球上行的通道），可它照样会被随机点亮，
+     玩家等于被白扣掉一个出口。
+     实测坐实：落到 slot 11 的球 **9/9 全部**是从场上「漏」进管道的
+     （漏的根因见 clampLaneWall），并不是真的落进去的。
+     所以出口区右界取**管道内壁的表面** LANE_WALL_X（而不是 324−RB，也不是 fieldR）：
+     球心最远只能到 LANE_WALL_X−RB，但球的**表面**正好抵到 324，
+     所以「视觉上槽铺到墙根」和「物理上球心最右落点」用的是同一条边界，中间不留缝。 */
+  const SLOT_R = LANE_WALL_X;                   // 出口区右界 = 管道内壁表面 324
+  /* 钉心允许的最大 x：再往右就会和「贴管壁的球」重叠，球会被墙+钉对推夹死
+     （实测卡在 x=312 就是这条）。留 2px 余量。 */
+  const PEG_R_MAX = LANE_WALL_X - RB - RP - 2;
+  const slotW  = (SLOT_R - fieldL) / N_SLOT;    // 每个出口的宽 25.79
+  const mouthY = 566;                           // 出口口线：球心越过它就结算
+  const floorY = 626;                           // 出口槽底
 
   /* ★ 发射 = 实机的「导轨导球」模型（不是纯弹道）：力度决定球沿顶部圆弧导轨爬多高、
      绕多远，绕到「释放角」才脱轨。所以「力度 → 释放角 → 落点」是一条单调可控的链
@@ -386,6 +434,7 @@
   let lampStep = 0, lampAcc = 0, lampOrder = [];
 
   let landSlot = -1, landWin = false, landGain = 0, settleT = 0;
+  let landX = NaN;                  // 落点连续 x（量技巧用，见 settle）
   let banner = null;        // 结算横幅 {txt, sub, win, life}
 
   let fx = [], floats = [];
@@ -509,10 +558,13 @@
         x1 = ARC_CX + half - RP - RB - 4;
       } else {
         x0 = CX_MIN + RB + RP + 2;
-        x1 = CX_MAX - RB - RP - 2;
+        /* ★ 用 PEG_R_MAX（管道内壁左表面再退 RB+RP）而不是 CX_MAX：管道右边那段不属于场地，
+           在那里摆钉既没意义，球也永远碰不到（blockLaneWall 把它挡在外面）。 */
+        x1 = PEG_R_MAX;
       }
-      /* 管道区：右侧那一段永远不要钉（球要从管道里上来） */
-      const x1Safe = Math.min(x1, LANE_WALL_X - RB - RP - 2);
+      /* 管道区：右侧那一段永远不要钉（球要从管道里上来）。
+         PEG_R_MAX 已经含 RB+RP 余量，所以 ARC 行也统一按它收边。 */
+      const x1Safe = Math.min(x1, PEG_R_MAX);
       if(x1Safe <= x0) { r++; continue; }
       const off = (r % 2) ? DX / 2 : 0;
       for(let x = x0 + off; x <= x1Safe; x += DX){
@@ -522,11 +574,11 @@
         /* 钉必须离墙足够远，否则球会被「墙 + 钉」夹死（弹珠乐园 WALL_PEG_GAP 那条坑）。
            球贴墙时球心 x = CX_MIN，球与钉不重叠要求中心距 ≥ RB+RP，
            所以钉心必须 ≥ CX_MIN + RB + RP，否则贴墙的球必然与它重叠、被两边对推卡死。 */
-        if(px < CX_MIN + RB + RP + 2 || px > CX_MAX - RB - RP - 2) continue;
+        if(px < CX_MIN + RB + RP + 2 || px > PEG_R_MAX) continue;
         /* 圆弧区：钉要在弧内侧，别挡住球在导轨上的路 */
         if(py < ARC_CY && hypot(px - ARC_CX, py - ARC_CY) > RC - RP - RB - 4) continue;
         /* 管道区：离管道壁留出 RB+RP，否则会被「管壁 + 钉」夹死（实测卡在 x=312） */
-        if(px > LANE_WALL_X - RB - RP - 2) continue;
+        if(px > PEG_R_MAX) continue;
         /* 钉要离**挡板**也留够间距（实测卡在 (309.9,393.4)：一边钉一边挡板对着推）。
            球贴着挡板时球心离挡板轴 RB+BAFFLE_R；要碰不到钉则
              dist(钉, 挡板) > 2·RB + RP + 挡板半径
@@ -574,7 +626,7 @@
        把「球落在分界线上」变成「随机归到左边或右边那个口」。 */
     if(BLADE_ON){
       for(let i = 1; i < N_SLOT; i++){
-        const x = fieldL + slotW * i;
+        const x = slotX0(i);
         baffles.push({ x1:x, y1:mouthY - 38, x2:x, y2:mouthY - 12, r:BLADE_R, kind:'blade' });
       }
     }
@@ -759,6 +811,30 @@
     }
   }
 
+  /** ★★ 把「场地球」挡在发射管道之外 —— 这是用户报的「发射道被算成出口」的根因。
+   *
+   *  管道走廊（球不能进的区域）= `x ≥ LANE_WALL_X − RB` 且 `y ≥ LANE_WALL_Y0`。
+   *
+   *  原来的管壁判断是**单向**的（靠上一帧的 x 判断球从哪一侧撞上来）：
+   *    `if(px >= wx+RB && b.x < wx+RB) …`  // 从左边撞上来
+   *    `else if(px <= wx-RB && b.x > wx-RB) …`  // 从右边撞上来
+   *  问题是球在**圆弧区**（y < ARC_CY）时 `hitWalls` 直接 return 了，弧区里根本没有管壁；
+   *  而弧的最右端 x 能到 339（正好是管道自己的 x）。球从弧的右端往下一落就到了管壁**右侧**，
+   *  此后上面两个分支**都不成立**（既不满足 px<wx+RB，也不满足 px>wx−RB），
+   *  球就顺着管道一路掉进「最右那个出口」。
+   *  实测坐实：落进最右出口的球 **9/9 全部**是这么漏进去的 —— 那个出口根本落不进去。
+   *
+   *  ⚠️ 只对 `fly`（场地球）调用：管道里的球（mode='lane'）本来就该在 x=LANE_X，
+   *     而 stepBallSub 在 lane/rail/drop 三个分支都提前 return 了，不会走到这里。 */
+  function blockLaneWall(b){
+    if(b.y < LANE_WALL_Y0) return;          // 管壁顶以上没有墙（那段是导轨的右端）
+    const wallX = LANE_WALL_X - RB;         // 墙的左表面（球心能到的最右位置）
+    if(b.x > wallX){
+      b.x = wallX;
+      if(b.vx > 0){ b.vx = -b.vx * REST_WALL; sndWall(); }
+    }
+  }
+
   function hitWalls(b, px){
     if(b.y < ARC_CY){
       /* 上半场：外边界是圆弧（球必须待在弧内侧） */
@@ -774,15 +850,15 @@
           sndWall();
         }
       }
+      /* ★ 管壁的上半段也是实体墙（否则球会从弧的右端绕到管道里，见 blockLaneWall） */
+      blockLaneWall(b);
       return;
     }
-    /* 下半场：左右竖墙 */
+    /* 下半场：左墙 + 管道内壁。
+       ★ 右墙不再是 CX_MAX：那个 x 属于**管道内部**，场地右边界其实是管道内壁。 */
     if(b.x < CX_MIN){ b.x = CX_MIN; b.vx = Math.abs(b.vx) * REST_WALL; sndWall(); }
-    if(b.x > CX_MAX){ b.x = CX_MAX; b.vx = -Math.abs(b.vx) * REST_WALL; sndWall(); }
-    /* 发射管道内壁：单向竖直挡板（用上一帧的 x 判断从哪一侧撞上来） */
-    const wx = LANE_WALL_X;
-    if(px >= wx + RB && b.x < wx + RB){ b.x = wx + RB; b.vx = Math.abs(b.vx) * REST_WALL; sndWall(); }
-    else if(px <= wx - RB && b.x > wx - RB){ b.x = wx - RB; b.vx = -Math.abs(b.vx) * REST_WALL; sndWall(); }
+    blockLaneWall(b);
+    void px;
   }
 
   /* ---------------- 球的一步 ---------------- */
@@ -859,9 +935,27 @@
   }
 
   /* ---------------- 结算 ---------------- */
+  /* ★ 出口区几何统一走这三个函数。为什么非要抽出来：exit 区右界从 fieldR 改成 SLOT_R
+     之后，「x→出口」「出口→左沿」「出口→中心」三处换算必须用**同一个区间**，
+     否则画灯的地方和判落点的地方会差一点点、看起来灯和球对不上。 */
+  function slotX0(i){ return fieldL + slotW * i; }              // 第 i 个出口的左沿
+  function slotCX(i){ return slotX0(i) + slotW * 0.5; }         // 第 i 个出口的中心
+  /** x → 出口序号（用 [fieldL, SLOT_R]，不含发射管道） */
+  function slotAtX(x){
+    return clamp(Math.floor((x - fieldL) / slotW), 0, N_SLOT - 1);
+  }
   function settle(){
-    const i = clamp(Math.floor((ball.x - fieldL) / slotW), 0, N_SLOT - 1);
+    const i = slotAtX(ball.x);
     landSlot = i;
+    /* ★ 记下落点 x（连续值）。为什么要留这个：
+       「力度 → 落点」的技巧性如果用**槽号**去量，会被槽宽量化 ——
+       槽变窄（27.6→25.8）本身就会让槽号的秩相关下降，
+       看起来像「技巧变差」，其实物理一模一样。
+       实测差点被这个骗过去：改完出口区边界后槽号秩相关从 -0.53 掉到 -0.43，
+       一查是**基线那边虚高**（漏进管道的低力度球全落最右假出口，
+       人为加强了负相关），剔掉漏球后基线只有 -0.476，差距只剩 0.03。
+       留 landX 是为了以后能用连续值量技巧、不再被量化误导。 */
+    landX = ball.x;
     landWin = !!lamps[i];
     landGain = landWin ? bet * mult : 0;
     coins += landGain;
@@ -873,7 +967,7 @@
     try{ localStorage.setItem('pinball_best', String(best)); }catch(e){}
     /* 让球看着落进槽里 */
     ball.mode = 'drop';
-    ball.x = fieldL + slotW * (i + 0.5);
+    ball.x = slotCX(i);
     ball.vx = 0; ball.vy = Math.max(ball.vy, 140);
     settleT = SETTLE_T;
     banner = landWin
@@ -895,7 +989,7 @@
        否则测试/实验台指定落点后 phase 还停在 'aim'，settleT 永远不减、这局收不掉
        （经济性实验台就是被这个卡住，只跑了 1 局就停）。 */
     phase = 'fly';
-    ball.x = fieldL + slotW * (clamp(i, 0, N_SLOT - 1) + 0.5);
+    ball.x = slotCX(clamp(i, 0, N_SLOT - 1));
     ball.y = mouthY;
     settle();
     return true;
@@ -997,17 +1091,21 @@
   }
 
   function drawField(){
-    /* 机台底色 */
-    const g = ctx.createLinearGradient(0, 0, 0, H);
+    /* 机台底色（★ 只画**可见窗口**：几何坐标 y ∈ [VIEW_Y0, HFIX]） */
+    const g = ctx.createLinearGradient(0, VIEW_Y0, 0, H);
     g.addColorStop(0, '#142a86'); g.addColorStop(0.55, '#0f1f6b'); g.addColorStop(1, '#0a1550');
     ctx.fillStyle = g;
-    roundRect(0, 0, W, H, 12); ctx.fill();
+    roundRect(0, VIEW_Y0, W, VIEW_H, 12); ctx.fill();
 
-    /* 场地玻璃内区（圆弧 + 两侧竖墙围出来的形状） */
+    /* 场地玻璃内区（圆弧 + 两侧竖墙围出来的形状）
+       ★ 右边界用**管道内壁 LANE_WALL_X** 而不是 CX_MAX：CX_MAX 那个 x 属于管道内部，
+         场地真正的右边界就是这根管道壁（物理上也是它挡球，见 blockLaneWall）。 */
     ctx.save();
     ctx.beginPath();
-    ctx.arc(ARC_CX, ARC_CY, RC, Math.PI, 0);
-    ctx.lineTo(CX_MAX, floorY);
+    /* 画到「弧与管道壁的交点」为止（见 LANE_WALL_Y0），再顺着管道壁落到槽底 ——
+       这样场地区域的右上角正好被管道切掉，和物理上的 blockLaneWall 完全一致。 */
+    ctx.arc(ARC_CX, ARC_CY, RC, Math.PI, LANE_WALL_ANG);
+    ctx.lineTo(LANE_WALL_X, floorY);
     ctx.lineTo(CX_MIN, floorY);
     ctx.closePath();
     const fg = ctx.createLinearGradient(0, 100, 0, floorY);
@@ -1026,19 +1124,21 @@
     ctx.beginPath(); ctx.arc(ARC_CX, ARC_CY, RC + RB + 3.6, Math.PI, 0);
     ctx.strokeStyle = 'rgba(150,190,255,.28)'; ctx.lineWidth = 1.4; ctx.stroke();
 
-    /* 发射管道 */
+    /* 发射管道（走廊 = x ≥ LANE_WALL_X 且 y ≥ LANE_WALL_Y0，与物理 blockLaneWall 一致） */
     ctx.save();
     ctx.beginPath();
-    ctx.rect(LANE_WALL_X, ARC_CY, CX_MAX - LANE_WALL_X + RB, floorY - ARC_CY);
+    ctx.rect(LANE_WALL_X, LANE_WALL_Y0, CX_MAX - LANE_WALL_X + RB, floorY - LANE_WALL_Y0);
     ctx.fillStyle = 'rgba(6,12,44,.55)'; ctx.fill();
     ctx.restore();
+    /* 管道内壁：从「与导轨的交点」一直画到槽底 —— 这样它上端正好吊在导轨上，
+       中间没有缝可钻（原来只从 ARC_CY 画起，弧区那段是敞口的，球就从那儿漏进管道）。 */
     ctx.beginPath();
-    ctx.moveTo(LANE_WALL_X, ARC_CY); ctx.lineTo(LANE_WALL_X, mouthY + 30);
+    ctx.moveTo(LANE_WALL_X, LANE_WALL_Y0); ctx.lineTo(LANE_WALL_X, mouthY + 30);
     ctx.strokeStyle = '#8ea6e0'; ctx.lineWidth = 3; ctx.stroke();
     /* 管道口的单向挡片（照片里管道顶有个小门） */
     ctx.beginPath();
-    ctx.moveTo(LANE_WALL_X, ARC_CY + 4);
-    ctx.lineTo(LANE_WALL_X - 12, ARC_CY + 16);
+    ctx.moveTo(LANE_WALL_X, LANE_WALL_Y0 + 2);
+    ctx.lineTo(LANE_WALL_X - 12, LANE_WALL_Y0 + 14);
     ctx.strokeStyle = 'rgba(200,220,255,.6)'; ctx.lineWidth = 2.4; ctx.stroke();
   }
 
@@ -1109,7 +1209,7 @@
   function drawSlots(){
     const litCount = lamps.filter(Boolean).length;
     for(let i = 0; i < N_SLOT; i++){
-      const x0 = fieldL + slotW * i, cx = x0 + slotW / 2;
+      const x0 = slotX0(i), cx = slotCX(i);
       const lit = lamps[i];
       const isLand = (landSlot === i && settleT > 0);
 
@@ -1153,9 +1253,9 @@
         ctx.lineWidth = 2.4; ctx.stroke();
       }
     }
-    /* 出口口线 */
+    /* 出口口线（★ 只画到管道内壁，右边那条细缝是发射管道，不是出口） */
     ctx.beginPath();
-    ctx.moveTo(CX_MIN, mouthY); ctx.lineTo(CX_MAX, mouthY);
+    ctx.moveTo(CX_MIN, mouthY); ctx.lineTo(SLOT_R, mouthY);
     ctx.strokeStyle = 'rgba(180,205,255,.35)'; ctx.lineWidth = 1.2;
     ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]);
     return litCount;
@@ -1263,7 +1363,9 @@
 
   function draw(){
     ctx.setTransform(S * dprNow, 0, 0, S * dprNow, OFFX * dprNow, OFFY * dprNow);
-    ctx.clearRect(0, 0, W, H);
+    /* ★ 清屏要用**可见窗口**（几何坐标里的 y ∈ [VIEW_Y0, HFIX]），
+       而不是整个 360×640 —— 上面那段本来就不显示，清了也白清。 */
+    ctx.clearRect(0, VIEW_Y0, W, VIEW_H);
     drawField();
     drawBaffles();
     drawPegs();
@@ -1317,9 +1419,13 @@
     else if(stage.style.height) stage.style.height = '';
     setSqueezed(squeezed);
 
-    S = Math.min(availH / HFIX, availW / WFIX);
+    /* ★ 缩放基准用**可见窗口高 VIEW_H**（不是整机 HFIX）：
+       分母小了，同一块屏幕算出来的 S 就大 —— 这正是「机台变大、顶部不留空」的来源。 */
+    S = Math.min(availH / VIEW_H, availW / WFIX);
     OFFX = (availW - WFIX * S) / 2;
-    OFFY = (availH - HFIX * S) / 2;
+    /* ★ OFFY 里要先减掉 VIEW_Y0*S，把「窗口顶端」拉到画布顶边：
+       几何点 y 画在画布上的位置 = (y − VIEW_Y0)·S + OFFY'。 */
+    OFFY = (availH - VIEW_H * S) / 2 - VIEW_Y0 * S;
 
     const dpr = window.devicePixelRatio || 1;
     dprNow = dpr;
@@ -1480,8 +1586,9 @@
     phase, coins, bet, mult, lamps: lamps.slice(), best,
     MIN_BET, MAX_BET, START_COINS, N_SLOT, MULTS, MULT_W, LAMP_N,
     MULTS_LEN: MULTS.length,
-    slotW, fieldL, fieldR, CX_MIN, CX_MAX, mouthY, floorY,
+    slotW, fieldL, fieldR, SLOT_R, CX_MIN, CX_MAX, mouthY, floorY,
     ARC_CX, ARC_CY, RC, RB, RP, G, LANE_X, LANE_WALL_X, LANE_Y0,
+    LANE_WALL_Y0, slotAtX, slotX0, slotCX,
     PHI_MIN, PHI_MAX, VREL_MIN, VREL_MAX, CHARGE_T, ROLL_T, LAMP_DT, SETTLE_T,
     aimOf: p => aimOf(p),
     totalBet, totalWon, ballsOut, ballsWon, rounds, roundsWon,
@@ -1492,6 +1599,7 @@
     pegHits, seed,
     charge, charging, rollT, lampStep,
     landSlot, landWin, landGain, settleT,
+    landX,
     aimReady: aimReady(),
     lampCount: mult ? lampCountOf(mult) : 0,
     lampOrder: lampOrder.slice(),

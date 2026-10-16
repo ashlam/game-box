@@ -148,7 +148,7 @@ function load(){
                                             tunnel: false, timedOut: false, won: false,
                                             gain: 0, coins: 0, flightT: 0, launchFailed: true };
     let f = 0, nan = false, out = false, tunnel = false;
-    let landed = -1, won = false, gain = 0, coinsAt = 0, flightT = 0;
+    let landed = -1, won = false, gain = 0, coinsAt = 0, flightT = 0, landX = NaN;
     let tunnelInfo = null, flyFrames = 0;
     let prevX = null, prevY = null, maxPen = 0, maxPenTouch = 0, maxPenStep = 0;
     /* ★ 循环条件用「phase 还是 fly」而不是「landed<0」：
@@ -196,9 +196,10 @@ function load(){
       }
       if(M().landSlot >= 0 && landed < 0){
         landed = M().landSlot; won = M().landWin; gain = M().landGain; coinsAt = M().coins;
+        landX = M().landX;                     // ★ 落点连续 x（量技巧用，见 test_pinball）
       }
     }
-    return { slot: landed, frames: flyFrames, totalFrames: f, nan, out, tunnel, tunnelInfo,
+    return { slot: landed, landX, frames: flyFrames, totalFrames: f, nan, out, tunnel, tunnelInfo,
              maxPen: +maxPen.toFixed(2), maxPenTouch, maxPenStep: +maxPenStep.toFixed(2),
              timedOut: f >= maxFrames, won, gain, coins: coinsAt, flightT, launchFailed: false };
   }
