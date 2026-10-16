@@ -380,9 +380,20 @@
      球心最远只能到 LANE_WALL_X−RB，但球的**表面**正好抵到 324，
      所以「视觉上槽铺到墙根」和「物理上球心最右落点」用的是同一条边界，中间不留缝。 */
   const SLOT_R = LANE_WALL_X;                   // 出口区右界 = 管道内壁表面 324
-  /* 钉心允许的最大 x：再往右就会和「贴管壁的球」重叠，球会被墙+钉对推夹死
-     （实测卡在 x=312 就是这条）。留 2px 余量。 */
-  const PEG_R_MAX = LANE_WALL_X - RB - RP - 2;
+  /* ★★ 钉心允许的最大 x —— 这个值**必须**满足「贴墙的球不会撞到钉」。
+     推导（用户报「球和右侧撞钉粘住然后 crash」时重新推了一遍）：
+        · blockLaneWall 把贴墙球的球心钳在  x = LANE_WALL_X − RB
+        · 球与钉不重叠要求中心距 ≥ RB + RP
+        · 两者联立 ⇒ 钉心必须 ≤ (LANE_WALL_X − RB) − (RB + RP)
+                                = LANE_WALL_X − 2·RB − RP
+     再留 2px 余量。
+     ⚠️ 原来写的是 `LANE_WALL_X − RB − RP − 2` —— **少减了一个 RB**（6.5px），
+        于是允许钉心到 310.5，而安全上限只有 306。实测真有钉落在 305.4~305.9，
+        贴墙球与它们的中心距只有 11.50~11.52（需要 11.5），
+        重叠 0.02~0.7px → 球被「钉推左、墙推右」反复对推，就"粘"住了。
+        更糟的是这种状态下 blockLaneWall 与 hitPegs **每帧各响一次音效**，
+        音频节点以 ~1000/秒 的速度创建，手机上足以让页面崩掉。 */
+  const PEG_R_MAX = LANE_WALL_X - 2 * RB - RP - 2;
   const slotW  = (SLOT_R - fieldL) / N_SLOT;    // 每个出口的宽 25.79
   const mouthY = 566;                           // 出口口线：球心越过它就结算
   const floorY = 626;                           // 出口槽底
@@ -664,9 +675,12 @@
   let soundOn = true;
   let raf = null, lastTs = 0;
   let layoutRetry = 0;
+  /* ★ 主循环自愈计数（见 frame）：>0 表示曾经有帧抛过异常并被恢复。
+     暴露给测试/诊断，避免异常被静默吞掉。 */
+  let frameErrors = 0;
 
   /* ---------------- 音效 ---------------- */
-  let ac = null, chargeOsc = null, chargeGain = null, lastPegSnd = 0;
+  let ac = null, chargeOsc = null, chargeGain = null, lastPegSnd = 0, lastWallSnd = 0;
   function audio(){
     if(!soundOn) return null;
     if(!ac){
@@ -713,7 +727,21 @@
   const sndLamp   = (i) => { tone(660 + i*70, 0.07, { type:'square', gain:0.05 }); };
   const sndFire   = () => { tone(300, 0.2, { type:'sawtooth', gain:0.1, to:900 }); noiseBurst(0.12, { freq:2200, gain:0.06 }); };
   const sndPeg    = () => { const now = tGlobal; if(now - lastPegSnd < 0.026) return; lastPegSnd = now; tone(1500 + Math.random()*900, 0.05, { type:'square', gain:0.035 }); };
-  const sndWall   = () => { tone(220, 0.05, { type:'sine', gain:0.04 }); };
+  /** ★★ 撞墙音必须**节流**，而且理由不只是"吵"——这是「球和撞钉粘住然后 crash」的元凶之一：
+   *  球被「右墙 + 钉」夹住时，`blockLaneWall` 和 `hitPegs` **每帧都会各调一次本函数**，
+   *  而物理用 SUB=4 子步进 → 每帧最多 8 次 → **约 480 个音频节点/秒**。
+   *  手机 WebAudio 每创建一个节点都要占用资源，这种速率足以让页面崩掉。
+   *  （原来只有 sndPeg 有 26ms 节流，sndWall 一个都没有 —— 因为「擦墙」在正常
+   *    玩法里很稀疏，谁也没想到它会被每帧调用。）
+   *  ⚠️ 教训：**任何"在碰撞回调里发声"的函数都必须自带节流** ——
+   *    碰撞回调的调用频率取决于几何，而不是取决于玩法节奏。
+   *  20ms 窗口 ≈ 每秒最多 50 次，听感上仍是一串密集的"嗒嗒"而不是单响。 */
+  const sndWall   = () => {
+    const now = tGlobal;
+    if(now - lastWallSnd < 0.02) return;
+    lastWallSnd = now;
+    tone(220, 0.05, { type:'sine', gain:0.04 });
+  };
   const sndRail   = () => { tone(420, 0.06, { type:'sine', gain:0.035 }); };
 
   /* ---------------- 结算音乐（中奖 / 没中奖） ----------------
@@ -1221,6 +1249,20 @@
     hitPegs(b);
     hitWalls(b, px);
     hitBaffles(b);
+    /* ★★ 物理层的最后一道闸：任何一步结束时球的状态必须是**有限值**。
+       为什么必须有这条（而不是"相信前面的碰撞都写对了"）：
+       canvas 的 createRadialGradient/arc 收到 NaN/Infinity/负半径会**抛异常**，
+       而 drawBall() 每帧都调 createRadialGradient → 一帧异常就会让游戏死掉
+       （用户报的「粘住然后 crash」就是这条链路）。
+       与其在 10 个碰撞函数里逐个防，不如在**唯一的出口**统一兜底：
+       一旦发现非有限值，就把球放回场地中线的一个合法位置并清速度，
+       再交给 stepBall 的卡住逻辑/超时强制结算收尾。
+       ⚠️ 不能让球"带着 NaN 继续飞"——那样每帧都会抛，等于永久卡死。 */
+    if(!Number.isFinite(b.x) || !Number.isFinite(b.y) ||
+       !Number.isFinite(b.vx) || !Number.isFinite(b.vy)){
+      b.x = ARC_CX; b.y = (ARC_CY + mouthY) * 0.5; b.vx = 0; b.vy = 120;
+      b.nonFinite = (b.nonFinite || 0) + 1;
+    }
   }
   function stepBall(b, dt){
     const SUB = 4, h = dt / SUB;
@@ -2090,15 +2132,56 @@
     drawFx();
   }
 
-  /* ---------------- 主循环 ---------------- */
+  /* ---------------- 主循环 ----------------
+     ★★★ 这里必须**自愈**，不能让一帧的异常变成永久崩溃。
+     用户报过「球和右侧撞钉粘住然后程序 crash」。已查明崩溃机制：
+     canvas 的 `createRadialGradient` / `arc` 收到 **NaN / Infinity / 负半径**会**抛异常**，
+     而 `drawBall()` 每帧都调 `createRadialGradient(ball.x …)`。
+     一旦球的坐标变成非有限值，**每一帧都抛**，rAF 循环表面还在转、实际画面彻底死掉 ——
+     玩家看到的就是"crash"。而且 `requestAnimationFrame` 是在 try 之前就排好的，
+     所以异常不会自动终止循环，只会无限重复抛。
+     ⚠️ 修法分两层：
+        ① 治本 —— 物理层不再产生非有限坐标（见 PEG_R_MAX 与发声节流那两处）；
+        ② 兜底 —— 这里捕获异常：清掉这一帧的球、把本局判为"异常落点"并继续跑。
+           宁可这一发落点突兀，也绝不能让整个游戏卡死。
+     ⚠️ 关键是**必须真正恢复**：只 catch 不修状态的话，下一帧照样抛（球还是 NaN）。
+        所以下面显式把球标记成非法并交给 settle 处理。 */
   function frame(ts){
     raf = requestAnimationFrame(frame);
     if(!lastTs) lastTs = ts;
     let dt = (ts - lastTs) / 1000; lastTs = ts;
     if(!(dt > 0)) dt = 1 / 60;
     dt = Math.min(dt, 1 / 20);
-    step(dt);
-    draw();
+    try{
+      step(dt);
+      draw();
+    }catch(e){
+      /* 一帧出错 → 立刻把这个球判为非法并结算，避免"每帧都抛"的死循环 */
+      try{
+        if(ball){
+          /* 坐标如果是非有限值，settle 里按 x 分槽会得到 NaN。
+             先把球挪到一个合法位置（按场地中线），再结算，保证状态可恢复。 */
+          if(!Number.isFinite(ball.x)) ball.x = ARC_CX;
+          if(!Number.isFinite(ball.y)) ball.y = mouthY;
+          if(!Number.isFinite(ball.vx)) ball.vx = 0;
+          if(!Number.isFinite(ball.vy)) ball.vy = 0;
+          if(ball.mode === 'fly') settle();
+          else { ball.mode = 'fly'; settle(); }
+        } else {
+          /* 连球都没有还抛异常 → 只能把本局收掉，回到可玩状态 */
+          if(phase === 'fly' || phase === 'transfer') endRound();
+        }
+      }catch(e2){
+        /* 结算本身都失败了：最坏情况下强制回到投币阶段，绝不留在死状态 */
+        try{ ball = null; landSlot = -1; phase = 'bet'; settleT = 0; winT = 0;
+             transferT = 0; coinFly = []; pendingShow = 0; syncUI(); }catch(e3){}
+      }
+      /* 记账：让测试/诊断能发现"曾经出过事"，而不是静默吞掉 */
+      frameErrors++;
+      if(frameErrors === 1 && typeof console !== 'undefined' && console.warn){
+        console.warn('[pinball] 一帧异常已自愈，游戏继续：', e && e.message);
+      }
+    }
   }
 
   /* ---------------- 布局 ---------------- */
@@ -2361,6 +2444,9 @@
     /* ★ 布局/可见窗口参数：给测试验「清屏是否覆盖整块画布」用
        （手机残留 bug 的回归断言需要自己算一遍"只清可见窗口够不够"） */
     W, H, VIEW_Y0, VIEW_H, WFIX, HFIX, S, OFFX, OFFY, dprNow,
+    /* ★ 崩溃自愈诊断：frameErrors>0 表示曾有帧抛异常并被恢复（不该发生）
+       ballNonFinite 表示物理层兜底触发过几次（同样不该发生） */
+    frameErrors, PEG_R_MAX,
     aimReady: aimReady(),
     lampCount: mult ? lampCountOf(mult) : 0,
     lampOrder: lampOrder.slice(),

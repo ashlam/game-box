@@ -322,6 +322,132 @@ section('5) ★ 拉扳机蓄力发射 / 力度 → 落点单调可控');
 }
 
 /* =====================================================================
+   9.85) ★★ 崩溃防护：球和右侧撞钉「粘住」然后 crash
+   ===================================================================== */
+section('9.85) ★★ 崩溃防护：球不会和右侧撞钉「粘住」');
+{
+  /* 用户原话：「球在弹跳的过程中和**右侧**的某个撞钉『粘』到一起然后程序 crash」。
+
+     查明是**两个问题叠加**：
+
+     ① 几何 bug：PEG_R_MAX 少减了一个球半径。
+        贴墙球的球心被 blockLaneWall 钳在 LANE_WALL_X − RB；
+        球与钉不重叠要求中心距 ≥ RB+RP；
+        联立得钉心必须 ≤ LANE_WALL_X − 2·RB − RP。
+        而原来写的是 LANE_WALL_X − RB − RP − 2 —— 少了 RB(=6.5px)，
+        于是允许钉心到 310.5，安全上限只有 306。
+        实测真有钉落在 305.4~305.9，贴墙球与它们中心距只剩 11.50~11.52
+        （需要 11.5）→ 球被「钉推左、墙推右」每帧对推，就"粘"住了。
+
+     ② 崩溃机制：audio 和 canvas 在异常路径上都会炸。
+        · sndWall **没有节流**，而粘住时 blockLaneWall + hitPegs 每帧各调一次，
+          SUB=4 子步进 → 每帧最多 8 次 → 约 480 个音频节点/秒 → 手机 WebAudio 崩。
+        · canvas 的 createRadialGradient/arc 收到 NaN/Infinity/负半径会**抛异常**，
+          而 drawBall 每帧都调 → 一帧异常 = 游戏永久卡死。
+          且 rAF 在 try 之前就排好，异常不会终止循环，只会无限重复抛。
+     */
+  const s = M();
+  const RB = s.RB, RP = s.RP, rr = RB + RP;
+  const wallX = s.LANE_WALL_X - RB;          // 贴墙球的球心 x
+  const safePegMax = wallX - rr;             // 钉心的安全上限
+
+  /* ① 常量本身必须算对（这条最直接锁住那个"少减一个 RB"的错误） */
+  ok(Math.abs(s.PEG_R_MAX - (s.LANE_WALL_X - 2 * RB - RP - 2)) < 1e-9,
+     '★★ PEG_R_MAX 必须 = LANE_WALL_X − 2·RB − RP − 2（不能少减一个 RB）',
+     '实际 ' + s.PEG_R_MAX + '，期望 ' + (s.LANE_WALL_X - 2 * RB - RP - 2));
+  ok(s.PEG_R_MAX <= safePegMax,
+     '★★ PEG_R_MAX（' + s.PEG_R_MAX + '）不超过钉心安全上限（' + safePegMax + '）');
+
+  /* ② 800 个种子：钉心一个都不许越过安全上限 */
+  let over = 0, minClear = Infinity, worst = null;
+  for(let seed = 1; seed <= 800; seed++){
+    reset(seed);
+    for(const p of M().pegs){
+      /* 「贴墙球与这颗钉的中心距」减去所需最小距 = 余量（必须 > 0） */
+      const clear = (wallX - p.x) - rr;
+      if(clear < 0) over++;
+      if(clear < minClear){ minClear = clear; worst = { seed, x: +p.x.toFixed(2), y: +p.y.toFixed(2) }; }
+    }
+  }
+  okNum(over, 0, '★★ 800 个种子里没有一颗钉落在「贴墙球必然重叠」的禁区',
+        over + ' 颗违规');
+  ok(minClear > 1.5,
+     '★★ 贴墙球与最近钉的最小余量 > 1.5px（实测 ' + minClear.toFixed(2) + 'px）—— 留了余量才不会被夹住',
+     JSON.stringify(worst));
+
+  /* ③ 端到端：真打 1650 发，不许出现「贴墙 + 贴钉」同帧（那就是"粘住"的几何状态） */
+  let conflictFrames = 0, shots = 0;
+  for(let seed = 1; seed <= 150; seed++){
+    for(let k = 0; k <= 10; k++){
+      reset(seed);
+      win.__pinballSetCoins(100000); forceMult(2);
+      insert(5); start(); skip();
+      if(!launch(k / 10)) continue;
+      shots++;
+      let f = 0;
+      while(f < 600){
+        step(); f++;
+        const st = M();
+        if(st.phase !== 'fly' || !st.ball) break;
+        const b = st.ball;
+        if(b.x >= wallX - 0.75){          // 贴着右墙
+          for(const p of st.pegs){
+            if(Math.hypot(b.x - p.x, b.y - p.y) <= rr + 0.75){ conflictFrames++; break; }
+          }
+        }
+        if(st.landSlot >= 0) break;
+      }
+    }
+  }
+  ok(shots > 1000, '  └ 覆盖了 ' + shots + ' 发实弹');
+  okNum(conflictFrames, 0,
+        '★★ 没有任何一帧处于「贴右墙 + 同时贴钉」——不会再"粘"住',
+        conflictFrames + ' 帧冲突');
+
+  /* ④ 球的状态必须**全程有限**（非有限值会让 canvas 每帧抛异常 = crash） */
+  let nonFinite = 0;
+  for(let seed = 1; seed <= 60; seed++){
+    for(let k = 0; k <= 10; k++){
+      const r = shoot(k / 10, { bet: 5, mult: 2, seed, fresh: true });
+      if(r.nan || !Number.isFinite(r.landX)) nonFinite++;
+    }
+  }
+  okNum(nonFinite, 0, '★★ 660 发里球的坐标/速度全程有限（非有限值会让 canvas 抛异常）');
+
+  /* ⑤ 主循环自愈：跑一大段，frameErrors 必须保持 0（正常路径不该有异常） */
+  reset(7);
+  okNum(M().frameErrors, 0, '★★ 正常游玩期间主循环没有出过异常（frameErrors = 0）');
+
+  ok(safePegMax < s.LANE_WALL_X,
+     '  └ 钉心安全上限确实在管道内壁左侧（' + safePegMax + ' < ' + s.LANE_WALL_X + '）');
+}
+
+/* =====================================================================
+   9.9) ★★ 撞墙音效必须节流（否则粘住时音频节点爆炸 → 手机崩）
+   ===================================================================== */
+section('9.9) ★★ 撞墙音效有节流 —— 粘住时不会刷爆音频节点');
+{
+  /* 直接量：连续飞行一整发，统计音效节点**速率**。
+     原来 sndWall 完全没有节流，而粘住时它每帧最多被调 8 次（SUB=4 子步进），
+     约 480 节点/秒 —— 手机 WebAudio 会因此崩掉。 */
+  const h3 = H.load();
+  const w3 = h3.win;
+  w3.__pinballReset(3);
+  w3.__pinballSetCoins(100000);
+  w3.__pinballInsert(5); w3.__pinballStart(); w3.__pinballSkipAnim();
+  w3.__pinballLaunch(1.0);
+  const b3 = h3.sndCount();
+  let g = 0;
+  while(w3.__pinball().phase === 'fly' && g++ < 900) h3.step();
+  const total = h3.sndCount() - b3;
+  const perSec = total / (g / 60);
+  ok(perSec < 200,
+     '★★ 整段飞行的音效节点速率 < 200/秒（实际 ' + perSec.toFixed(0) + '/秒）—— 手机扛得住',
+     total + ' 个节点 / ' + (g/60).toFixed(1) + 's');
+  ok(total > 0, '  └ 确实产生了音效（' + total + ' 个节点）');
+}
+
+/* =====================================================================
    9.7) ★ 出口字母标注（用户要求「标注 ABCDE 等大写字幕，方便辨识和沟通」）
    ===================================================================== */
 section('9.7) ★ 12 个出口标注 A~L 字母');

@@ -104,7 +104,7 @@ node tools/test_marble.js       # 弹珠乐园逻辑：455 项
 node tools/test_marble_ui.js    # 弹珠乐园**真机布局**：79 项（需真 Chrome + 本地站，见下）
 node tools/test_othello.js      # 黑白棋整局对局 + 计时断言
 node tools/test_parking.js      # 停车场华容道：77 项
-node tools/test_pinball.js      # 弹珠台逻辑：301 项
+node tools/test_pinball.js      # 弹珠台逻辑：312 项
 node tools/test_pinball_ui.js   # 弹珠台**真机布局**：247 项（需真 Chrome + 本地站）
 node tools/test_sokoban.js      # 两套关卡逐关重放解法：30 项
 node tools/test_watersort.js    # 倒水分拣：48 项
@@ -855,7 +855,68 @@ const shownCoins = () => coins - pendingShow;   // 显示值 = 真值 − 还没
 `drop` 只走下落动画。并存了一条反证断言：**同一串力度、分别等 0 / 90 / 300 帧结算，
 落点序列必须逐发相同**。
 
-#### ⑫ 测试保真度：断言要够得着「画出来没有」
+#### ⑫ 崩溃防护：球和右侧撞钉「粘住」然后 crash
+
+用户原话：「球在弹跳的过程中和**右侧**的某个撞钉『粘』到一起然后程序 crash」。
+查下去是**两个独立问题叠加**，各修一个都不够。
+
+**问题 1：几何 bug —— `PEG_R_MAX` 少减了一个球半径。**
+
+推导（贴墙球为什么会被钉夹住）：
+
+```
+blockLaneWall 把贴墙球的球心钳在   x = LANE_WALL_X − RB
+球与钉不重叠要求中心距           ≥ RB + RP
+两者联立 ⇒ 钉心必须              ≤ LANE_WALL_X − 2·RB − RP
+```
+
+而代码里写的是 `LANE_WALL_X − RB − RP − 2` —— **少了 `RB`（6.5px）**，
+于是允许钉心到 310.5，而安全上限只有 **306**。
+实测真有钉落在 `305.4 ~ 305.9`，贴墙球与它们中心距只剩 **11.50 ~ 11.52**
+（需要 11.5，即重叠 0.02 ~ 0.7px）→ 球被「钉推左、墙推右」**每帧对推**，就"粘"住了。
+
+> 修完实测：贴墙球与最近钉的最小余量从 **0.02px → 2.02px**；
+> 1650 发实弹里「贴右墙 + 同时贴钉」的帧数从 **10 → 0**。
+
+**问题 2：崩溃机制 —— audio 和 canvas 在异常路径上都会炸。**
+
+- **`sndWall` 完全没有节流**。球粘住时 `blockLaneWall` 和 `hitPegs` **每帧各调一次**，
+  而物理是 `SUB=4` 子步进 → 每帧最多 8 次 → **约 480 个音频节点/秒**。
+  手机 WebAudio 每创建一个节点都要占资源，这个速率足以让页面崩掉。
+  （原来只有 `sndPeg` 有 26ms 节流 —— 因为"擦墙"在正常玩法里很稀疏，
+  谁也没想到它会被每帧调用。）
+  > **教训：任何"在碰撞回调里发声"的函数都必须自带节流。**
+  > 碰撞回调的调用频率取决于**几何**，而不是取决于玩法节奏。
+- **canvas 对非有限值会抛异常**（实测确认）：
+
+  | 调用 | 结果 |
+  |---|---|
+  | `createRadialGradient(NaN, …)` | **抛 TypeError**（non-finite） |
+  | `createRadialGradient(…, r0<0)` | **抛 IndexSizeError** |
+  | `arc(…, 负半径)` | **抛 IndexSizeError** |
+  | `arc(NaN)` / `fillText(NaN)` | 不抛 |
+
+  而 `drawBall()` **每帧**都调 `createRadialGradient(ball.x …)`。
+  一旦球坐标变成 NaN，就是**每帧都抛**；而 `requestAnimationFrame` 是在 try 之前
+  就排好的，异常**不会**终止循环，只会无限重复抛 → 画面彻底死掉 = 玩家说的"crash"。
+
+**修法（治本 + 兜底三层）**：
+
+1. 改对 `PEG_R_MAX = LANE_WALL_X − 2·RB − RP − 2`（治本）
+2. `sndWall` 加 20ms 节流（治本；每秒最多 50 次，听感仍是密集"嗒嗒"）
+3. **物理层最后一道闸**：`stepBallSub` 的 fly 分支结束时统一检查
+   `x/y/vx/vy` 是否有限，不是就放回场地中线并给一个向下速度 ——
+   与其在 10 个碰撞函数里逐个防，不如在**唯一的出口**兜底
+4. **主循环自愈**：`frame()` 里 `try{ step; draw }catch{ … }`，
+   捕获后**必须真正修复状态**（把非有限的球判为非法并 `settle()`），
+   否则下一帧照样抛。只 catch 不改状态等于没修。
+   再加一层兜底：连结算都失败就强制回投币阶段。用 `frameErrors` 计数，
+   **绝不静默吞掉异常**。
+
+> 真机验证（真 Chrome + 真 canvas，每帧都 `draw()`）：111 发实弹，
+> 非有限坐标 **0**、帧异常 **0**、页面存活 —— 而且这套断言会一直守着。
+
+#### ⑬ 测试保真度：断言要够得着「画出来没有」
 
 补的几处都是同一类问题 —— 内部状态对了，不代表玩家看得到：
 
@@ -876,12 +937,12 @@ const shownCoins = () => coins - pendingShow;   // 显示值 = 真值 − 还没
 
 ### 弹珠台的两个测试文件（跟弹珠乐园同样的理由）
 
-`tools/test_pinball.js` 跑**假 DOM**（301 项断言，覆盖规则/物理/结算/绘制，
+`tools/test_pinball.js` 跑**假 DOM**（312 项断言，覆盖规则/物理/结算/绘制，
 含上面那三个根因的专项回归）；`tools/test_pinball_ui.js` 起**真无头 Chrome**、
 按 6 种竖屏尺寸真渲染量像素（247 项断言）。
 
 ```bash
-node tools/test_pinball.js             # 逻辑：301 项
+node tools/test_pinball.js             # 逻辑：312 项
 python ops/serve_site.py 4321 web      # 先起站（UI 测试要与游戏同源）
 node tools/test_pinball_ui.js          # 真机布局：247 项
 ```
