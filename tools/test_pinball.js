@@ -412,22 +412,26 @@ section('7) ★ 本局结束 → 回投币阶段，必须重新投币');
    ===================================================================== */
 section('7.5) ★ 结算演出：输赢音乐不同 + 中奖时代币逐点加上去');
 {
-  /* ---- ① 中奖与没中奖的音乐必须**明显不同**（用户要的「失落 vs 奖励」）---- */
-  const musicOf = won => {
+  /* ---- ① 中奖与没中奖的音乐必须**明显不同**（用户要的「失落 vs 奖励」）----
+     ★ 注意：中奖音乐现在是**分两波**放的（① 号角、④ 收尾和弦），
+       所以必须**把整段演出走完**再统计，只在 settle 瞬间抓会漏掉收尾和弦。 */
+  const playThrough = (won, bet = 5, mult = 2) => {
     const h2 = H.load();
-    const w = h2.win, m = h2.M;
-    w.__pinballReset(1); w.__pinballForceMult(2);
-    w.__pinballInsert(5); w.__pinballStart(); w.__pinballSkipAnim();
+    const w = h2.win;
+    w.__pinballReset(1); w.__pinballForceMult(mult);
+    w.__pinballInsert(bet); w.__pinballStart(); w.__pinballSkipAnim();
     w.__pinballSetLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
-    /* 音效由 h2 内部计数（每 start() 一个振荡器算一次），量结算前后差值 */
     const before = h2.sndCount();
     w.__pinballLaunch(0.5);
     w.__pinballLand(won ? 0 : 3);
-    return h2.sndCount() - before;
+    /* 走完整段结算（中奖 4.6s / 没中奖 2.2s，多留些余量） */
+    let g = 0;
+    while(h2.M().settleT > 0 && g++ < 900) h2.step();
+    return { n: h2.sndCount() - before, freqs: h2.sndFreqsTail(h2.sndCount() - before) };
   };
-  const nWin = musicOf(true);
-  const nLose = musicOf(false);
-  ok(nWin >= 6, '★ 中奖放的是「奖励音乐」（音符 ' + nWin + ' 个 ≥ 6）', '音符 ' + nWin);
+  const W = playThrough(true), L = playThrough(false);
+  const nWin = W.n, nLose = L.n;
+  ok(nWin >= 10, '★ 中奖放的是「奖励音乐」（整段音符 ' + nWin + ' 个 ≥ 10）', '音符 ' + nWin);
   ok(nLose >= 2, '★ 没中奖也有音效（音符 ' + nLose + ' 个 ≥ 2）', '音符 ' + nLose);
   ok(nWin > nLose,
      '★ 中奖的音效比没中奖更丰富（' + nWin + ' > ' + nLose + '）—— 听感上分得出输赢');
@@ -435,20 +439,9 @@ section('7.5) ★ 结算演出：输赢音乐不同 + 中奖时代币逐点加�
   /* ★★ 光比音符个数是不够的：个数一样多但「走向搞反了」（中奖变叹气、
      没中奖变欢呼）照样能过。所以直接量**频率序列的走向**。
      判据用「后半段均值 − 前半段均值」：中奖必须往上、没中奖必须往下。 */
-  const musicFreqs = won => {
-    const h2 = H.load();
-    const w = h2.win;
-    w.__pinballReset(1); w.__pinballForceMult(2);
-    w.__pinballInsert(5); w.__pinballStart(); w.__pinballSkipAnim();
-    w.__pinballSetLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
-    const before = h2.sndCount();
-    w.__pinballLaunch(0.5);
-    w.__pinballLand(won ? 0 : 3);
-    return h2.sndFreqsTail(h2.sndCount() - before);
-  };
   const avg = a => a.reduce((x,y) => x+y, 0) / a.length;
   const trendOf = a => { const h = Math.ceil(a.length/2); return avg(a.slice(h)) - avg(a.slice(0,h)); };
-  const fWin = musicFreqs(true), fLose = musicFreqs(false);
+  const fWin = W.freqs, fLose = L.freqs;
   ok(trendOf(fLose) < 0,
      '★★ 没中奖是**下行**旋律（失落感），走向 ' + Math.round(trendOf(fLose)) + 'Hz',
      fLose.map(f=>Math.round(f)).join(' '));
@@ -458,50 +451,111 @@ section('7.5) ★ 结算演出：输赢音乐不同 + 中奖时代币逐点加�
   ok(avg(fWin) > avg(fLose) * 1.4,
      '★ 中奖的音区明显更高（' + Math.round(avg(fWin)) + 'Hz vs ' + Math.round(avg(fLose)) + 'Hz）—— 明亮 vs 低沉');
 
-  /* ---- ② 中奖：代币真值立刻全额入账（保证逻辑原子性）---- */
+  /* ---- ② ★★ 四段式节奏：中奖啦 → 看多少 → 钱在涨 → 真爽 ----
+     用户原话：「节奏还可以再慢些，让玩家清晰的认知并体会到
+     中奖啦 → 看看中了多少 → 钱（余额）一点点增加 → 真爽 这几个阶段」。
+     下面按**时间顺序**逐段验证：每段该出现什么、且**不该**提前出现什么。 */
   reset(1); forceMult(4);
   insert(10); start(); skip();
   setLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
-  /* ★ 这一条是**截图发现的 bug**：投币扣了钱，界面却还显示旧数字
-     （因为显示值是另一个变量、投币路径忘了同步它）。
-     现在显示值由 coins 派生，任何改 coins 的路径都自动反映。 */
   okNum(M().shownCoins, 200 - 10, '★ 投币后显示值也要跟着减（投 10 → 显示 190）');
   const coinsBefore = M().coins, shownBefore = M().shownCoins;
   launch(0.5); land(0);
   const st = M();
   okNum(st.coins, coinsBefore + 10 * 4, '★ 中奖时代币**真值**立刻全额入账（逻辑不受动画影响）');
-  ok(st.gainRollT > 0, '★ 同时启动了「逐点加钱」演出（gainRollT > 0）');
-  okNum(st.shownCoins, shownBefore, '  └ 演出刚开始：显示值仍是旧余额（还没涨）');
+  ok(st.winStage === 1, '★★ ① 一落槽先进入第 1 段「中奖啦」（winStage = ' + st.winStage + '）');
+  ok(!(st.gainRollT > 0), '  └ 此时还没开始数钱（gainRollT 未启动）');
+  okNum(st.shownCoins, shownBefore, '  └ 余额还是旧值 —— 先"中奖"，钱的事后面再说');
+  /* ★★ 第 1 段**不能**出现账目：那行「投注 × 倍数 = 奖金」是第 2 段的任务。
+     截图里发现过这个问题：第 1 段就显示「返还 20 × 10 = 200」，
+     于是「中奖啦」和「看看中了多少」两段在视觉上糊成了一段，
+     四段式节奏白做了。 */
+  ok(st.banner && st.banner.sub === '',
+     '★★ 第 1 段横幅**只有「中 奖」大字、没有账目**（等第 2 段才念账）',
+     '实际 sub = ' + JSON.stringify(st.banner && st.banner.sub));
 
-  /* ---- ③ 显示值会一步步追上真值，且**不会超过**真值 ---- */
-  const target = M().coins, from = M().shownCoins;
-  const samples = [];
-  let overshoot = 0, guard = 0;
-  while(M().gainRollT > 0 && guard++ < 600){
+  /* 逐帧走完整段演出，记录每段的：阶段号、余额、横幅副标题 */
+  const target = coinsBefore + 10 * 4;
+  const timeline = [];
+  let guard = 0, overshoot = 0;
+  while(M().settleT > 0 && guard++ < 900){
     step();
     const s = M();
-    if(s.shownCoins > target) overshoot++;
-    samples.push(s.shownCoins);
+    if(s.winT > 0){
+      timeline.push({ st: s.winStage, coins: s.shownCoins });
+      if(s.shownCoins > target) overshoot++;
+    }
   }
-  ok(guard < 600, '★ 「逐点加钱」演出会自己结束（' + guard + ' 帧 ≈ ' + (guard/60).toFixed(2) + 's）');
-  okNum(overshoot, 0, '★ 显示值从不超过真值（不会出现「涨过头再退回」的穿帮）');
-  ok(samples.length >= 5, '★ 显示值确实是一点点涨的（采样 ' + samples.length + ' 次）',
-     samples.slice(0, 8).join('→'));
-  const uniq = new Set(samples).size;
-  ok(uniq >= 4, '★ 中途出现了多个不同的数值（不是直接跳变）—— 不同值 ' + uniq + ' 个');
-  /* ★★ 这一条是**截图发现的 bug**：数字在涨，但界面从没刷新过 ——
-     玩家看到的是全程纹丝不动的 200，只有「最高代币」跳到了 380。
-     所以必须断言「演出中途的显示值既不是旧值也不是新值」。 */
-  const mid = samples[Math.floor(samples.length / 2)];
-  ok(mid !== shownBefore && mid !== target,
-     '★★ 演出中途的显示值既不是旧余额也不是新余额（' + shownBefore + ' → ' + mid + ' → ' + target + '）');
-  ok(samples[samples.length - 1] >= from, '  └ 数值单调不降');
+  const inStage = k => timeline.filter(t => t.st === k);
+  for(const k of [1,2,3,4]){
+    ok(inStage(k).length > 0,
+       `★★ 第 ${k} 段确实出现过（${inStage(k).length} 帧）`,
+       ['', '中奖啦', '看看中了多少', '钱一点点增加', '真爽'][k]);
+  }
+  /* ★ 顺序必须是 1→2→3→4（不能乱序，也不能跳段） */
+  const seq = timeline.map(t => t.st).filter((v,i,a) => i === 0 || v !== a[i-1]);
+  ok(seq.join(',') === '1,2,3,4',
+     '★★ 四段严格按 1→2→3→4 依次出现（实际 ' + seq.join('→') + '）');
+  /* ★★ 关键：第 3 段之前余额**一动不动**（先看清中了多少，再看着钱变多） */
+  const beforeRoll = timeline.filter(t => t.st < 3);
+  const frozen = beforeRoll.every(t => t.coins === shownBefore);
+  ok(frozen,
+     '★★ 第 3 段之前余额**完全不变**（' + shownBefore + '）—— 先看清账目，再看着钱变多',
+     '第3段前的余额取值: ' + [...new Set(beforeRoll.map(t=>t.coins))].join(','));
+  /* ★ 第 3 段必须真的在涨（出现多个不同值） */
+  const rollVals = [...new Set(inStage(3).map(t => t.coins))];
+  ok(rollVals.length >= 4,
+     '★★ 第 3 段余额确实在一点点增加（' + rollVals.length + ' 个不同值）',
+     rollVals.slice(0, 10).join('→'));
+  okNum(overshoot, 0, '★ 余额从不超过真值（不会「涨过头再退回」）');
   okNum(M().shownCoins, target, '★ 演出结束后显示值与真值对齐');
 
-  /* ---- ③b ★★ DOM 层面：界面上的代币文本必须在演出期间真的在变 ----
-     这是**截图才发现**的 bug：内部数值一路在涨，但没人调 syncUI()，
-     玩家看到的代币全程是纹丝不动的 200（只有「最高代币」跳到了 380）。
-     只断言内部状态是抓不住这种「算对了但没画出来」的 bug 的。 */
+  /* ---- ③ 每段的**时长**必须够玩家反应过来（这是「节奏再慢些」的核心）---- */
+  const durOf = k => inStage(k).length / 60;
+  ok(durOf(1) >= 0.4, '★★ ①「中奖啦」至少给 0.4 秒反应过来（实际 ' + durOf(1).toFixed(2) + 's）');
+  ok(durOf(3) >= 1.0, '★★ ③「钱在涨」是最爽的一段，给足时间（' + durOf(3).toFixed(2) + 's ≥ 1.0s）');
+  ok(durOf(4) >= 0.5, '★★ ④「真爽」有收尾时间（' + durOf(4).toFixed(2) + 's）');
+  const total = timeline.length / 60;
+  ok(total >= 3.5, '★★ 中奖演出总长 ≥ 3.5 秒（实际 ' + total.toFixed(2) + 's）—— 原来只有 2.6 秒，来不及体会');
+
+  /* ---- ③c ★★ 绘制层面：每段**画出来的文字**必须符合该段的职责 ----
+     只看内部状态是抓不住「状态对了但画错了」的（第 1 段多画一行账目就是这么漏的）。
+     drawRec 记录了每次 fillText，所以可以直接检查"这一帧画了什么字"。 */
+  const textsAt = stageWanted => {
+    reset(1); forceMult(4);
+    insert(10); start(); skip();
+    setLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
+    launch(0.5); land(0);
+    let g = 0, out = [];
+    while(M().settleT > 0 && g++ < 900){
+      step();
+      if(M().winStage === stageWanted){
+        drawRec.texts.length = 0;
+        win.__pinballDraw();
+        out = drawRec.texts.map(t => t.txt);
+        break;
+      }
+    }
+    return out;
+  };
+  const t1 = textsAt(1);
+  ok(t1.some(s => s.indexOf('中') >= 0),
+     '★★ 第 1 段画了「中 奖」大字', t1.join(' | '));
+  ok(!t1.some(s => s.indexOf('返还') >= 0),
+     '★★ 第 1 段**没有**画「返还 …」那行账目（那是第 2 段的事）', t1.join(' | '));
+  const t2 = textsAt(2);
+  ok(t2.some(s => s.indexOf('返还') >= 0),
+     '★★ 第 2 段画出了这笔账（含「返还」）', t2.join(' | '));
+  const t3 = textsAt(3);
+  ok(t3.some(s => s.indexOf('到账') >= 0),
+     '★★ 第 3 段提示「代币正在到账…」', t3.join(' | '));
+  const t4 = textsAt(4);
+  ok(t4.some(s => s.indexOf('已入账') >= 0),
+     '★★ 第 4 段提示「✓ 已入账」（钱到手了）', t4.join(' | '));
+  ok(!t4.some(s => s.indexOf('正在到账') >= 0),
+     '  └ 第 4 段不再显示「正在到账」（该收尾了）');
+
+  /* ---- ③b ★★ DOM 层面：界面上的代币文本必须在第 3 段真的在变 ---- */
   reset(1); forceMult(4);
   insert(10); start(); skip();
   setLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
@@ -509,18 +563,51 @@ section('7.5) ★ 结算演出：输赢音乐不同 + 中奖时代币逐点加�
   const coinEl = els.vCoins;
   const domTexts = [];
   guard = 0;
-  while(M().gainRollT > 0 && guard++ < 600){
+  while(M().settleT > 0 && guard++ < 900){
     step();
-    domTexts.push(coinEl.textContent);
+    if(M().winStage === 3) domTexts.push(coinEl.textContent);
   }
   const domUniq = new Set(domTexts).size;
   ok(domUniq >= 4,
-     '★★ 演出期间**界面上的代币文本**确实在不断变化（' + domUniq + ' 个不同值）',
+     '★★ 第 3 段**界面上的代币文本**确实在不断变化（' + domUniq + ' 个不同值）',
      domTexts.slice(0, 10).join('→'));
-  ok(domTexts[domTexts.length - 1] === String(M().coins),
-     '★★ 演出结束后界面显示的是新余额（' + domTexts[domTexts.length-1] + '）');
+  ok(coinEl.textContent === String(M().coins),
+     '★★ 演出结束后界面显示的是新余额（' + coinEl.textContent + '）');
 
-  /* ---- ④ 没中奖：不滚动，显示值与真值立刻一致 ---- */
+  /* ---- ④b ★★ 灯跟着 BGM 闪：节拍周期必须取自音乐本身 ---- */
+  reset(1); forceMult(4);
+  insert(10); start(); skip();
+  setLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
+  launch(0.5); land(0);
+  const beats = [];
+  guard = 0;
+  while(M().settleT > 0 && guard++ < 900){
+    step();
+    const b = M().winBeat;
+    if(b && b.on) beats.push({ st: b.st, idx: b.idx, per: b.per });
+  }
+  ok(beats.length > 0, '★★ 中奖演出期间灯有节拍（winBeat.on）');
+  /* ★ 节拍必须在推进（idx 会变），否则就是"灯不闪" */
+  const maxIdx = k => Math.max(...beats.filter(b => b.st === k).map(b => b.idx));
+  ok(maxIdx(3) >= 8, '★★ 第 3 段灯闪了很多拍（最多第 ' + maxIdx(3) + ' 拍）—— 跟着硬币声一起闪');
+  ok(maxIdx(4) >= 6, '★★ 第 4 段灯闪得更快（最多第 ' + maxIdx(4) + ' 拍）—— 收尾加速');
+  /* ★★ 第 3 段的节拍周期必须**正好等于硬币声间隔**（这才是"跟着 BGM"而不是各闪各的） */
+  /* ⚠️ 这里不能先 toFixed 再比较：四舍五入会引入 3e-5 的误差，
+     比容差 1e-6 还大，会误报失败（踩过）。保留原值比较。 */
+  const per3 = [...new Set(beats.filter(b => b.st === 3).map(b => b.per))];
+  ok(per3.length === 1, '  └ 第 3 段节拍周期恒定（' + per3.length + ' 种取值）');
+  const wantPer = M().GAIN_ROLL_T / 12;
+  ok(per3.length === 1 && Math.abs(per3[0] - wantPer) < 1e-9,
+     '★★ 第 3 段节拍周期 = 硬币声间隔（' + per3[0] + 's = GAIN_ROLL_T/12）—— 视听同步',
+     '得到 ' + per3[0] + '，期望 ' + wantPer);
+  /* 没中奖时不能闪（别把失落也搞得很热闹） */
+  reset(1); forceMult(2);
+  insert(5); start(); skip();
+  setLamps(new Array(12).fill(false));
+  launch(0.5); land(3);
+  ok(!M().winBeat.on, '★ 没中奖时灯不闪（winBeat.on = false）—— 失落不需要热闹');
+
+  /* ---- ⑤ 没中奖：不滚动，显示值与真值立刻一致 ---- */
   reset(1); forceMult(2);
   insert(5); start(); skip();
   setLamps([0,0,0,0,0,0,0,0,0,0,0,0]);

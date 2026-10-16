@@ -387,11 +387,22 @@
 
   const ROLL_T = 0.85;               // 倍数滚动动画时长
   const LAMP_DT = 0.075;             // 逐个点亮出口灯的间隔
-  const SETTLE_T = 2.6;              // 结算展示时长（之后回投币阶段）
-  /* ★ 中奖时「代币逐点加上去」的时长（用户要的「延长兴奋感」）。
-     必须 ≤ SETTLE_T，否则动画会被 endRound 打断、数字停在半路。
-     2.6 − 0.9 = 1.7 秒留给横幅展示，节奏正好。 */
-  const GAIN_ROLL_T = 0.9;
+  /* ---------------- 结算时长 ----------------
+     ★★ 中奖拆成**四段**（用户要求「节奏再慢些，让玩家清晰体会到这四个阶段」）：
+          ① 中奖啦        —— 先让人「反应过来中了」
+          ② 看看中了多少  —— 再把「投注 × 倍数 = 奖金」这笔账摆出来
+          ③ 钱一点点增加  —— 余额真的在涨（最爽的一段，给最长时间）
+          ④ 真爽          —— 收尾：和弦 + 撒彩带，把情绪推到顶
+       总长 4.6 秒（原来是 2.6 秒里塞完所有信息，玩家根本来不及分阶段体会）。
+     ⚠️ 四段**共用一个时钟** settleT，按 elapsed 落点判断当前是哪一段，
+        而不是给每段各开一个定时器 —— 单一时间轴掉帧时也不会各段错位/重叠。 */
+  const SETTLE_T   = 2.2;            // 没中奖：干脆点，别拖着（失落不需要慢镜头）
+  const WIN_T      = 4.6;            // 中奖演出总时长
+  const WIN_S1     = 0.80;           // ① 中奖啦          0.00 → 0.80
+  const WIN_S2     = 1.70;           // ② 看看中了多少    0.80 → 1.70
+  const WIN_S3     = 3.30;           // ③ 钱一点点增加    1.70 → 3.30
+                                     // ④ 真爽            3.30 → 4.60
+  const GAIN_ROLL_T = WIN_S3 - WIN_S2;  // ③ 段的长度（数钱的时长）
 
   /** 力度 → (释放角, 进弧速度, 出手方向抖动) —— 抽成函数，游戏与测试/实验台共用同一份。
    *  jitter = true 时加一点出手抖动（真机手感）；实验台要测纯映射就传 false。 */
@@ -458,7 +469,25 @@
         pendingShow 只管「这笔奖金还要数多久」。 */
   let pendingShow = 0;              // 演出中还没「数」出来的金额（0 = 无演出）
   let gainRollT = 0, gainRollTotal = 0, gainTickAcc = 0, gainTickN = 0;
-  /** 界面该显示多少代币（真值 − 还在数的部分） */
+  /* ★ 中奖演出的**单一时间轴**：winT = 从落槽中奖那一刻起的秒数。
+     四段（中奖啦 / 看多少 / 钱在涨 / 真爽）都从它算出来，而不是各开一个定时器 ——
+     单一时间轴掉帧时不会各段错位或重叠。0 = 不在中奖演出中。 */
+  let winT = 0;
+  let gainStarted = false;          // 第 3 段的「开始数钱」是否已触发（只触发一次）
+  /* ★ 灯跟着 BGM 闪的节拍相位：让灯和硬币声**同频**，看起来像灯在跟着音乐打拍子。 */
+  let lampBeatAcc = 0, lampBeatN = 0;
+  /** 当前处于中奖演出的第几段（1~4）；不是中奖演出时返回 0。
+   *  抽成函数是为了让 **绘制** 和 **测试** 用同一套判据，不会各写一份阈值。 */
+  function winStage(){
+    if(!(winT > 0)) return 0;
+    if(winT < WIN_S1) return 1;      // 中奖啦
+    if(winT < WIN_S2) return 2;      // 看看中了多少
+    if(winT < WIN_S3) return 3;      // 钱一点点增加
+    return 4;                        // 真爽
+  }
+  /** 界面该显示多少代币（真值 − 还在数的部分）
+   *  ★ 第 3 段之前 pendingShow 保持**整笔奖金**，所以余额一直显示旧值 ——
+   *    这正是「先看清中了多少，再看着钱变多」的关键：账目和余额是**先后**出现的。 */
   const shownCoins = () => coins - pendingShow;
 
   let fx = [], floats = [];
@@ -549,21 +578,38 @@
     tone(midi(43), 0.7, { type:'sine', gain:0.05, at:0.36 });
   }
 
-  /** 中奖：上行大调号角 + 高音亮点 + 低音垫底（「奖励感」）。
-   *  琶音间隔 0.075 秒、越往上越亮，制造「往上冲」的势头。 */
+  /** ★ 第 ① 段「中奖啦」：一声短促有力的**上行号角**（C5 E5 G5 C6）。
+   *  故意做得短（0.35 秒内收完）—— 它的任务只是「啪」地告诉你中了，
+   *  细节（中了多少）留给第 ② 段，别抢戏。 */
   function sndWin(){
-    /* 主旋律：C5 E5 G5 C6（大三和弦琶音上行） */
     [72, 76, 79, 84].forEach((n, i) => {
-      tone(midi(n), 0.24, { type:'triangle', gain:0.10, at:i * 0.075 });
+      tone(midi(n), 0.22, { type:'triangle', gain:0.10, at:i * 0.075 });
     });
-    /* 高音亮点：E6 / G6 点缀，像奖金闪了一下 */
-    tone(midi(88), 0.20, { type:'sine', gain:0.06, at:0.34 });
-    tone(midi(91), 0.30, { type:'sine', gain:0.055, at:0.42 });
-    /* 低音垫底：让号角有厚度，不是单薄的一声叮 */
-    tone(midi(48), 0.55, { type:'sine', gain:0.055, at:0 });
-    tone(midi(55), 0.40, { type:'sine', gain:0.045, at:0.075 });
-    /* 一点点金属噪声当「硬币撒出来」的质感 */
-    noiseBurst(0.16, { freq: 3200, gain:0.035 });
+    /* 低音垫一下，让号角有厚度，不是单薄的一声叮 */
+    tone(midi(48), 0.5, { type:'sine', gain:0.05, at:0 });
+    noiseBurst(0.14, { freq: 3200, gain:0.03 });
+  }
+
+  /** ★ 第 ② 段「看看中了多少」：两下**中音区**的「叮·咚」，像账目被念出来。
+   *  音高刻意比号角低、比硬币声沉稳 —— 听觉上把「这是关键信息」和
+   *  「这是背景欢快声」区分开，玩家自然会把注意力放到横幅那行账上。 */
+  function sndStage2(){
+    tone(midi(67), 0.16, { type:'triangle', gain:0.075 });          // G4
+    tone(midi(71), 0.22, { type:'triangle', gain:0.07, at:0.14 });  // B4
+  }
+
+  /** ★ 第 ④ 段「真爽」：收尾大和弦 + 高音滑上去 + 一串撒币噪声。
+   *  和前两段拉开：这是**最厚**的一下（四个音同时响），把情绪顶到最高。 */
+  function sndJackpot(){
+    /* C 大调加九和弦，同时起振 → 厚、亮、有"落地"感 */
+    [60, 64, 67, 72, 76].forEach((n, i) => {
+      tone(midi(n), 0.9, { type:'triangle', gain:0.075 - i * 0.006, at:0 });
+    });
+    /* 高音往上滑一下（像中奖数字冲到顶） */
+    tone(midi(79), 0.45, { type:'sine', gain:0.06, to: midi(91) });
+    /* 撒币：两串短噪声，营造"钱哗啦啦掉下来" */
+    noiseBurst(0.22, { freq: 2600, gain:0.05 });
+    noiseBurst(0.30, { freq: 3600, gain:0.04 });
   }
 
   /** 「代币一点一点加上去」时的硬币声。i = 第几声（音高随进度上升，越加越兴奋）。 */
@@ -731,6 +777,7 @@
        余额慢慢爬回 200。pendingShow 归零就等于显示值立刻等于真值。 */
     pendingShow = 0;
     gainRollT = 0; gainRollTotal = 0; gainTickAcc = 0; gainTickN = 0;
+    winT = 0; gainStarted = false; lampBeatAcc = 0; lampBeatN = 0;
     banner = null; fx = []; floats = [];
     /* ★ 先挡板、后钉阵：genPegs 要拿挡板位置算安全间距（否则球会被「钉+挡板」夹死） */
     genBaffles();
@@ -1061,23 +1108,31 @@
     ball.mode = 'drop';
     ball.x = slotCX(i);
     ball.vx = 0; ball.vy = Math.max(ball.vy, 140);
-    settleT = SETTLE_T;
+    settleT = landWin ? WIN_T : SETTLE_T;
+    /* ★★ 四段式中奖演出（用户要的：中奖啦 → 看看中了多少 → 钱一点点增加 → 真爽）。
+       第 ① 段只放「中 奖」两个大字，**先不给任何数字** ——
+       让人先反应过来「中了」，再去关心中了多少。原来是一股脑全塞出来，
+       玩家眼睛不知道先看哪里，四个阶段的情绪就全糊在一起了。 */
     banner = landWin
-      ? { txt:'中 奖', sub:'返还 ' + bet + ' × ' + mult + ' = ' + landGain + ' 枚', win:true }
+      ? { txt:'中 奖', sub:'', win:true }
       : { txt:'未 中 奖', sub:'投注 ' + bet + ' 枚不退', win:false };
     if(landWin){
+      /* ★ 音乐分两波：① 立刻响「中奖号角」；④ 收尾再补一个和弦（见 step 的段切换）。
+         这样「中奖啦」和「真爽」各有一个听觉锚点，中间数钱时是硬币声。 */
       sndWin();
-      /* 中奖 → 启动「代币逐点加上去」的演出：
-         pendingShow 从**整笔奖金**开始（显示值 = coins − pendingShow = 旧余额），
-         随 gainRollT 衰减到 0（显示值 = coins = 新余额）。 */
+      /* 中奖 → 启动四段时间轴。
+         ⚠️ pendingShow 一开始就是**整笔奖金**（显示值 = 旧余额），
+            一直保持到第 3 段才开始衰减 —— 这是「先看账、后看涨」的实现方式。 */
+      winT = 0.0001;                   // > 0 表示进入演出
       pendingShow = landGain;
       gainRollTotal = landGain;
-      gainRollT = GAIN_ROLL_T;
+      gainRollT = 0;                   // 第 3 段开始时才真正启动（见 step）
       gainTickAcc = 0; gainTickN = 0;
+      gainStarted = false;
     } else {
       sndLose();
       /* 没中奖：不滚动，显示值立刻等于真值 */
-      gainRollT = 0; pendingShow = 0;
+      winT = 0; gainRollT = 0; pendingShow = 0;
     }
     const cx = ball.x;
     for(let k = 0; k < (landWin ? 26 : 8); k++){
@@ -1106,6 +1161,11 @@
     lamps = new Array(N_SLOT).fill(false);
     ball = null; landSlot = -1; landWin = false; landGain = 0; banner = null;
     rollT = 0; lampStep = 0; lampOrder = [];
+    /* ★ 演出状态一并清掉：不然下一局开局时 winT 还在走，灯会莫名其妙继续闪。
+       （虽然 settleT≤0 时 winT 也会归零，但 endRound 是收局的权威位置，
+        在这里显式清一次才不会依赖别处的副作用。） */
+    winT = 0; gainStarted = false; gainRollT = 0; pendingShow = 0;
+    gainTickAcc = 0; gainTickN = 0; lampBeatAcc = 0; lampBeatN = 0;
     if(coins < MIN_BET){
       phase = 'over';
       $('overSub').innerHTML =
@@ -1172,13 +1232,50 @@
     /* 球 */
     if(ball) stepBall(ball, dt);
 
+    /* ★★ 四段式中奖演出（用户要的节奏）：
+          ① 中奖啦        —— 只有「中 奖」两个大字
+          ② 看看中了多少  —— 摆出「投注 × 倍数 = 奖金」
+          ③ 钱一点点增加  —— 余额真的在涨（伴随硬币声）
+          ④ 真爽          —— 收尾和弦 + 撒彩带
+       四段共用 winT 这一条时间轴，按已过去的秒数落段。 */
+    if(winT > 0){
+      const prev = winStage();
+      winT += dt;
+      const now = winStage();
+      if(now !== prev){
+        /* ---- 进入新段时的一次性动作（这就是「节奏感」的来源：每段都有明确的开场）---- */
+        if(now === 2){
+          /* ② 摆出这笔账。★ 此时**余额还是旧值**（pendingShow 未动）——
+             先让人看清「中了多少」，再让钱变多，两个信息不打架。 */
+          banner = { txt:'中 奖', sub:'返还 ' + bet + ' × ' + mult + ' = ' + landGain + ' 枚', win:true };
+          sndStage2();
+        } else if(now === 3){
+          /* ③ 开始数钱：启动余额滚动 + 硬币声 + 灯跟着节拍闪 */
+          gainStarted = true;
+          gainRollT = GAIN_ROLL_T;
+          gainTickAcc = 0; gainTickN = 0;
+          lampBeatAcc = 0; lampBeatN = 0;
+        } else if(now === 4){
+          /* ④ 真爽：收尾和弦 + 一波撒彩带（从槽口往上喷） */
+          sndJackpot();
+          for(let k = 0; k < 30; k++){
+            fx.push({ x: slotCX(landSlot), y: mouthY,
+                      vx:(rng() - 0.5) * 420, vy:-160 - rng() * 300,
+                      life:0.8 + rng() * 0.7, max:1.5, r:1.8 + rng() * 2.6,
+                      c: rng() < 0.5 ? '#ffd23f' : (rng() < 0.5 ? '#ff7a5c' : '#8ff6ff') });
+          }
+        }
+      }
+      if(settleT <= 0) winT = 0;       // 演出随结算结束一起收掉
+    }
+
     /* 结算展示 → 收局 */
     if(settleT > 0){
       settleT -= dt;
       if(settleT <= 0) endRound();
     }
 
-    /* ★ 代币逐点加上去的演出（纯显示层，不碰 coins 真值）——
+    /* ★ 第 ③ 段：代币逐点加上去（纯显示层，不碰 coins 真值）——
        每个 step 让 pendingShow 沿缓动曲线衰减到 0，显示值 = coins − pendingShow。
        ⚠️ 用「进度百分比 × 总额」而不是「每帧加固定值」：
           这样无论总额是 10 还是 200，动画都恰好用 GAIN_ROLL_T 秒跑完，
@@ -1193,17 +1290,24 @@
       /* easeOutCubic：开头冲得快、尾巴慢下来 —— 像老虎机数钱 */
       const e = 1 - Math.pow(1 - k, 3);
       pendingShow = done ? 0 : Math.round(gainRollTotal * (1 - e));
-      /* 硬币声：整段里均匀撒 ~12 声，音高随进度上升 */
+      /* 硬币声 + ★ 灯跟着同一节拍闪：两者用同一个节拍周期，
+         所以灯看起来是「跟着 BGM 在打拍子」而不是各闪各的。 */
       gainTickAcc += dt;
       const per = GAIN_ROLL_T / 12;
       if(gainTickAcc >= per && !done){
         gainTickAcc -= per;
         sndGainTick(gainTickN++);
+        lampBeatN++;                   // 每响一声硬币，灯就换一拍
       }
       syncUI();
-    } else if(pendingShow !== 0){
-      /* 兜底对齐：任何没走滚动的路径（没中奖、重置、测试直接改 coins）
-         都不能让显示值长期停在旧数字上。 */
+    } else if(pendingShow !== 0 && !(winT > 0)){
+      /* 兜底对齐：任何**没有在走中奖演出**的路径（没中奖、重置、测试直接改 coins）
+         都不能让显示值长期停在旧数字上。
+         ⚠️ 必须排除「中奖演出中但还没到第 3 段」的情形（winT > 0）：
+            第 1、2 段里 gainRollT 故意是 0（钱还没开始涨），
+            如果这里无脑把 pendingShow 清零，余额会在落槽的**那一帧**
+            就直接变成新值 —— 那「先看清中了多少、再看着钱变多」的节奏就没了。
+            实测就是这么翻车的：演出刚开始余额就已经是 230。 */
       pendingShow = 0;
       syncUI();
     }
@@ -1341,8 +1445,38 @@
     }
   }
 
+  /** ★ 中奖演出时出口灯的「打拍子」节拍（用户要的「下面的灯也跟着 bgm 闪烁」）。
+   *
+   *  设计要点：**节拍周期直接取自音乐本身**，而不是随便定一个闪烁频率 ——
+   *  这样灯才是真的「跟着 BGM」，而不是各闪各的：
+   *    · ① 中奖啦 / ② 看多少：0.20s 一拍（贴着号角和「叮咚」的节奏）
+   *    · ③ 钱在涨：      GAIN_ROLL_T/12 —— **正好等于硬币声的间隔**，
+   *                      所以每响一声硬币、灯就闪一下，视听完全同步
+   *    · ④ 真爽：        0.10s 一拍（快一倍，配合收尾和弦把情绪顶上去）
+   *
+   *  返回值：on=是否在演出中；phase=当前拍的进度 0→1（用来做「亮起再衰减」）；
+   *          idx=第几拍（用来做跑马灯）；st=第几段。 */
+  function winBeat(){
+    const st = winStage();
+    if(!st) return { on:false, phase:0, idx:0, st:0 };
+    const per = st === 3 ? (GAIN_ROLL_T / 12) : (st === 4 ? 0.10 : 0.20);
+    /* 每段从自己的起点重新计时，这样「进入新段」时灯也是从第一拍干净地开始闪 */
+    const t = st === 1 ? winT
+            : st === 2 ? (winT - WIN_S1)
+            : st === 3 ? (winT - WIN_S2)
+            :            (winT - WIN_S3);
+    const idx = Math.max(0, Math.floor(t / per));
+    const phase = t / per - idx;       // 0 → 1（拍内进度）
+    return { on:true, phase, idx, st, per };
+  }
+
   function drawSlots(){
     const litCount = lamps.filter(Boolean).length;
+    /* ★ 中奖演出时的节拍（灯跟着音乐闪） */
+    const beat = winBeat();
+    /* 拍的亮度：刚打拍时最亮（1），拍尾衰减到 0 —— 「咚」的那一下灯也最亮。
+       用 1−phase 的平方让衰减更快，闪得干脆不拖泥带水。 */
+    const pulse = beat.on ? Math.pow(1 - beat.phase, 2) : 0;
     for(let i = 0; i < N_SLOT; i++){
       const x0 = slotX0(i), cx = slotCX(i);
       const lit = lamps[i];
@@ -1365,9 +1499,14 @@
 
       /* 出口灯（照片上每个出口口上一颗红 LED） */
       const ly = mouthY - 48;
+      /* ★ 跑马灯：第 ④ 段每拍点亮一颗灯（沿着 12 个口依次跑），
+         亮灯的口跑的时候更亮 —— 这是老虎机中奖时的经典观感。 */
+      const chaseOn = beat.on && beat.st === 4 && (beat.idx % N_SLOT) === i;
       if(lit){
-        ctx.beginPath(); ctx.arc(cx, ly, 11, 0, 7);
-        ctx.fillStyle = 'rgba(255,60,45,.22)'; ctx.fill();
+        /* 亮灯的口在演出期间跟着节拍脉动：光晕变大变亮 */
+        const halo = 11 + 9 * pulse;
+        ctx.beginPath(); ctx.arc(cx, ly, halo, 0, 7);
+        ctx.fillStyle = 'rgba(255,60,45,' + (0.22 + 0.5 * pulse).toFixed(3) + ')'; ctx.fill();
         ctx.beginPath(); ctx.arc(cx, ly, 6.4, 0, 7);
         const lg = ctx.createRadialGradient(cx - 1.6, ly - 2, 0.6, cx, ly, 6.4);
         lg.addColorStop(0, '#fff0ea'); lg.addColorStop(0.45, '#ff5a44'); lg.addColorStop(1, '#c01008');
@@ -1379,13 +1518,26 @@
         ctx.fillStyle = dg; ctx.fill();
         ctx.strokeStyle = 'rgba(120,140,200,.35)'; ctx.lineWidth = 1; ctx.stroke();
       }
+      /* ★ 跑马灯扫过的那颗（含没亮的口）：叠一层白金色闪光 */
+      if(chaseOn){
+        ctx.beginPath(); ctx.arc(cx, ly, 13, 0, 7);
+        ctx.fillStyle = 'rgba(255,235,150,' + (0.25 + 0.55 * pulse).toFixed(3) + ')'; ctx.fill();
+        ctx.beginPath(); ctx.arc(cx, ly, 5 + 3 * pulse, 0, 7);
+        ctx.fillStyle = '#fffbe8'; ctx.fill();
+      }
 
-      /* 落点的槽口高亮 */
+      /* 落点的槽口高亮：中奖时也跟着拍子一起闪（把「就是这个口」钉进眼里） */
       if(isLand){
         ctx.beginPath();
         roundRect(x0 + 1.6, mouthY - 34, slotW - 3.2, floorY - (mouthY - 34) - 2, 5);
-        ctx.strokeStyle = landWin ? 'rgba(255,215,70,.95)' : 'rgba(120,140,200,.7)';
-        ctx.lineWidth = 2.4; ctx.stroke();
+        if(landWin && beat.on){
+          ctx.strokeStyle = 'rgba(255,215,70,' + (0.55 + 0.45 * pulse).toFixed(3) + ')';
+          ctx.lineWidth = 2.4 + 1.6 * pulse;
+        } else {
+          ctx.strokeStyle = landWin ? 'rgba(255,215,70,.95)' : 'rgba(120,140,200,.7)';
+          ctx.lineWidth = 2.4;
+        }
+        ctx.stroke();
       }
     }
     /* 出口口线（★ 只画到管道内壁，右边那条细缝是发射管道，不是出口） */
@@ -1478,20 +1630,56 @@
     ctx.textAlign = 'left';
   }
 
-  /** 结算横幅 */
+  /** 结算横幅（按中奖演出的阶段显示不同内容） */
   function drawBanner(){
     if(!banner || settleT <= 0) return;
+    const st = winStage();
     const a = clamp(settleT / 0.35, 0, 1);
     ctx.globalAlpha = a;
     ctx.textAlign = 'center';
+
+    /* ★ ① 「中奖啦」：字**特别大**，并且带一个「弹出来」的缩放。
+       这是整局情绪的最高点，字要大得夸张 —— 先让人「哇」一下，
+       后面的数字才有心理空间被读到。 */
+    if(st === 1){
+      const t01 = clamp(winT / WIN_S1, 0, 1);
+      /* 前 0.25 秒从 0.6 倍弹到 1.15 倍，再回落到 1.0（过冲回弹） */
+      const pop = t01 < 0.35
+        ? 0.6 + (1.15 - 0.6) * (t01 / 0.35)
+        : 1.15 - 0.15 * ((t01 - 0.35) / 0.65);
+      ctx.save();
+      ctx.translate(ARC_CX, 336);
+      ctx.scale(pop, pop);
+      ctx.font = '800 44px ' + UI;
+      ctx.fillStyle = 'rgba(0,0,0,.55)';
+      ctx.fillText('中 奖', 2.4, 3);
+      const g = ctx.createLinearGradient(0, -22, 0, 16);
+      g.addColorStop(0, '#fff6c8'); g.addColorStop(0.5, '#ffd23f'); g.addColorStop(1, '#ff9a2e');
+      ctx.fillStyle = g;
+      ctx.fillText('中 奖', 0, 0);
+      ctx.restore();
+      ctx.globalAlpha = 1; ctx.textAlign = 'left';
+      return;
+    }
+
     ctx.font = '800 30px ' + UI;
     ctx.fillStyle = 'rgba(0,0,0,.55)';
     ctx.fillText(banner.txt, ARC_CX + 2, 336 + 2.4);
     ctx.fillStyle = banner.win ? '#ffd23f' : '#8b9ad0';
     ctx.fillText(banner.txt, ARC_CX, 336);
-    ctx.font = '600 14px ' + UI;
-    ctx.fillStyle = banner.win ? '#ffe89a' : 'rgba(190,205,240,.9)';
-    ctx.fillText(banner.sub, ARC_CX, 362);
+
+    /* ★ ② 之后的「这笔账」：投注 × 倍数 = 奖金，逐字放大出来。
+       ④ 段把它换成「已入账」，表示钱真的到手了。 */
+    if(banner.sub){
+      ctx.font = '600 14px ' + UI;
+      ctx.fillStyle = banner.win ? '#ffe89a' : 'rgba(190,205,240,.9)';
+      ctx.fillText(banner.sub, ARC_CX, 362);
+    }
+    if(st === 3 || st === 4){
+      ctx.font = '700 15px ' + UI;
+      ctx.fillStyle = 'rgba(120,255,210,.95)';
+      ctx.fillText(st === 4 ? '✓ 已入账' : '代币正在到账…', ARC_CX, 386);
+    }
     ctx.globalAlpha = 1;
     ctx.textAlign = 'left';
   }
@@ -1740,7 +1928,10 @@
     charge, charging, rollT, lampStep,
     landSlot, landWin, landGain, settleT,
     landX,
+    banner: banner ? { txt:banner.txt, sub:banner.sub, win:banner.win } : null,
     shownCoins: shownCoins(), gainRollT, GAIN_ROLL_T, pendingShow,
+    winT, winStage: winStage(), winBeat: winBeat(),
+    WIN_T, WIN_S1, WIN_S2, WIN_S3, gainStarted,
     aimReady: aimReady(),
     lampCount: mult ? lampCountOf(mult) : 0,
     lampOrder: lampOrder.slice(),
