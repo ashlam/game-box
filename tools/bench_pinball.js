@@ -60,15 +60,21 @@ function evaluate(win, M, shoot, tune, { seeds = 6, steps = 120, bet = 5, mult =
 
   const slotHit = new Array(12).fill(0);
   const corrs = [], jumpMeans = [], timeouts = [];
+  const repeatWorst = [], repeatAvg = [];
   let nan = 0, out = 0, tunnel = 0;
   let frames = [];
 
   for(let s = 0; s < seeds; s++){
     const seed = 90001 + s * 7919;
     const xs = [], ys = [];
+    /* ★ 整档力度在**同一局连续**打完（不 reset）：RNG 持续推进，
+       出手抖动才会每发不同 —— 这正是玩家真实体验。
+       以前每发都 reset，抖动序列完全相同，「同力度同落点」是必然的，
+       量出来的可控性数字好看但掩盖了 bug。 */
+    w.__pinballReset(seed);
     for(let i = 0; i < steps; i++){
       const p = i / (steps - 1);
-      const r = sh(p, { seed, bet, mult });
+      const r = sh(p, { bet, mult, fresh: false });
       xs.push(p); ys.push(r.slot);
       if(r.slot >= 0 && r.slot < 12) slotHit[r.slot]++;
       if(r.nan) nan++;
@@ -82,6 +88,23 @@ function evaluate(win, M, shoot, tune, { seeds = 6, steps = 120, bet = 5, mult =
     let sum = 0, n = 0;
     for(let i = 1; i < ys.length; i++){ sum += Math.abs(ys[i] - ys[i - 1]); n++; }
     jumpMeans.push(sum / n);
+    /* 同一力度反复打 8 发的重复度。
+       ★ 报「平均值」而不是「最大值」：最大值只由某一个档位决定，噪声大；
+         平均值才反映「整体上玩家会不会觉得每次都一样」。
+         两个都留着 —— 最大值用来发现「某个档位特别死」的局部问题。 */
+    let worst = 0, rsum = 0, rcnt = 0;
+    for(let i = 0; i < steps; i += Math.max(1, Math.floor(steps / 12))){
+      const p = i / (steps - 1);
+      const slots = [];
+      for(let k = 0; k < 8; k++) slots.push(sh(p, { bet, mult, fresh: false }).slot);
+      const c = {};
+      for(const v of slots) c[v] = (c[v] || 0) + 1;
+      const modal = Math.max.apply(null, Object.values(c)) / 8;
+      worst = Math.max(worst, modal);
+      rsum += modal; rcnt++;
+    }
+    repeatWorst.push(worst);
+    repeatAvg.push(rsum / rcnt);
   }
   const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
   return {
@@ -90,6 +113,8 @@ function evaluate(win, M, shoot, tune, { seeds = 6, steps = 120, bet = 5, mult =
     covered: slotHit.filter(v => v > 0).length,
     corr: avg(corrs),
     jump: avg(jumpMeans),
+    repeat: avg(repeatWorst),
+    repeatAvg: avg(repeatAvg),
     nan, out, tunnel,
     timeouts: timeouts.length,
     avgFrames: avg(frames),
@@ -121,14 +146,16 @@ for(const c of CANDIDATES){
   const r = evaluate(null, null, null, t);
   results.push({ label: c.label, ...r });
   const bars = r.slotHit.map(v => v === 0 ? '·' : String(Math.min(9, Math.ceil(v / 20)))).join('');
-  console.log(`${c.label.padEnd(14)} 覆盖 ${String(r.covered).padStart(2)}/12  秩相关 ${r.corr.toFixed(3).padStart(7)}  邻档跳变 ${r.jump.toFixed(2)}  分布 ${bars}  超时 ${r.timeouts} NaN ${r.nan} 出界 ${r.out}`);
+  console.log(`${c.label.padEnd(14)} 覆盖 ${String(r.covered).padStart(2)}/12  秩相关 ${r.corr.toFixed(3).padStart(7)}  邻档跳变 ${r.jump.toFixed(2)}  重复 均${(r.repeatAvg*100).toFixed(0)}%/最差${(r.repeat*100).toFixed(0)}%  分布 ${bars}  超时 ${r.timeouts} NaN ${r.nan} 出界 ${r.out}`);
 }
 
 console.log('\n（分布条：每槽命中量的对数刻度，· = 完全没球落进去；左=0号槽，右=11号槽）');
 console.log('  理想：覆盖 12/12、秩相关接近 -1（大力→左边）、邻档跳变小（好微调）');
+console.log('        「重复」= 同一力度反复打时最常见落点占比 —— 越低越不会「每次都一样」');
+console.log('        （这一项曾经是 100%：满力量 12/12 都落同一个口，见 README「发射手感」）');
 
 if(results.length > 1){
   const best = results.slice().sort((a, b) =>
     (b.covered - a.covered) || (Math.abs(b.corr) - Math.abs(a.corr)) || (a.jump - b.jump))[0];
-  console.log(`\n>>> 综合最优：${best.label}  （覆盖 ${best.covered}/12，秩相关 ${best.corr.toFixed(3)}，邻档跳变 ${best.jump.toFixed(2)}）`);
+  console.log(`\n>>> 综合最优：${best.label}  （覆盖 ${best.covered}/12，秩相关 ${best.corr.toFixed(3)}，邻档跳变 ${best.jump.toFixed(2)}，同力度重复 ${(best.repeat*100).toFixed(0)}%）`);
 }

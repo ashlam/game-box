@@ -118,9 +118,13 @@ function load(){
   const step = (dt = DT) => { perfNow += 16; win.__pinballStep(dt); };
   const run = n => { for(let i = 0; i < n; i++) step(); };
 
-  /** 开一局（可选指定倍数），返回是否成功 */
-  function openRound({ seed = null, bet = 5, mult = 2, skipAnim = true } = {}){
-    win.__pinballReset(seed);
+  /** 开一局（可选指定倍数），返回是否成功。
+   *  seed 传 null = **不 reset**，沿用当前局的 RNG 与钉阵（连续对局用）。
+   *  ★ 每局前自动给代币充值：实验台要连打几百发，玩家只有 200 枚，
+   *    不充值就会打到没钱、后续全部「发射失败」，量出来的分布是假的。 */
+  function openRound({ seed = null, bet = 5, mult = 2, skipAnim = true, fresh = true } = {}){
+    if(fresh) win.__pinballReset(seed);
+    if(win.__pinballSetCoins) win.__pinballSetCoins(100000);
     if(mult) win.__pinballForceMult(mult);
     win.__pinballInsert(bet);
     const ok = win.__pinballStart();
@@ -129,33 +133,74 @@ function load(){
   }
 
   /** 打一发并等它自然落槽（真实物理）。返回观测数据。
-   *  ★ 落点必须在飞行途中抓 —— 结算展示结束后 endRound() 会把 landSlot 清掉。 */
-  function shoot(power, { seed = null, bet = 5, mult = 2, maxFrames = 2400 } = {}){
-    openRound({ seed, bet, mult });
+   *  ★ 落点必须在飞行途中抓 —— 结算展示结束后 endRound() 会把 landSlot 清掉。
+   *  ★ 默认 **不 reset**：一局一局连着打，RNG 持续推进。
+   *    这很重要 —— 每发都 reset 的话出手抖动序列完全相同，
+   *    「同力度 = 同落点」是必然的，量出来的多样性是假的（实验台踩过这个坑）。
+   *  ★ 循环在「落点已定」时就停，**不等结算动画**：
+   *    settle() 会把 mode 置成 'drop' 并倒计时 SETTLE_T（2 秒），
+   *    如果等 phase 变化，那 2 秒会被算进「飞行时长」——
+   *    实测因此量出「每发飞 10 秒」的假结论（真实飞行约 4 秒）。 */
+  function shoot(power, { seed = null, bet = 5, mult = 2, maxFrames = 2400, fresh = false } = {}){
+    openRound({ seed, bet, mult, fresh });
     const s0 = M();
-    win.__pinballLaunch(power);
+    if(!win.__pinballLaunch(power)) return { slot: -1, frames: 0, nan: false, out: false,
+                                            tunnel: false, timedOut: false, won: false,
+                                            gain: 0, coins: 0, flightT: 0, launchFailed: true };
     let f = 0, nan = false, out = false, tunnel = false;
     let landed = -1, won = false, gain = 0, coinsAt = 0, flightT = 0;
+    let tunnelInfo = null, flyFrames = 0;
+    let prevX = null, prevY = null, maxPen = 0, maxPenTouch = 0, maxPenStep = 0;
+    /* ★ 循环条件用「phase 还是 fly」而不是「landed<0」：
+       settle() 之后 phase 仍是 'fly'（要播结算动画），但 landSlot 已经定了。
+       所以用 phase 判循环、用 landSlot 判「什么时候记下结果」，
+       同时 flyFrames 只在 landSlot 还没定时累加 —— 这样飞行时长不含结算动画。 */
     while(M().phase === 'fly' && f < maxFrames){
       step(); f++;
       const b = M().ball;
       if(b){
-        flightT = Math.max(flightT, b.flightT);
+        if(M().landSlot < 0){
+          flyFrames++;
+          flightT = Math.max(flightT, b.flightT);
+        }
         if(![b.x, b.y, b.vx, b.vy].every(Number.isFinite)) nan = true;
         if(b.x < s0.CX_MIN - 0.7 || b.x > s0.CX_MAX + 0.7) out = true;
         if(b.y < s0.ARC_CY){
+          const lim = s0.RP + s0.RB;
+          /* ★ 区分「真穿钉」与「多钉夹击的残差」：
+             球在密集钉阵里可能同时贴住两颗钉，单趟解算把它推出 A 又压进 B，
+             帧末残留约 1px 重叠 —— 那不是「穿过去」。
+             真穿钉的特征是**单帧位移接近或超过 RB+RP**（球整颗跨过钉子）。
+             所以这里一并记录「同时接触几颗钉」与「单帧位移」，供测试判定。 */
+          let touch = 0, deepest = 0;
           for(const p of M().pegs){
             const dx = b.x - p.x, dy = b.y - p.y;
-            if(dx * dx + dy * dy < (s0.RP + s0.RB - 0.8) * (s0.RP + s0.RB - 0.8)) { tunnel = true; break; }
+            const d = Math.sqrt(dx * dx + dy * dy);
+            if(d < lim){ touch++; if(lim - d > deepest) deepest = lim - d; }
+            if(d < lim - 0.8){
+              tunnel = true;
+              if(!tunnelInfo){
+                tunnelInfo = { f, mode: b.mode, x: +b.x.toFixed(2), y: +b.y.toFixed(2),
+                               d: +d.toFixed(2), pen: +(lim - d).toFixed(2),
+                               peg: [+p.x.toFixed(1), +p.y.toFixed(1)],
+                               sp: +Math.hypot(b.vx, b.vy).toFixed(0), flightT: +b.flightT.toFixed(2) };
+              }
+            }
+          }
+          if(deepest > maxPen){
+            maxPen = deepest; maxPenTouch = touch;
+            maxPenStep = (prevX == null) ? 0 : Math.hypot(b.x - prevX, b.y - prevY);
           }
         }
+        prevX = b.x; prevY = b.y;
       }
       if(M().landSlot >= 0 && landed < 0){
         landed = M().landSlot; won = M().landWin; gain = M().landGain; coinsAt = M().coins;
       }
     }
-    return { slot: landed, frames: f, nan, out, tunnel, timedOut: f >= maxFrames,
-             won, gain, coins: coinsAt, flightT };
+    return { slot: landed, frames: flyFrames, totalFrames: f, nan, out, tunnel, tunnelInfo,
+             maxPen: +maxPen.toFixed(2), maxPenTouch, maxPenStep: +maxPenStep.toFixed(2),
+             timedOut: f >= maxFrames, won, gain, coins: coinsAt, flightT, launchFailed: false };
   }
 
   return { win, M, DT, step, run, shoot, openRound, els, ledEls, drawRec, sandbox,

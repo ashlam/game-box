@@ -235,25 +235,75 @@
   let RP = 5;                        // 钉半径
   let G  = 380;                      // 重力
   let REST_WALL = 0.72;              // 墙面恢复系数
-  let REST_PEG  = 0.42;              // 钉恢复系数（★ 调低过：钉太弹会把「力度→落点」打乱）
+  let REST_PEG  = 0.30;              // 钉恢复系数（★ 调低过两次：钉太弹会把「力度→落点」打乱，
+                                     //    还会让球在上半场反复弹、飞行时间从 4.6s 涨到 7.5s）
 
   /* ---- 钉阵（可调） ----
-     ★ 这几组值是 tools/bench_pinball.js 扫出来的（见 README「发射手感」一节）：
-       钉距 66 / 6 行 + 钉弹力 0.42 → 力度与落点的秩相关 -0.859、邻档跳变 1.85，
-       而初版是 -0.680 / 2.80。也就是说**调这几颗钉，把「凭运气」变成了「凭手感」**。 */
-  let PEG_ROWS = 6, PEG_Y0 = 222, PEG_DY = 44, PEG_DX = 66;
-  let PEG_JX = 11, PEG_JY = 9;       // 钉位抖动幅度
+     ★★ 最关键的一条（「满力量每次落同一个口」的根因，踩了很久）：
+        钉阵必须**铺满圆弧内侧的整个可用区域**，不能只在下面摆几行。
+        原因：球是在**圆弧导轨**上爬到某个角度才脱轨的，脱轨点 y 在 140~300 之间
+        （弧顶 y=141）。原来钉阵从 y=216 才开始 → 满力量在 y≈164 脱轨时，
+        **整个钉阵都在它下方之外**，球直接自由落体穿过空隙、一颗钉都撞不到
+        （实测「撞钉=0」），于是每次路线完全相同、必然落同一个口。
+        现在从弧顶下方一路铺到 PEG_END，球无论从哪个角度脱轨都必然进入钉阵。
+
+     ★ 密度与弹力是**飞行时长**的主要旋钮（tools/bench_pinball.js 可量）：
+       钉太密 / 太弹 → 球在上半场反复弹、悬停，实测飞行中位 7.5 秒、最长 14 秒，
+       根本没法玩。现在的值让飞行中位 ≈ 4.6 秒、最长 ≈ 7.5 秒（240 发实测无一发超 8 秒）。 */
+  let PEG_ROWS = 12, PEG_Y0 = 172, PEG_DY = 38, PEG_DX = 44;
+  let PEG_END = 456;                 // ★ 钉阵最低铺到哪个 y（再往下留给出槽的空档）
+  let PEG_JX = 15, PEG_JY = 12;      // 钉位抖动幅度（错落排布，照照片）
+
+  /* ---- 挡板（可调） ----
+     ★ 照片里能看到的挡板结构就是**出口之间的金属分流叶片**（每个出口上方一根竖条），
+       作用是让「落在分界线上的球」随机归到左边或右边那个口，不会卡在缝里。
+     ★ 我一度还加了「两侧回中挡板」（把贴墙下落的球顶回中间）。它确实能打散
+       「贴墙直落」，但**代价太大**：实测秩相关从 -0.79 掉到 -0.2（力度与落点几乎脱钩），
+       等于把技巧性换成了随机性。真正解决「满力量总落同一个口」的是
+       出手方向抖动（DIR_JIT）+ 修掉「墙/管壁把球夹死」的几何 bug，
+       所以回中挡板**默认关掉**（KICK_YS 为空），只在实验台里作为对照保留。 */
+  let BAFFLE_R = 3.2;                // 挡板粗细（胶囊体半径）
+  let REST_BAFFLE = 0.55;            // 挡板恢复系数
+  let KICK_LEN = 30;                 // 回中挡板长度（默认不生成，见上）
+  let KICK_YS = [];                  // ★ 空数组 = 不生成回中挡板（保留参数供实验台对比）
+  let BLADE_R = 2.6;                 // 出口分流叶片的粗细
+  let BLADE_ON = true;               // 出口上方分流叶片开关
 
   /* ---- 发射（可调） ---- */
   /* ★ 释放角：球被圆弧导轨「导」到 phiRel 才脱轨。
      这是实机的做法 —— 发射力度决定球沿导轨爬多高、绕多远，
      所以「力度 → 释放角 → 落点」是一条单调可控的链，而不是纯看运气。 */
-  let PHI_MIN = 0.10, PHI_MAX = 3.00;   // 释放角范围（弧度，0=正右，π=正左）
+  let PHI_MIN = 0.62, PHI_MAX = 2.30;   // 释放角范围（弧度，0=正右，π=正左）
+  /* ★ PHI_MAX 为什么是 2.30 而不是 π：
+     释放点 x = ARC_CX + RC·cos φ。φ→π 时 x→22，也就是**正好贴在左墙上**，
+     切线几乎竖直向下 —— 球只是贴着墙往下掉，出手抖动完全扰动不了它，
+     实测满力量 12/12 都落最左那个口（用户报的就是这个）。
+     取 2.30 rad（132°）时释放点 x ≈ 180+159·cos132° ≈ 74，离墙 53px，
+     球带着明显的水平速度飞出去，必须穿过钉阵 → 抖动被放大、落点自然分散。
+     同时力度仍然单调决定「从哪一侧进入」，技巧性保留（秩相关约 -0.8）。 */
   let VREL_MIN = 70, VREL_MAX = 190;    // 脱轨时的速度范围（低力度「滴」下来，高力度射出去）
   /* ★ 出手抖动：真机同一个人同一力度也会差一点点（球在管里的微小差异被放大）。
      没有它的话「同力度 = 同一落点」完全确定，会被一次试出来反复刷同一个亮灯口。
      抖动幅度必须远小于力度分辨率，否则「可控」就没了。 */
   let PHI_JIT = 0.045, VREL_JIT = 9;
+  /* ★ 出手方向抖动（弧度）：脱轨瞬间给速度方向加一点点随机偏转。
+     为什么光有上面两个抖动还不够（这是实测挖出来的真问题）：
+       释放点 x = ARC_CX + RC·cos(φ)，对 φ 求导是 −RC·sin(φ)。
+       在 φ→0 和 φ→π（也就是**力度最小和最大的两端**）sin φ → 0，
+       于是「角度抖动」几乎不改变释放点位置 —— 实测满力量连打 8 发，
+       释放点 x 的极差只有 0.78px，轨迹当然几乎一模一样、落点总在同一个口。
+     而速度方向的抖动**与释放角无关**：它直接改变初始速度矢量，
+     在任何释放角下都能产生横向散布，所以两端也散得开。
+     物理上也说得通：真机的球出膛时方向本来就有微小偏差，会被后续行程放大。 */
+  let DIR_JIT = 0.06;                // 脱轨速度方向抖动（弧度）
+  /* ★★ 指向圆心的内偏角（弧度）—— 这是「满力量每次落同一个口」的**物理根因**修法。
+     球在导轨上脱轨时位置恰好在半径 RC 的弧上，而速度是**切向**的；
+     切向运动让球离圆心越来越远 → 它立刻贴住最外圈（弧壁/竖墙）往下滑，
+     永远进不了半径 < RC−RP−RB 的钉阵区（实测「撞钉=0」），于是每发路线完全相同。
+     真机的导轨出口是**朝内**的，球一离开导轨就往钉阵里钻。
+     所以这里把脱轨速度整体向圆心偏一个角度（φ<90° 偏向右下，φ>90° 偏向左下，
+     统一写成「沿 −径向 的分量」）。 */
+  let INWARD = 0.60;                 // 内偏角（0 = 纯切向，0.6 rad ≈ 34°）
   /* ---- 场地几何（360×640 内） ---- */
   const ARC_CX = 180, ARC_CY = 300, RC = 159;   // 顶部圆弧：球心所在半径
   const CX_MIN = ARC_CX - RC;                   // 球心 x 下限 = 21
@@ -278,23 +328,30 @@
      所以 peak = φ>90° ? 1 : sinφ。参数本体在上面的「数值」区（let，实验台可调）。 */
   const CHARGE_T = 1.15;             // 满蓄力秒数
   const FLIGHT_CAP = 12;             // 单球超时兜底（正常远小于此值）
+  const FLIGHT_SOFT = 6.0;           // ★ 超过这么久就开始温和下压（收长尾，见 stepBall）
+  const FLIGHT_HARD = 20;            // ★ 硬上限：超过就直接强制结算（防卡死，见 stepBall）
   const STUCK_V = 26, STUCK_T = 0.7; // 卡住判定：速度低于此值持续这么久就踢一脚
 
   const ROLL_T = 0.85;               // 倍数滚动动画时长
   const LAMP_DT = 0.075;             // 逐个点亮出口灯的间隔
   const SETTLE_T = 2.0;              // 结算展示时长（之后回投币阶段）
 
-  /** 力度 → (释放角, 进弧速度) —— 抽成函数，游戏与测试/实验台共用同一份。
+  /** 力度 → (释放角, 进弧速度, 出手方向抖动) —— 抽成函数，游戏与测试/实验台共用同一份。
    *  jitter = true 时加一点出手抖动（真机手感）；实验台要测纯映射就传 false。 */
   function aimOf(p, jitter){
     p = clamp(p, 0, 1);
     let phiRel = lerp(PHI_MIN, PHI_MAX, p);
     let vRel   = lerp(VREL_MIN, VREL_MAX, p);
-    if(jitter !== false){ phiRel += (rng() - 0.5) * PHI_JIT; vRel += (rng() - 0.5) * VREL_JIT; }
+    let dirJit = 0;
+    if(jitter !== false){
+      phiRel += (rng() - 0.5) * PHI_JIT;
+      vRel   += (rng() - 0.5) * VREL_JIT;
+      dirJit  = (rng() - 0.5) * DIR_JIT;
+    }
     /* 要爬到 φRel 就得先越过弧上最费能量的点（φ>90° 时是 90°，否则是 φ 本身） */
     const peak = phiRel > Math.PI / 2 ? 1 : Math.sin(phiRel);
     const v0 = Math.sqrt(Math.max(0, vRel * vRel + 2 * G * RC * peak));
-    return { phiRel, vRel, v0, vLaunch: Math.sqrt(v0 * v0 + 2 * G * LANE_LEN) };
+    return { phiRel, vRel, v0, dirJit, vLaunch: Math.sqrt(v0 * v0 + 2 * G * LANE_LEN) };
   }
 
   /* ---------------- 随机（本局种子可复现） ---------------- */
@@ -321,6 +378,7 @@
 
   let ball = null;
   let pegs = [];
+  let baffles = [];        // ★ 挡板（胶囊体线段）：堵住两侧贴墙直落的通道
   let pegHits = 0;
 
   let charge = 0, charging = false;
@@ -407,26 +465,123 @@
     if(chargeGain && ac){ try{ chargeGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.03); }catch(e){} chargeGain = null; }
   }
 
-  /* ---------------- 钉阵 ---------------- */
+  /* ---------------- 钉阵 + 挡板 ---------------- */
   /* ★ 钉阵按「本局种子」生成（reset 时重掷），同一局内固定 —— 这样玩家能学会这一局的
      场地、把「蓄力 → 落点」练成手感；换一局才换布局。 */
+  /** 点到线段的距离（生成钉阵时用来给挡板留安全间距） */
+  function distSeg(px, py, x1, y1, x2, y2){
+    const ex = x2 - x1, ey = y2 - y1;
+    const len2 = ex * ex + ey * ey;
+    let t = len2 > 0 ? ((px - x1) * ex + (py - y1) * ey) / len2 : 0;
+    t = t < 0 ? 0 : (t > 1 ? 1 : t);
+    return hypot(px - (x1 + ex * t), py - (y1 + ey * t));
+  }
+
   function genPegs(){
     pegs = [];
-    const ROWS = PEG_ROWS, Y0 = PEG_Y0, DY = PEG_DY, DX = PEG_DX;
-    for(let r = 0; r < ROWS; r++){
-      const y = Y0 + r * DY;
+    const DX = PEG_DX, DY = PEG_DY;
+    /* ★★ 铺满整个可用区域（这是修「满力量每次落同一个口」的核心改动）。
+       分两段铺：
+         ① 圆弧区（y < ARC_CY）：钉阵必须跟着**弧的形状**走 —— 按半径一层层往里排，
+            这样球沿导轨爬到任何角度脱轨，脚下都立刻是钉阵，不会「从钉阵上方飞过去」。
+         ② 竖直区（y ≥ ARC_CY）：按普通横排铺到接近口线。
+       ⚠️ 踩过的坑：原来只在 y≥216 摆横排，而球在 y≈164 就脱轨了 ——
+          整个钉阵都在它下方之外，球自由落体穿过旁边的空隙，一颗钉都撞不到
+          （实测「撞钉=0」），于是每发路线完全相同。 */
+    const rows = [];
+    /* ① 圆弧区：按「离弧顶多深」分层，每层的可用半宽由圆弧决定 */
+    for(let y = ARC_CY - RC + 26; y < ARC_CY; y += DY){
+      rows.push({ y, arc: true });
+    }
+    /* ② 竖直区：横排（铺到 PEG_END 为止，不一直铺到口线） */
+    for(let y = ARC_CY; y <= Math.min(mouthY - 46, PEG_END); y += DY){
+      rows.push({ y, arc: false });
+    }
+    let r = 0;
+    for(const row of rows){
+      const y = row.y;
+      let x0, x1;
+      if(row.arc){
+        /* 该高度上圆弧内侧的可用半宽（扣掉钉半径与安全间距） */
+        const dy = ARC_CY - y;
+        const half = Math.sqrt(Math.max(0, RC * RC - dy * dy));
+        x0 = ARC_CX - half + RP + RB + 4;
+        x1 = ARC_CX + half - RP - RB - 4;
+      } else {
+        x0 = CX_MIN + RB + RP + 2;
+        x1 = CX_MAX - RB - RP - 2;
+      }
+      /* 管道区：右侧那一段永远不要钉（球要从管道里上来） */
+      const x1Safe = Math.min(x1, LANE_WALL_X - RB - RP - 2);
+      if(x1Safe <= x0) { r++; continue; }
       const off = (r % 2) ? DX / 2 : 0;
-      for(let x = 30 + off; x <= 330; x += DX){
+      for(let x = x0 + off; x <= x1Safe; x += DX){
         const px = x + (rng() - 0.5) * PEG_JX;
         const py = y + (rng() - 0.5) * PEG_JY;
-        if(py > mouthY - 46) continue;                                   // 别贴着出口口线
-        if(px < CX_MIN + RP + 3 || px > CX_MAX - RP - 3) continue;       // 别贴着墙
-        /* 圆弧区：钉必须在弧内侧，否则会挡住球在导轨上的路 */
-        if(py < ARC_CY && hypot(px - ARC_CX, py - ARC_CY) > RC - RP - RB - 6) continue;
-        /* 管道区：钉不能伸进发射管道 */
-        if(py > ARC_CY && px > LANE_WALL_X - RP - RB - 2) continue;
+        if(py > mouthY - 46) continue;
+        /* 钉必须离墙足够远，否则球会被「墙 + 钉」夹死（弹珠乐园 WALL_PEG_GAP 那条坑）。
+           球贴墙时球心 x = CX_MIN，球与钉不重叠要求中心距 ≥ RB+RP，
+           所以钉心必须 ≥ CX_MIN + RB + RP，否则贴墙的球必然与它重叠、被两边对推卡死。 */
+        if(px < CX_MIN + RB + RP + 2 || px > CX_MAX - RB - RP - 2) continue;
+        /* 圆弧区：钉要在弧内侧，别挡住球在导轨上的路 */
+        if(py < ARC_CY && hypot(px - ARC_CX, py - ARC_CY) > RC - RP - RB - 4) continue;
+        /* 管道区：离管道壁留出 RB+RP，否则会被「管壁 + 钉」夹死（实测卡在 x=312） */
+        if(px > LANE_WALL_X - RB - RP - 2) continue;
+        /* 钉要离**挡板**也留够间距（实测卡在 (309.9,393.4)：一边钉一边挡板对着推）。
+           球贴着挡板时球心离挡板轴 RB+BAFFLE_R；要碰不到钉则
+             dist(钉, 挡板) > 2·RB + RP + 挡板半径
+           挡板是胶囊，所以用「点到线段距离」。 */
+        let tooClose = false;
+        for(const bf of baffles){
+          if(distSeg(px, py, bf.x1, bf.y1, bf.x2, bf.y2) <= 2 * RB + RP + bf.r) { tooClose = true; break; }
+        }
+        if(tooClose) continue;
+        /* ★★ 两颗钉之间必须留出「球能通过」的净空 —— 这是**卡死**的根因（实测抓到的）：
+           球在 (162,291) 处以速度 3 卡了 370 帧（整发拖到 11.3 秒），
+           一查那附近有两颗钉 (152.2,285.4) 与 (167.4,301.6)，钉心距只有 **22.15**，
+           而球要通过需要 > 2·(RB+RP) = **23**。球正好被楔在这个缝里，
+           踢一脚又被两边的钉推回原位（速度偶尔超过阈值就把 stuckT 清零，于是永远踢不出去）。
+           几何推导：球心到每颗钉心都 ≥ RB+RP，所以球心被限制在两钉连线的中垂面上；
+           球能「挤过去」的条件是两钉心距 > 2·(RB+RP)。
+           留一点余量取 2·(RB+RP) + 1.5，让球能顺滑通过而不是勉强擦过。 */
+        const minSep = 2 * (RB + RP) + 1.5;
+        let wedged = false;
+        for(const q of pegs){
+          const dx = px - q.x, dy = py - q.y;
+          if(dx * dx + dy * dy < minSep * minSep){ wedged = true; break; }
+        }
+        if(wedged) continue;
         pegs.push({ x: px, y: py, hit: 0 });
       }
+      r++;
+    }
+  }
+
+  /* ★ 挡板（胶囊体线段）。为什么必须有它 —— 这是用户实测出来的 bug：
+     光靠钉阵挡不住「贴墙直落」。钉是离散的，两侧各留出一条竖直通道，
+     球一旦贴上墙就一路滑到最左/最右的出口，路径**完全确定**
+     （实测满力量 6/6 都落同一个口）。挡板是唯一能从几何上堵死这条通道的东西。
+
+     几何要点（推错过一次，记下来）：
+       要让球从「贴左墙向下」变成「往右弹开」，球必须撞到一个**法线朝右上**的面。
+       法线朝右上 ⇒ 面是「外高内低」的斜坡（外侧端点 y 小、内侧端点 y 大）。
+       写成线段就是：外端 (CX_MIN-6, y) → 内端 (CX_MIN+KICK_LEN, y+26)。
+       ⚠️ 外端要**埋进墙里**（x 比 CX_MIN 小 6px），否则球会卡在「斜坡端点与墙」
+          之间那个死角里左右反复弹（没有 pocket 才安全）。 */
+  function genBaffles(){
+    baffles = [];
+    /* 出口上方的金属分流叶片（照片里每个出口之间那根竖条）：
+       把「球落在分界线上」变成「随机归到左边或右边那个口」。 */
+    if(BLADE_ON){
+      for(let i = 1; i < N_SLOT; i++){
+        const x = fieldL + slotW * i;
+        baffles.push({ x1:x, y1:mouthY - 38, x2:x, y2:mouthY - 12, r:BLADE_R, kind:'blade' });
+      }
+    }
+    /* 两侧「回中挡板」：外高内低的斜坡，把贴墙下落的球顶回场地中间 */
+    for(const y of KICK_YS){
+      baffles.push({ x1:CX_MIN - 6, y1:y, x2:CX_MIN + KICK_LEN, y2:y + 26, r:BAFFLE_R, kind:'kick' });
+      baffles.push({ x1:CX_MAX + 6, y1:y, x2:CX_MAX - KICK_LEN, y2:y + 26, r:BAFFLE_R, kind:'kick' });
     }
   }
 
@@ -444,6 +599,8 @@
     lampStep = 0; lampAcc = 0; lampOrder = [];
     landSlot = -1; landWin = false; landGain = 0; settleT = 0;
     banner = null; fx = []; floats = [];
+    /* ★ 先挡板、后钉阵：genPegs 要拿挡板位置算安全间距（否则球会被「钉+挡板」夹死） */
+    genBaffles();
     genPegs();
     syncUI();
   }
@@ -501,7 +658,7 @@
     if(!aimReady()) return false;
     const a = aimOf(power);
     ball = { mode:'lane', x:LANE_X, y:LANE_Y0, vx:0, vy:-a.vLaunch,
-             phi:0, v0:0, phiRel:a.phiRel, vRel:a.vRel,
+             phi:0, v0:0, phiRel:a.phiRel, vRel:a.vRel, dirJit:a.dirJit,
              flightT:0, stuckT:0, chargeP:clamp(power, 0, 1) };
     phase = 'fly';
     chargeOff();
@@ -528,8 +685,18 @@
     const v = Math.sqrt(v2);
     b.x = ARC_CX + RC * c;
     b.y = ARC_CY - RC * s;
-    b.vx = -v * s;
-    b.vy = -v * c;
+    /* 切线方向（φ 增大方向）= (−sinφ, −cosφ)；指向圆心 = (−cosφ, +sinφ)。
+       两者**恰好垂直**（点积 = sinφcosφ − cosφsinφ = 0），而「从切线转到朝圆心」
+       是**顺时针 90°**（用 atan2 验算：φ=0 时切线 −π/2、朝圆心 π；
+       φ=90° 时切线 π、朝圆心 π/2 —— 都是**减小** π/2）。
+       ★ 所以内偏必须写成 `− INWARD`。我一开始写成 `+ INWARD`，
+         等于把球**朝外**（朝弧壁）推 —— 结果低力度球撞弧壁乱弹到中间、
+         满力量贴墙直落，而且「力度→落点」的相关性被冲掉（秩相关只剩 −0.28）。
+         这个符号错误是「满力量每次落同一个口」的最后一个成因。 */
+    const base = Math.atan2(-v * c, -v * s);
+    const ang = base - INWARD + (b.dirJit || 0);
+    b.vx = v * Math.cos(ang);
+    b.vy = v * Math.sin(ang);
     b.mode = 'fly';
   }
 
@@ -555,6 +722,43 @@
       }
     }
   }
+  /** ★ 挡板碰撞：胶囊体（线段 + 半径）vs 圆。
+   *  做法是标准的两步：① 求球心到线段最近点；② 若距离 < RB + r 就沿法线推出去并反射。
+   *  ⚠️ 必须用「线段最近点」而不是「无限长直线」—— 否则球会撞到挡板延长线上的空气。
+   *  ⚠️ 法线方向由最近点指向球心；退化情形（球心正好落在线段上，d≈0）用法线兜底，
+   *     否则会除以 0 得到 NaN，球直接飞出场外。 */
+  function hitBaffles(b){
+    for(let i = 0; i < baffles.length; i++){
+      const bf = baffles[i];
+      const ex = bf.x2 - bf.x1, ey = bf.y2 - bf.y1;
+      const len2 = ex * ex + ey * ey;
+      let t = len2 > 0 ? ((b.x - bf.x1) * ex + (b.y - bf.y1) * ey) / len2 : 0;
+      t = t < 0 ? 0 : (t > 1 ? 1 : t);
+      const cx = bf.x1 + ex * t, cy = bf.y1 + ey * t;
+      let dx = b.x - cx, dy = b.y - cy;
+      const rr = RB + bf.r;
+      let d2 = dx * dx + dy * dy;
+      if(d2 >= rr * rr) continue;
+      let d = Math.sqrt(d2), nx, ny;
+      if(d < 1e-6){
+        /* 球心正好压在挡板中轴上：取挡板法线当推出方向 */
+        const il = Math.sqrt(len2) || 1;
+        nx = -ey / il; ny = ex / il;
+        if(nx * b.vx + ny * b.vy > 0){ nx = -nx; ny = -ny; }
+        d = 0;
+      } else { nx = dx / d; ny = dy / d; }
+      b.x = cx + nx * rr;
+      b.y = cy + ny * rr;
+      const vn = b.vx * nx + b.vy * ny;
+      if(vn < 0){
+        b.vx -= (1 + REST_BAFFLE) * vn * nx;
+        b.vy -= (1 + REST_BAFFLE) * vn * ny;
+        bf.hit = 0.22;
+        sndWall();
+      }
+    }
+  }
+
   function hitWalls(b, px){
     if(b.y < ARC_CY){
       /* 上半场：外边界是圆弧（球必须待在弧内侧） */
@@ -614,6 +818,7 @@
     b.y += b.vy * h;
     hitPegs(b);
     hitWalls(b, px);
+    hitBaffles(b);
   }
   function stepBall(b, dt){
     const SUB = 4, h = dt / SUB;
@@ -624,9 +829,31 @@
         b.flightT += h;
         const sp = hypot(b.vx, b.vy);
         if(sp < STUCK_V){ b.stuckT += h; } else b.stuckT = 0;
-        if(b.stuckT > STUCK_T){ b.vy += 60; b.vx += (rng() - 0.5) * 70; b.stuckT = 0; }   // 卡住踢一脚
-        if(b.flightT > FLIGHT_CAP && b.mode === 'fly'){ b.vy += 400; }                       // 超时兜底：往下压
+        if(b.stuckT > STUCK_T){
+          /* 卡住踢一脚。★ 只往上加力是不够的（球可能被夹在挡板与钉之间，越推越死），
+             所以按「卡住的次数」递增力度，并且**加一点确定性的水平推力**把它推离夹缝。 */
+          b.stuckN = (b.stuckN || 0) + 1;
+          b.vy += 60 * b.stuckN;
+          b.vx += (rng() - 0.5) * 70 + (b.stuckN > 2 ? (b.x > ARC_CX ? -90 : 90) : 0);
+          b.stuckT = 0;
+        }
+        if(b.flightT > FLIGHT_CAP && b.mode === 'fly'){ b.vy += 400; }
+        /* ★ 长尾收敛：正常一发 5.5 秒内就落槽了，但极少数球会在钉阵里「低速赖着不走」
+           （实测 40 发里会有 1 发拖到 10~12 秒）。这种球速度不算「卡住」（没触发上面的
+           STUCK 逻辑），所以给它一个**随时间温和增强的下压**，把长尾收掉。
+           注意是「温和」（最多把重力加重约一倍），不是瞬移式加力 ——
+           这样正常球（5.5 秒内落槽）完全不受影响，只有赖着的球被慢慢劝下去。 */
+        if(b.flightT > FLIGHT_SOFT && b.mode === 'fly'){
+          const k = Math.min(2.5, (b.flightT - FLIGHT_SOFT) / 1.5);
+          b.vy += 150 * k * h;
+        }
       }
+      /* ★ 硬保证：球绝不允许无限飞下去。
+         以前只在 flightT 超时时「往下加力」，但被夹死的球照样到不了口线 ——
+         实测夹住一次之后，后续每一发都返回「没落点」，整局卡死。
+         现在超过 FLIGHT_HARD 就**强制结算**（按当前 x 归到某个出口），
+         这是兜底里的兜底：宁可这一次落点略突兀，也不能让游戏卡住。 */
+      if(b.mode === 'fly' && b.flightT > FLIGHT_HARD){ settle(); return; }
       if(b.mode === 'fly' && b.y >= mouthY){ settle(); return; }
     }
   }
@@ -708,6 +935,7 @@
       if(f.life <= 0) floats.splice(i, 1);
     }
     for(const p of pegs) if(p.hit > 0) p.hit = Math.max(0, p.hit - dt);
+    for(const bf of baffles) if(bf.hit > 0) bf.hit = Math.max(0, bf.hit - dt);
   }
 
   /* ---------------- 主步进 ---------------- */
@@ -832,6 +1060,49 @@
         ctx.beginPath(); ctx.arc(p.x, p.y, RP + 4 + p.hit * 10, 0, 7);
         ctx.strokeStyle = 'rgba(255,190,70,' + (p.hit * 2.6) + ')'; ctx.lineWidth = 1.6; ctx.stroke();
       }
+    }
+  }
+
+  /** ★ 挡板画成照片里那种「银色金属条」：深色描边 + 亮面高光。
+   *  画成胶囊（线段两端各一个圆头）而不是细矩形 —— 与碰撞用的胶囊体一致，
+   *  否则会出现「看着没碰到却被弹开」的观感错位。 */
+  function drawBaffles(){
+    for(const bf of baffles){
+      const hit = bf.hit > 0;
+      const il = Math.hypot(bf.x2 - bf.x1, bf.y2 - bf.y1) || 1;
+      const ux = (bf.x2 - bf.x1) / il, uy = (bf.y2 - bf.y1) / il;
+      /* 高光沿法线偏移一点，做出圆柱反光 */
+      const nx = -uy, ny = ux;
+      ctx.lineCap = 'round';
+      /* 外描边 */
+      ctx.beginPath();
+      ctx.moveTo(bf.x1, bf.y1); ctx.lineTo(bf.x2, bf.y2);
+      ctx.strokeStyle = 'rgba(6,10,34,.9)'; ctx.lineWidth = bf.r * 2 + 2.4; ctx.stroke();
+      /* 金属主体 */
+      const g = ctx.createLinearGradient(
+        bf.x1 - nx * bf.r, bf.y1 - ny * bf.r,
+        bf.x1 + nx * bf.r, bf.y1 + ny * bf.r);
+      if(hit){
+        g.addColorStop(0, '#fff3d0'); g.addColorStop(0.5, '#ffb03a'); g.addColorStop(1, '#a8631a');
+      } else {
+        g.addColorStop(0, '#8f9dc0'); g.addColorStop(0.42, '#ffffff');
+        g.addColorStop(0.62, '#d3ddf2'); g.addColorStop(1, '#6d7ba0');
+      }
+      ctx.beginPath();
+      ctx.moveTo(bf.x1, bf.y1); ctx.lineTo(bf.x2, bf.y2);
+      ctx.strokeStyle = g; ctx.lineWidth = bf.r * 2; ctx.stroke();
+      /* 端点圆头（让胶囊看起来是圆的） */
+      for(const [ex, ey] of [[bf.x1, bf.y1], [bf.x2, bf.y2]]){
+        ctx.beginPath(); ctx.arc(ex, ey, bf.r, 0, 7);
+        ctx.fillStyle = hit ? '#ffc257' : '#c9d4ea'; ctx.fill();
+      }
+      if(hit){
+        ctx.beginPath();
+        ctx.moveTo(bf.x1, bf.y1); ctx.lineTo(bf.x2, bf.y2);
+        ctx.strokeStyle = 'rgba(255,190,70,' + (bf.hit * 2.4) + ')';
+        ctx.lineWidth = bf.r * 2 + 5; ctx.stroke();
+      }
+      ctx.lineCap = 'butt';
     }
   }
 
@@ -994,6 +1265,7 @@
     ctx.setTransform(S * dprNow, 0, 0, S * dprNow, OFFX * dprNow, OFFY * dprNow);
     ctx.clearRect(0, 0, W, H);
     drawField();
+    drawBaffles();
     drawPegs();
     drawSlots();
     drawBall();
@@ -1216,6 +1488,7 @@
     ball: ball ? { mode:ball.mode, x:ball.x, y:ball.y, vx:ball.vx, vy:ball.vy,
                    phi:ball.phi, v0:ball.v0, flightT:ball.flightT } : null,
     pegs: pegs.map(p => ({ x:p.x, y:p.y })),
+    baffles: baffles.map(b => ({ x1:b.x1, y1:b.y1, x2:b.x2, y2:b.y2, r:b.r, kind:b.kind })),
     pegHits, seed,
     charge, charging, rollT, lampStep,
     landSlot, landWin, landGain, settleT,
@@ -1246,6 +1519,11 @@
   window.__pinballPegs     = () => pegs.map(p => ({ x:p.x, y:p.y }));
   window.__pinballDraw     = () => draw();
   window.__pinballEndRound = () => endRound();
+  /** 实验台用：给代币充值。
+   *  ★ 必须有这个 —— 实验台要打几百发才能量出分布，而玩家只有 200 枚代币，
+   *    打到一半就没钱了，后续每一发都「发射失败」返回 slot=-1，
+   *    于是「同力度重复度」被算成 100%（全是 -1）—— 量出来的是假象，不是手感。 */
+  window.__pinballSetCoins = n => { coins = Math.max(0, n | 0); if(coins >= MIN_BET && phase === 'over') phase = 'bet'; syncUI(); return coins; };
   /** 实验台用：运行时改可调参数（只改传进来的键），返回改后的值 */
   window.__pinballTune = o => {
     if(o){
@@ -1258,6 +1536,7 @@
       if('PEG_Y0' in o) PEG_Y0 = o.PEG_Y0;
       if('PEG_DY' in o) PEG_DY = o.PEG_DY;
       if('PEG_DX' in o) PEG_DX = o.PEG_DX;
+      if('PEG_END' in o) PEG_END = o.PEG_END;
       if('PEG_JX' in o) PEG_JX = o.PEG_JX;
       if('PEG_JY' in o) PEG_JY = o.PEG_JY;
       if('PHI_MIN' in o) PHI_MIN = o.PHI_MIN;
@@ -1266,9 +1545,18 @@
       if('VREL_MAX' in o) VREL_MAX = o.VREL_MAX;
       if('PHI_JIT' in o) PHI_JIT = o.PHI_JIT;
       if('VREL_JIT' in o) VREL_JIT = o.VREL_JIT;
+      if('DIR_JIT' in o) DIR_JIT = o.DIR_JIT;
+      if('INWARD' in o) INWARD = o.INWARD;
+      if('BAFFLE_R' in o) BAFFLE_R = o.BAFFLE_R;
+      if('REST_BAFFLE' in o) REST_BAFFLE = o.REST_BAFFLE;
+      if('KICK_LEN' in o) KICK_LEN = o.KICK_LEN;
+      if('KICK_YS' in o) KICK_YS = o.KICK_YS;
+      if('BLADE_R' in o) BLADE_R = o.BLADE_R;
+      if('BLADE_ON' in o) BLADE_ON = o.BLADE_ON;
     }
-    return { G, RP, RB, REST_PEG, REST_WALL, PEG_ROWS, PEG_Y0, PEG_DY, PEG_DX, PEG_JX, PEG_JY,
-             PHI_MIN, PHI_MAX, VREL_MIN, VREL_MAX, PHI_JIT, VREL_JIT };
+    return { G, RP, RB, REST_PEG, REST_WALL, PEG_ROWS, PEG_Y0, PEG_DY, PEG_DX, PEG_JX, PEG_JY, PEG_END,
+             PHI_MIN, PHI_MAX, VREL_MIN, VREL_MAX, PHI_JIT, VREL_JIT, DIR_JIT, INWARD,
+             BAFFLE_R, REST_BAFFLE, KICK_LEN, KICK_YS, BLADE_R, BLADE_ON };
   };
 })();
 </script>
