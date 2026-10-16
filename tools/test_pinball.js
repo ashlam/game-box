@@ -1129,6 +1129,70 @@ section('9.5) ★ 回归：同一力度不能「每次都落同一个出口」')
 }
 
 /* =====================================================================
+   9.8) ★★ 清屏必须覆盖整个画布（手机残留 bug）
+   ===================================================================== */
+section('9.8) ★★ 清屏覆盖整个画布 —— 不会残留转移动画');
+{
+  /* 用户报的 bug：「转移奖励代币的动画特效和文字，在手机上玩的时候似乎有残留，
+     残留位置在游戏盘 ui 和最上方 ui（代币、倍率等）之间」。
+
+     根因：布局是 S = min(availH/VIEW_H, availW/WFIX)，手机通常**宽度受限**，
+     纵向就空出余量（iPhone 14 上上下各 37px）。而 draw() 原来只清
+     (0, VIEW_Y0, W, VIEW_H) —— 那两段余量**从来没被清过**；
+     金币飞行的目标是顶部记分牌里的「代币」格，逻辑坐标 y≈22，
+     正好落在这条永不清理的带里，于是金币和「+N」文字每帧画上去却永不擦除。
+     真实像素实测：那段 37px 带里残留 1194 个不透明像素（8.93%）。
+
+     这条断言用**变换后的设备像素矩形**来验，而不是只看逻辑坐标 ——
+     因为 bug 的本质就是"逻辑坐标算少了"，只看原始参数照样能过。 */
+  reset(1);
+  drawRec.clearRects.length = 0;
+  win.__pinballDraw();
+  ok(drawRec.clearRects.length > 0, '★ draw() 确实调用了 clearRect');
+  /* 画布的设备像素尺寸（假 DOM 里 cv.width/height） */
+  const cvW = els.cv.width, cvH = els.cv.height;
+  ok(cvW > 0 && cvH > 0, '  └ 画布有尺寸（' + cvW + '×' + cvH + '）');
+  /* ★★ 关键：至少有一个清屏矩形完整覆盖整块画布 */
+  const covers = drawRec.clearRects.some(r =>
+    r.x <= 0.5 && r.y <= 0.5 && (r.x + r.w) >= cvW - 0.5 && (r.y + r.h) >= cvH - 0.5);
+  const best = drawRec.clearRects.reduce((a, b) =>
+    (b.w * b.h > (a ? a.w * a.h : -1)) ? b : a, null);
+  ok(covers,
+     '★★ 有一次 clearRect 完整覆盖整个画布（' + cvW + '×' + cvH + ' 设备像素）—— 不留永不清理的边',
+     '最大覆盖 x=' + best.x.toFixed(0) + ' y=' + best.y.toFixed(0) +
+     ' w=' + best.w.toFixed(0) + ' h=' + best.h.toFixed(0));
+  /* ★ 反向证明：如果只清可见窗口，就盖不住画布（说明这条断言真的有效） */
+  const s = M();
+  const onlyVisible = { x: 0, y: s.VIEW_Y0 * s.S, w: s.W * s.S, h: s.VIEW_H * s.S };
+  const visibleCovers = onlyVisible.x <= 0.5 && onlyVisible.y <= 0.5 &&
+                        (onlyVisible.y + onlyVisible.h) >= cvH - 0.5;
+  ok(!visibleCovers,
+     '★★ 反证：「只清可见窗口」确实盖不住整块画布 —— 所以这条断言是有效的',
+     '可见窗口只到 y=' + (onlyVisible.y + onlyVisible.h).toFixed(0) + '，画布高 ' + cvH);
+
+  /* ★ 再验一次"整段演出期间每一帧都清干净"（不是只有第一帧清了） */
+  reset(1); forceMult(4);
+  insert(10); start(); skip();
+  setLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
+  launch(0.5); land(0);
+  let g = 0, pressed = false, badFrames = 0, frames = 0;
+  while(g++ < 900){
+    step();
+    const st = M();
+    if(!pressed && st.inCollect){ win.__pinballCollect(); pressed = true; }
+    drawRec.clearRects.length = 0;
+    win.__pinballDraw();
+    frames++;
+    const okFrame = drawRec.clearRects.some(r =>
+      r.x <= 0.5 && r.y <= 0.5 && (r.x + r.w) >= cvW - 0.5 && (r.y + r.h) >= cvH - 0.5);
+    if(!okFrame) badFrames++;
+    if(!st.inTransfer && !st.inCollect && st.winStage === 0) break;
+  }
+  ok(frames > 100, '  └ 覆盖了整段中奖演出（' + frames + ' 帧）');
+  okNum(badFrames, 0, '★★ 演出期间**每一帧**都完整清屏（没有一帧漏清）');
+}
+
+/* =====================================================================
    10) 绘制：亮灯的口画成红的
    ===================================================================== */
 section('10) 绘制：亮灯的口真的画成红的 / 未亮的是暗的');

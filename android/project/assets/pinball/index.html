@@ -2053,10 +2053,29 @@
   }
 
   function draw(){
+    /* ★★★ 清屏必须覆盖**整个画布**，不能只清"可见窗口"。
+       这是一个真实用户报的 bug（手机上残留的文字/特效卡在游戏盘和顶部记分牌之间）：
+       布局用 S = min(availH/VIEW_H, availW/WFIX) 缩放，手机通常是**宽度受限**，
+       于是纵向空出余量（iPhone 14 上上下各 37px）。
+       原来这里只清 (0, VIEW_Y0, W, VIEW_H)，那两段余量**从来没被清过**；
+       而金币飞行的目标是顶部记分牌里的「代币」格，换算成逻辑坐标 y≈22 ——
+       正好落在这条永不清理的带里。金币和「+N」文字每帧画上去、却永不擦除，
+       像素就一点点累积在那里。实测那段 37px 带里残留 1194 个不透明像素。
+
+       ⚠️ 做法上用**单位变换清整块设备画布**，而不是在逻辑坐标里算边界：
+          S 是浮点、OFFX/OFFY 带小数，硬算「刚好覆盖」容易差一两像素又留细线；
+          而 clearRect 的成本只跟面积相关，多清一圈完全无感，不值得为省这点冒风险。
+          单位变换 = 不依赖 S/OFFX/OFFY，**任何**布局参数下都不可能漏清。 */
+    const cw = cv.width | 0, ch = cv.height | 0;
+    if(cw > 0 && ch > 0){
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, cw, ch);
+    } else {
+      /* 兜底：布局还没量到尺寸（嵌入式预览首帧）时，用足够大的逻辑范围清 */
+      ctx.setTransform(S * dprNow, 0, 0, S * dprNow, OFFX * dprNow, OFFY * dprNow);
+      ctx.clearRect(-W * 4, -H * 4, W * 9, H * 9);
+    }
     ctx.setTransform(S * dprNow, 0, 0, S * dprNow, OFFX * dprNow, OFFY * dprNow);
-    /* ★ 清屏要用**可见窗口**（几何坐标里的 y ∈ [VIEW_Y0, HFIX]），
-       而不是整个 360×640 —— 上面那段本来就不显示，清了也白清。 */
-    ctx.clearRect(0, VIEW_Y0, W, VIEW_H);
     drawField();
     drawBaffles();
     drawPegs();
@@ -2339,6 +2358,9 @@
     credited, N_COIN, winGain: (bet > 0 && mult) ? bet * mult : 0,
     /* ★ 出口字母代号（测试与 UI 用） */
     SLOT_LETTERS: SLOT_LETTERS.slice(), slotLetter,
+    /* ★ 布局/可见窗口参数：给测试验「清屏是否覆盖整块画布」用
+       （手机残留 bug 的回归断言需要自己算一遍"只清可见窗口够不够"） */
+    W, H, VIEW_Y0, VIEW_H, WFIX, HFIX, S, OFFX, OFFY, dprNow,
     aimReady: aimReady(),
     lampCount: mult ? lampCountOf(mult) : 0,
     lampOrder: lampOrder.slice(),

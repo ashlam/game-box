@@ -22,8 +22,12 @@ const HTML = path.join(__dirname, '..', 'web', 'pinball', 'index.html');
    光看游戏状态看不出画没画对（弹珠乐园的地雷 alpha 坑就是这么抓出来的）。 */
 function mkGradient(){ return { addColorStop(){} }; }
 function load(){
-  const drawRec = { texts: [], fills: [], dashes: [], alphas: [], arcs: [] };
+  /* ★ clearRects 记录每次清屏的矩形**和当时的变换矩阵**，
+     用来断言「清屏覆盖了整个画布」——手机残留 bug 就是这么验的：
+     原来只清可见窗口，宽度受限的手机上下各留 37px 永不清理的带。 */
+  const drawRec = { texts: [], fills: [], dashes: [], alphas: [], arcs: [], clearRects: [] };
   function mkCtx(){
+    let m = { a:1, b:0, c:0, d:1, e:0, f:0 };   // 当前变换
     return new Proxy({}, {
       get(t, k){
         if(k === 'createLinearGradient' || k === 'createRadialGradient') return () => mkGradient();
@@ -32,6 +36,18 @@ function load(){
         if(k === 'setLineDash') return a => { drawRec.dashes.push(a ? a.slice() : []); };
         if(k === 'arc') return (x, y, r) => { t._ax = x; t._ay = y; t._ar = r; };
         if(k === 'fill') return () => { drawRec.fills.push({ x: t._ax, y: t._ay, r: t._ar, style: t.fillStyle }); };
+        if(k === 'setTransform') return (a, b, c, d, e, f) => { m = { a, b, c, d, e, f }; };
+        if(k === 'clearRect') return (x, y, w, h) => {
+          /* 把清屏矩形经当前变换映射到**设备像素**，记下它覆盖的范围。
+             只记轴对齐的缩放+平移（本作只用这种），斜切情形退化为记原始值。 */
+          const x0 = m.a * x + m.e, y0 = m.d * y + m.f;
+          const x1 = m.a * (x + w) + m.e, y1 = m.d * (y + h) + m.f;
+          drawRec.clearRects.push({
+            x: Math.min(x0, x1), y: Math.min(y0, y1),
+            w: Math.abs(x1 - x0), h: Math.abs(y1 - y0),
+            raw: [x, y, w, h],
+          });
+        };
         if(k in t) return t[k];
         return () => {};
       },
