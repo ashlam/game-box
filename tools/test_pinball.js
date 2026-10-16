@@ -408,6 +408,151 @@ section('7) ★ 本局结束 → 回投币阶段，必须重新投币');
 }
 
 /* =====================================================================
+   7.5) ★ 结算演出：中奖/没中奖音乐区分 + 代币逐点加上去
+   ===================================================================== */
+section('7.5) ★ 结算演出：输赢音乐不同 + 中奖时代币逐点加上去');
+{
+  /* ---- ① 中奖与没中奖的音乐必须**明显不同**（用户要的「失落 vs 奖励」）---- */
+  const musicOf = won => {
+    const h2 = H.load();
+    const w = h2.win, m = h2.M;
+    w.__pinballReset(1); w.__pinballForceMult(2);
+    w.__pinballInsert(5); w.__pinballStart(); w.__pinballSkipAnim();
+    w.__pinballSetLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
+    /* 音效由 h2 内部计数（每 start() 一个振荡器算一次），量结算前后差值 */
+    const before = h2.sndCount();
+    w.__pinballLaunch(0.5);
+    w.__pinballLand(won ? 0 : 3);
+    return h2.sndCount() - before;
+  };
+  const nWin = musicOf(true);
+  const nLose = musicOf(false);
+  ok(nWin >= 6, '★ 中奖放的是「奖励音乐」（音符 ' + nWin + ' 个 ≥ 6）', '音符 ' + nWin);
+  ok(nLose >= 2, '★ 没中奖也有音效（音符 ' + nLose + ' 个 ≥ 2）', '音符 ' + nLose);
+  ok(nWin > nLose,
+     '★ 中奖的音效比没中奖更丰富（' + nWin + ' > ' + nLose + '）—— 听感上分得出输赢');
+
+  /* ★★ 光比音符个数是不够的：个数一样多但「走向搞反了」（中奖变叹气、
+     没中奖变欢呼）照样能过。所以直接量**频率序列的走向**。
+     判据用「后半段均值 − 前半段均值」：中奖必须往上、没中奖必须往下。 */
+  const musicFreqs = won => {
+    const h2 = H.load();
+    const w = h2.win;
+    w.__pinballReset(1); w.__pinballForceMult(2);
+    w.__pinballInsert(5); w.__pinballStart(); w.__pinballSkipAnim();
+    w.__pinballSetLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
+    const before = h2.sndCount();
+    w.__pinballLaunch(0.5);
+    w.__pinballLand(won ? 0 : 3);
+    return h2.sndFreqsTail(h2.sndCount() - before);
+  };
+  const avg = a => a.reduce((x,y) => x+y, 0) / a.length;
+  const trendOf = a => { const h = Math.ceil(a.length/2); return avg(a.slice(h)) - avg(a.slice(0,h)); };
+  const fWin = musicFreqs(true), fLose = musicFreqs(false);
+  ok(trendOf(fLose) < 0,
+     '★★ 没中奖是**下行**旋律（失落感），走向 ' + Math.round(trendOf(fLose)) + 'Hz',
+     fLose.map(f=>Math.round(f)).join(' '));
+  ok(trendOf(fWin) > 0,
+     '★★ 中奖是**上行**旋律（奖励感），走向 +' + Math.round(trendOf(fWin)) + 'Hz',
+     fWin.map(f=>Math.round(f)).join(' '));
+  ok(avg(fWin) > avg(fLose) * 1.4,
+     '★ 中奖的音区明显更高（' + Math.round(avg(fWin)) + 'Hz vs ' + Math.round(avg(fLose)) + 'Hz）—— 明亮 vs 低沉');
+
+  /* ---- ② 中奖：代币真值立刻全额入账（保证逻辑原子性）---- */
+  reset(1); forceMult(4);
+  insert(10); start(); skip();
+  setLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
+  /* ★ 这一条是**截图发现的 bug**：投币扣了钱，界面却还显示旧数字
+     （因为显示值是另一个变量、投币路径忘了同步它）。
+     现在显示值由 coins 派生，任何改 coins 的路径都自动反映。 */
+  okNum(M().shownCoins, 200 - 10, '★ 投币后显示值也要跟着减（投 10 → 显示 190）');
+  const coinsBefore = M().coins, shownBefore = M().shownCoins;
+  launch(0.5); land(0);
+  const st = M();
+  okNum(st.coins, coinsBefore + 10 * 4, '★ 中奖时代币**真值**立刻全额入账（逻辑不受动画影响）');
+  ok(st.gainRollT > 0, '★ 同时启动了「逐点加钱」演出（gainRollT > 0）');
+  okNum(st.shownCoins, shownBefore, '  └ 演出刚开始：显示值仍是旧余额（还没涨）');
+
+  /* ---- ③ 显示值会一步步追上真值，且**不会超过**真值 ---- */
+  const target = M().coins, from = M().shownCoins;
+  const samples = [];
+  let overshoot = 0, guard = 0;
+  while(M().gainRollT > 0 && guard++ < 600){
+    step();
+    const s = M();
+    if(s.shownCoins > target) overshoot++;
+    samples.push(s.shownCoins);
+  }
+  ok(guard < 600, '★ 「逐点加钱」演出会自己结束（' + guard + ' 帧 ≈ ' + (guard/60).toFixed(2) + 's）');
+  okNum(overshoot, 0, '★ 显示值从不超过真值（不会出现「涨过头再退回」的穿帮）');
+  ok(samples.length >= 5, '★ 显示值确实是一点点涨的（采样 ' + samples.length + ' 次）',
+     samples.slice(0, 8).join('→'));
+  const uniq = new Set(samples).size;
+  ok(uniq >= 4, '★ 中途出现了多个不同的数值（不是直接跳变）—— 不同值 ' + uniq + ' 个');
+  /* ★★ 这一条是**截图发现的 bug**：数字在涨，但界面从没刷新过 ——
+     玩家看到的是全程纹丝不动的 200，只有「最高代币」跳到了 380。
+     所以必须断言「演出中途的显示值既不是旧值也不是新值」。 */
+  const mid = samples[Math.floor(samples.length / 2)];
+  ok(mid !== shownBefore && mid !== target,
+     '★★ 演出中途的显示值既不是旧余额也不是新余额（' + shownBefore + ' → ' + mid + ' → ' + target + '）');
+  ok(samples[samples.length - 1] >= from, '  └ 数值单调不降');
+  okNum(M().shownCoins, target, '★ 演出结束后显示值与真值对齐');
+
+  /* ---- ③b ★★ DOM 层面：界面上的代币文本必须在演出期间真的在变 ----
+     这是**截图才发现**的 bug：内部数值一路在涨，但没人调 syncUI()，
+     玩家看到的代币全程是纹丝不动的 200（只有「最高代币」跳到了 380）。
+     只断言内部状态是抓不住这种「算对了但没画出来」的 bug 的。 */
+  reset(1); forceMult(4);
+  insert(10); start(); skip();
+  setLamps([1,0,0,0,0,0,0,0,0,0,0,0]);
+  launch(0.5); land(0);
+  const coinEl = els.vCoins;
+  const domTexts = [];
+  guard = 0;
+  while(M().gainRollT > 0 && guard++ < 600){
+    step();
+    domTexts.push(coinEl.textContent);
+  }
+  const domUniq = new Set(domTexts).size;
+  ok(domUniq >= 4,
+     '★★ 演出期间**界面上的代币文本**确实在不断变化（' + domUniq + ' 个不同值）',
+     domTexts.slice(0, 10).join('→'));
+  ok(domTexts[domTexts.length - 1] === String(M().coins),
+     '★★ 演出结束后界面显示的是新余额（' + domTexts[domTexts.length-1] + '）');
+
+  /* ---- ④ 没中奖：不滚动，显示值与真值立刻一致 ---- */
+  reset(1); forceMult(2);
+  insert(5); start(); skip();
+  setLamps([0,0,0,0,0,0,0,0,0,0,0,0]);
+  launch(0.5); land(3);
+  const lose = M();
+  ok(!(lose.gainRollT > 0), '★ 没中奖时不启动「逐点加钱」');
+  okNum(lose.shownCoins, lose.coins, '★ 没中奖时显示值与真值一致（不会差着上局的数）');
+  /* reset 后是 200，投了 5 枚 → 195；没中奖不返还，所以就是 195 */
+  okNum(lose.coins, 200 - 5, '  └ 只扣了投注（200 − 5 = 195），没有返还');
+
+  /* ---- ⑤ ★★ 物理必须与结算时长完全脱钩（这是加演出时踩到的真 bug）----
+     原来 drop 模式也跑「卡住踢一脚」：球在槽底速度天然为 0 → 必被判卡住 →
+     每 STUCK_T 秒 rng() 一次。于是**改结算时长就会让随机数流错位**，
+     后面每一发的出手抖动全变。实测把 SETTLE_T 从 2.0 改成 2.6，
+     物理一行没动，「力度→落点」秩相关却从 -0.53 掉到 -0.44。 */
+  const series = extra => {
+    reset(777);
+    const out = [];
+    for(let i = 0; i < 30; i++){
+      const r = shoot(i / 29, { bet: 5, mult: 2, fresh: false });
+      out.push(r.slot);
+      for(let k = 0; k < extra; k++) step();   // 多等一段结算动画
+    }
+    return out.join(',');
+  };
+  const s0 = series(0), s1 = series(90), s2 = series(300);
+  ok(s0 === s1 && s1 === s2,
+     '★★ 落点序列与「结算等待多久」无关（物理不被演出污染）',
+     '0帧 vs 90帧 相同=' + (s0 === s1) + '，90帧 vs 300帧 相同=' + (s1 === s2));
+}
+
+/* =====================================================================
    8) 代币耗尽 → 结束 / 重置
    ===================================================================== */
 section('8) ★ 代币不足 5 枚 → 结束；「再来一次」重置 200');

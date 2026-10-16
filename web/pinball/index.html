@@ -45,6 +45,11 @@
            white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .stat.cyan .v{color:#4df3e6;text-shadow:0 0 7px rgba(60,240,225,.7)}
   .stat.gold .v{color:var(--gold);text-shadow:0 0 7px rgba(255,210,63,.7)}
+  /* ★ 中奖时代币数字「正在涨」的高亮：变金 + 轻微放大脉冲。
+     目的是让「钱在增加」这件事**被看见** —— 光数字跳变容易被忽略。 */
+  .stat .v.counting{color:var(--gold);text-shadow:0 0 12px rgba(255,210,63,.95);
+                    animation:coinCount .18s ease-out infinite alternate}
+  @keyframes coinCount{from{transform:scale(1)}to{transform:scale(1.14)}}
 
   /* ---------- 倍率灯排（照片上 2x/4x/6x/8x/10x 五个椭圆灯） ---------- */
   .leds{display:flex;gap:5px;justify-content:center}
@@ -382,7 +387,11 @@
 
   const ROLL_T = 0.85;               // 倍数滚动动画时长
   const LAMP_DT = 0.075;             // 逐个点亮出口灯的间隔
-  const SETTLE_T = 2.0;              // 结算展示时长（之后回投币阶段）
+  const SETTLE_T = 2.6;              // 结算展示时长（之后回投币阶段）
+  /* ★ 中奖时「代币逐点加上去」的时长（用户要的「延长兴奋感」）。
+     必须 ≤ SETTLE_T，否则动画会被 endRound 打断、数字停在半路。
+     2.6 − 0.9 = 1.7 秒留给横幅展示，节奏正好。 */
+  const GAIN_ROLL_T = 0.9;
 
   /** 力度 → (释放角, 进弧速度, 出手方向抖动) —— 抽成函数，游戏与测试/实验台共用同一份。
    *  jitter = true 时加一点出手抖动（真机手感）；实验台要测纯映射就传 false。 */
@@ -436,6 +445,21 @@
   let landSlot = -1, landWin = false, landGain = 0, settleT = 0;
   let landX = NaN;                  // 落点连续 x（量技巧用，见 settle）
   let banner = null;        // 结算横幅 {txt, sub, win, life}
+  /* ★ 中奖时「代币逐点加上去」：
+       `coins` 是**真值**（结算瞬间就全额入账，经济系统的唯一依据）。
+       显示值不是另存一个变量，而是**算出来的**：
+           显示值 = coins − pendingShow
+       其中 pendingShow 是「还在演出的那部分金额」，随时间衰减到 0。
+     ⚠️ 为什么不用「另存 shownCoins 再手动同步」：那样每一条改动 coins 的路径
+        （投币扣钱、重置、实验台充值、中奖）都得记着同步一次，漏一个就显示错数。
+        实测就漏了：投币扣了 20 枚，界面还显示原来的数（因为 shownCoins 没跟着减），
+        而且演出期间没人调 syncUI，数字全程纹丝不动。
+        改成派生值之后，**任何**对 coins 的改动都自动反映到显示上，
+        pendingShow 只管「这笔奖金还要数多久」。 */
+  let pendingShow = 0;              // 演出中还没「数」出来的金额（0 = 无演出）
+  let gainRollT = 0, gainRollTotal = 0, gainTickAcc = 0, gainTickN = 0;
+  /** 界面该显示多少代币（真值 − 还在数的部分） */
+  const shownCoins = () => coins - pendingShow;
 
   let fx = [], floats = [];
   let tGlobal = 0;
@@ -495,8 +519,59 @@
   const sndPeg    = () => { const now = tGlobal; if(now - lastPegSnd < 0.026) return; lastPegSnd = now; tone(1500 + Math.random()*900, 0.05, { type:'square', gain:0.035 }); };
   const sndWall   = () => { tone(220, 0.05, { type:'sine', gain:0.04 }); };
   const sndRail   = () => { tone(420, 0.06, { type:'sine', gain:0.035 }); };
-  function sndWin(){ [72,76,79,84].forEach((n,i)=>tone(440*Math.pow(2,(n-69)/12),0.22,{type:'triangle',gain:0.1,at:i*0.075})); }
-  function sndLose(){ [60,55].forEach((n,i)=>tone(440*Math.pow(2,(n-69)/12),0.26,{type:'triangle',gain:0.08,at:i*0.13})); }
+
+  /* ---------------- 结算音乐（中奖 / 没中奖） ----------------
+     ★ 为什么要专门做这个：用户说「没中奖时给个音效表示啥也没有比较失落，
+       中奖的话给一段奖励的 bgm」。原来只有两个极短的提示音（sndWin/sndLose），
+       音色也几乎一样，玩家根本分不清输赢的情绪差别。
+       现在两者在**音区、走向、时长、音色**四个维度上完全拉开：
+         · 没中奖：**下行**的小调动机（像叹气「唉——」），低沉、越来越慢、尾巴往下滑
+         · 中奖：**上行**的大调琶音 + 高音亮点 + 低音垫底，明亮、密、往上冲
+     ⚠️ 音符用 MIDI 号写（69 = A4 = 440Hz），比直接写频率好读也好改调。
+     ⚠️ 只用 `tone()` 的 `at` 参数做「时间调度」，**不用 setTimeout** ——
+        定时器在后台标签页会被节流甚至冻结，音乐会拖成一坨；
+        而 WebAudio 的调度是音频线程的事，页面卡一下也不会跑调。 */
+  const midi = n => 440 * Math.pow(2, (n - 69) / 12);
+
+  /** 没中奖：下行小调「叹气」，最后一下明显往下滑（失落感全在这个滑音上）。
+   *  故意留 0.5 秒的尾巴 —— 短促的「叮」不叫失落，**慢下来**才叫失落。 */
+  function sndLose(){
+    const seq = [
+      { n: 64, at: 0.00, d: 0.20 },   // E4
+      { n: 62, at: 0.17, d: 0.22 },   // D4
+      { n: 59, at: 0.36, d: 0.26 },   // B3
+      { n: 55, at: 0.58, d: 0.55, to: 49 },  // G3 → 下滑到 C#3（「唉……」）
+    ];
+    for(const s of seq){
+      tone(midi(s.n), s.d, { type:'triangle', gain:0.085, at:s.at, to: s.to ? midi(s.to) : undefined });
+    }
+    /* 低音垫一下，让「空」的感觉更沉 */
+    tone(midi(43), 0.7, { type:'sine', gain:0.05, at:0.36 });
+  }
+
+  /** 中奖：上行大调号角 + 高音亮点 + 低音垫底（「奖励感」）。
+   *  琶音间隔 0.075 秒、越往上越亮，制造「往上冲」的势头。 */
+  function sndWin(){
+    /* 主旋律：C5 E5 G5 C6（大三和弦琶音上行） */
+    [72, 76, 79, 84].forEach((n, i) => {
+      tone(midi(n), 0.24, { type:'triangle', gain:0.10, at:i * 0.075 });
+    });
+    /* 高音亮点：E6 / G6 点缀，像奖金闪了一下 */
+    tone(midi(88), 0.20, { type:'sine', gain:0.06, at:0.34 });
+    tone(midi(91), 0.30, { type:'sine', gain:0.055, at:0.42 });
+    /* 低音垫底：让号角有厚度，不是单薄的一声叮 */
+    tone(midi(48), 0.55, { type:'sine', gain:0.055, at:0 });
+    tone(midi(55), 0.40, { type:'sine', gain:0.045, at:0.075 });
+    /* 一点点金属噪声当「硬币撒出来」的质感 */
+    noiseBurst(0.16, { freq: 3200, gain:0.035 });
+  }
+
+  /** 「代币一点一点加上去」时的硬币声。i = 第几声（音高随进度上升，越加越兴奋）。 */
+  const sndGainTick = i => {
+    const base = 1000 + Math.min(i, 24) * 45;
+    tone(base, 0.045, { type:'square', gain:0.05 });
+    tone(base * 1.5, 0.05, { type:'square', gain:0.03, at:0.02 });
+  };
 
   function chargeOn(){
     const a = audio(); if(!a) return;
@@ -650,6 +725,12 @@
     rollT = 0; rollI = 0; rollAcc = 0; forcedMult = 0; rolledMult = 0;
     lampStep = 0; lampAcc = 0; lampOrder = [];
     landSlot = -1; landWin = false; landGain = 0; settleT = 0;
+    /* ★ 显示值必须跟着重置，并把「逐点加钱」的演出彻底清干净 ——
+       否则 reset 之后数字会从上一局的余额慢慢爬回 200。 */
+    /* ★ 「逐点加钱」的演出必须彻底清干净 —— 否则 reset 之后数字会从上一局的
+       余额慢慢爬回 200。pendingShow 归零就等于显示值立刻等于真值。 */
+    pendingShow = 0;
+    gainRollT = 0; gainRollTotal = 0; gainTickAcc = 0; gainTickN = 0;
     banner = null; fx = []; floats = [];
     /* ★ 先挡板、后钉阵：genPegs 要拿挡板位置算安全间距（否则球会被「钉+挡板」夹死） */
     genBaffles();
@@ -901,7 +982,7 @@
     for(let k = 0; k < SUB; k++){
       if(!ball) return;
       stepBallSub(b, h);
-      if(b.mode === 'fly' || b.mode === 'drop'){
+      if(b.mode === 'fly'){
         b.flightT += h;
         const sp = hypot(b.vx, b.vy);
         if(sp < STUCK_V){ b.stuckT += h; } else b.stuckT = 0;
@@ -913,16 +994,25 @@
           b.vx += (rng() - 0.5) * 70 + (b.stuckN > 2 ? (b.x > ARC_CX ? -90 : 90) : 0);
           b.stuckT = 0;
         }
-        if(b.flightT > FLIGHT_CAP && b.mode === 'fly'){ b.vy += 400; }
+        if(b.flightT > FLIGHT_CAP){ b.vy += 400; }
         /* ★ 长尾收敛：正常一发 5.5 秒内就落槽了，但极少数球会在钉阵里「低速赖着不走」
            （实测 40 发里会有 1 发拖到 10~12 秒）。这种球速度不算「卡住」（没触发上面的
            STUCK 逻辑），所以给它一个**随时间温和增强的下压**，把长尾收掉。
            注意是「温和」（最多把重力加重约一倍），不是瞬移式加力 ——
            这样正常球（5.5 秒内落槽）完全不受影响，只有赖着的球被慢慢劝下去。 */
-        if(b.flightT > FLIGHT_SOFT && b.mode === 'fly'){
+        if(b.flightT > FLIGHT_SOFT){
           const k = Math.min(2.5, (b.flightT - FLIGHT_SOFT) / 1.5);
           b.vy += 150 * k * h;
         }
+      } else if(b.mode === 'drop'){
+        /* ★★ 球已经落在槽里（结算演出中），**绝对不能**再跑「卡住踢一脚」——
+           它在槽底速度天然是 0，必然被判成「卡住」，于是每 STUCK_T 秒就
+           `rng()` 一次。后果不是画面问题，而是**随机数流被结算时长污染**：
+           改一下 SETTLE_T，后面每一发的出手抖动就全错位了。
+           实测踩到：给结算加「逐点加钱」把 SETTLE_T 从 2.0 改成 2.6，
+           物理一行没动，「力度→落点」秩相关却从 -0.53 掉到 -0.44。
+           drop 模式只需要走完下落动画，不需要任何物理判定。 */
+        b.flightT += h;
       }
       /* ★ 硬保证：球绝不允许无限飞下去。
          以前只在 flightT 超时时「往下加力」，但被夹死的球照样到不了口线 ——
@@ -958,6 +1048,8 @@
     landX = ball.x;
     landWin = !!lamps[i];
     landGain = landWin ? bet * mult : 0;
+    /* ★ 代币**立刻全额入账**（真值），显示值随后逐点追上去 —— 见 shownCoins 的注释。
+       顺序上必须在落盘 best 之前，否则 best 会漏记这一笔。 */
     coins += landGain;
     ballsOut++;
     if(landWin){ ballsWon++; roundsWon++; totalWon += landGain; }
@@ -973,7 +1065,20 @@
     banner = landWin
       ? { txt:'中 奖', sub:'返还 ' + bet + ' × ' + mult + ' = ' + landGain + ' 枚', win:true }
       : { txt:'未 中 奖', sub:'投注 ' + bet + ' 枚不退', win:false };
-    if(landWin) sndWin(); else sndLose();
+    if(landWin){
+      sndWin();
+      /* 中奖 → 启动「代币逐点加上去」的演出：
+         pendingShow 从**整笔奖金**开始（显示值 = coins − pendingShow = 旧余额），
+         随 gainRollT 衰减到 0（显示值 = coins = 新余额）。 */
+      pendingShow = landGain;
+      gainRollTotal = landGain;
+      gainRollT = GAIN_ROLL_T;
+      gainTickAcc = 0; gainTickN = 0;
+    } else {
+      sndLose();
+      /* 没中奖：不滚动，显示值立刻等于真值 */
+      gainRollT = 0; pendingShow = 0;
+    }
     const cx = ball.x;
     for(let k = 0; k < (landWin ? 26 : 8); k++){
       fx.push({ x:cx, y:mouthY, vx:(rng()-0.5)*230, vy:-60 - rng()*230,
@@ -1071,6 +1176,36 @@
     if(settleT > 0){
       settleT -= dt;
       if(settleT <= 0) endRound();
+    }
+
+    /* ★ 代币逐点加上去的演出（纯显示层，不碰 coins 真值）——
+       每个 step 让 pendingShow 沿缓动曲线衰减到 0，显示值 = coins − pendingShow。
+       ⚠️ 用「进度百分比 × 总额」而不是「每帧加固定值」：
+          这样无论总额是 10 还是 200，动画都恰好用 GAIN_ROLL_T 秒跑完，
+          不会出现「小奖一闪而过、大奖要等半天」。
+       ⚠️ 必须**每帧调 syncUI()**：数字在涨却不刷新界面，玩家看到的是一动不动的数
+          （实测就是这样：代币全程显示 200，只有「最高代币」跳到了 380）。
+          只在 gainRollT 归零时刷一次也不行 —— 那就成了「直接跳变」，没有逐点效果。 */
+    if(gainRollT > 0){
+      gainRollT -= dt;
+      const done = gainRollT <= 0;
+      const k = done ? 1 : 1 - gainRollT / GAIN_ROLL_T;
+      /* easeOutCubic：开头冲得快、尾巴慢下来 —— 像老虎机数钱 */
+      const e = 1 - Math.pow(1 - k, 3);
+      pendingShow = done ? 0 : Math.round(gainRollTotal * (1 - e));
+      /* 硬币声：整段里均匀撒 ~12 声，音高随进度上升 */
+      gainTickAcc += dt;
+      const per = GAIN_ROLL_T / 12;
+      if(gainTickAcc >= per && !done){
+        gainTickAcc -= per;
+        sndGainTick(gainTickN++);
+      }
+      syncUI();
+    } else if(pendingShow !== 0){
+      /* 兜底对齐：任何没走滚动的路径（没中奖、重置、测试直接改 coins）
+         都不能让显示值长期停在旧数字上。 */
+      pendingShow = 0;
+      syncUI();
     }
 
     updateFx(dt);
@@ -1437,7 +1572,12 @@
   /* ---------------- UI 同步 ---------------- */
   const ledEls = [].slice.call(document.querySelectorAll('#leds .led'));
   function syncUI(){
-    $('vCoins').textContent = coins;
+    /* ★ 代币显示的是**演出值**（coins − pendingShow）：中奖时会一点点涨上去。
+       它是从 coins 派生的，所以投币扣钱、充值、重置都会自动反映到界面。 */
+    $('vCoins').textContent = shownCoins();
+    /* ★ 逐点涨的时候给数字加个高亮 + 轻微放大，让「在涨」这件事看得见 */
+    const coinCounting = gainRollT > 0;
+    $('vCoins').classList.toggle('counting', coinCounting);
     $('vBet').textContent = bet;
     $('vBest').textContent = best;
     /* 倍数：滚动动画期间显示跳动的数字，定下来后显示真值 */
@@ -1600,6 +1740,7 @@
     charge, charging, rollT, lampStep,
     landSlot, landWin, landGain, settleT,
     landX,
+    shownCoins: shownCoins(), gainRollT, GAIN_ROLL_T, pendingShow,
     aimReady: aimReady(),
     lampCount: mult ? lampCountOf(mult) : 0,
     lampOrder: lampOrder.slice(),
@@ -1631,7 +1772,14 @@
    *  ★ 必须有这个 —— 实验台要打几百发才能量出分布，而玩家只有 200 枚代币，
    *    打到一半就没钱了，后续每一发都「发射失败」返回 slot=-1，
    *    于是「同力度重复度」被算成 100%（全是 -1）—— 量出来的是假象，不是手感。 */
-  window.__pinballSetCoins = n => { coins = Math.max(0, n | 0); if(coins >= MIN_BET && phase === 'over') phase = 'bet'; syncUI(); return coins; };
+  /* ★ 实验台/测试直接给代币充值：显示值也要立刻跟上，否则量布局时会看到一个旧数字。
+     同时清掉「逐点加钱」演出（充值等于把场面重置了）。 */
+  window.__pinballSetCoins = n => {
+    coins = Math.max(0, n | 0);
+    pendingShow = 0; gainRollT = 0;
+    if(coins >= MIN_BET && phase === 'over') phase = 'bet';
+    syncUI(); return coins;
+  };
   /** 实验台用：运行时改可调参数（只改传进来的键），返回改后的值 */
   window.__pinballTune = o => {
     if(o){

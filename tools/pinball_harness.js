@@ -42,7 +42,7 @@ function load(){
   function mkEl(tag){
     const set = new Set();
     const el = {
-      tagName: (tag || 'div').toUpperCase(), style: {}, dataset: {}, textContent: '', _html: '',
+      tagName: (tag || 'div').toUpperCase(), style: {}, dataset: {}, _text: '', _html: '',
       children: [], disabled: false, clientWidth: 390, clientHeight: 640, width: 0, height: 0,
       offsetHeight: 0,
       classList: { add: c => set.add(c), remove: c => set.delete(c), contains: c => set.has(c),
@@ -55,6 +55,13 @@ function load(){
       focus(){}, blur(){}, select(){},
     };
     Object.defineProperty(el, 'innerHTML', { get(){ return el._html; }, set(v){ el._html = v; } });
+    /* ★ textContent 必须像真 DOM 一样**强制转成字符串**：
+       真浏览器里 `el.textContent = 230` 读回来是 "230"（字符串）。
+       假 DOM 如果原样存数字，就会出现「引用相等却 === 为 false」的怪事
+       （断言写 el.textContent === String(coins) 会永远失败，而肉眼看两个值一模一样）。 */
+    Object.defineProperty(el, 'textContent', {
+      get(){ return el._text; }, set(v){ el._text = String(v); },
+    });
     return el;
   }
 
@@ -68,11 +75,23 @@ function load(){
 
   const store = {};
   let sndNodes = 0, sndStarts = 0;
+  /* ★ 记录每次起振的**频率**，用来验证「中奖是上行、没中奖是下行」这类
+     旋律走向的断言 —— 只数音符个数是查不出「音区/走向搞反了」的。 */
+  const sndFreqs = [];
   class FakeCtx {
     constructor(){ this.state = 'suspended'; this.currentTime = 0; this.sampleRate = 44100; this.destination = {}; }
     createOscillator(){
-      return { type:'', frequency: { value:0, setValueAtTime(){}, exponentialRampToValueAtTime(){}, setTargetAtTime(){} },
-               connect(){}, start(){ sndStarts++; sndNodes++; }, stop(){} };
+      const o = { type:'', _f:0,
+        frequency: {
+          get value(){ return o._f; },
+          set value(v){ o._f = v; },
+          setValueAtTime(v){ o._f = v; },
+          exponentialRampToValueAtTime(){}, setTargetAtTime(){},
+        },
+        connect(){},
+        start(){ sndStarts++; sndNodes++; sndFreqs.push(o._f); },
+        stop(){} };
+      return o;
     }
     createGain(){ return { gain: { setValueAtTime(){}, exponentialRampToValueAtTime(){}, setTargetAtTime(){}, value:0 }, connect(){} }; }
     createBuffer(ch, len){ return { getChannelData: () => new Float32Array(len) }; }
@@ -205,7 +224,11 @@ function load(){
   }
 
   return { win, M, DT, step, run, shoot, openRound, els, ledEls, drawRec, sandbox,
-           store, sndCount: () => sndStarts, HTML, RAW, script };
+           store, sndCount: () => sndStarts, sndFreqs,
+           /* ★ 取「最近 n 次起振」的频率 —— 音效计数是全局累加的，
+              要单独看某一段（比如结算音乐）就得取尾部快照。 */
+           sndFreqsTail: n => sndFreqs.slice(-n),
+           HTML, RAW, script };
 }
 
 module.exports = { load, HTML };
