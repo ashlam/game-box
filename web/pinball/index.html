@@ -1,0 +1,1564 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#060a24">
+<title>弹珠台 · 小游戏盒子</title>
+<style>
+  :root{
+    --bg:#060a24; --panel:#0d1747; --panel2:#111d55; --line:#243a8f;
+    --txt:#e9f0ff; --dim:#8a97cc; --acc:#2fe3d8; --red:#ff3b30; --gold:#ffd23f;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+  html{height:100%}
+  html,body{margin:0}
+  body{
+    background:radial-gradient(1000px 520px at 50% -8%,#152a72 0%,var(--bg) 62%);
+    color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    /* ★ height:100%（不是 100vh）：手机上 100vh 是地址栏隐藏时的高度，会凭空溢出 */
+    height:100%;display:flex;flex-direction:column;align-items:center;
+    padding:calc(env(safe-area-inset-top) + 6px) 4px calc(env(safe-area-inset-bottom) + 8px);
+    overflow:hidden;
+  }
+  /* 容器太矮（矮 iframe / 嵌入式预览）时硬撑一块完整机台出来并放开滚动 */
+  html.squeezed,html.squeezed body{overflow:auto;height:auto}
+
+  .top{width:100%;max-width:440px;display:flex;align-items:center;gap:7px;flex:0 0 auto}
+  .top a{color:var(--dim);text-decoration:none;font-size:18px;padding:5px 9px;border-radius:9px;
+          background:var(--panel);border:1px solid var(--line);line-height:1}
+  .top h1{font-size:15px;margin:0;color:var(--dim);font-weight:600;white-space:nowrap;flex:1}
+  .top button{font-size:11.5px;padding:6px 8px;border-radius:9px;border:1px solid var(--line);
+               background:var(--panel);color:var(--txt);font-family:inherit;line-height:1;white-space:nowrap}
+  .top button:active{background:var(--acc);border-color:var(--acc);color:#04241f}
+
+  /* ---------- 记分牌（仿机台背板） ---------- */
+  .board{width:100%;max-width:440px;flex:0 0 auto;margin-top:6px;
+         background:linear-gradient(#12205e,#0b1440);border:1px solid var(--line);border-radius:12px;
+         padding:7px 8px 8px;display:flex;flex-direction:column;gap:7px}
+  .stats{display:flex;gap:7px}
+  .stat{flex:1 1 0;min-width:0;background:#050a22;border:1px solid #1b2a6d;border-radius:8px;
+        padding:4px 6px 5px;display:flex;flex-direction:column;gap:1px}
+  .stat .k{font-size:9.5px;color:var(--dim);letter-spacing:.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stat .v{font-family:"DS-Digital",Consolas,"Courier New",monospace;font-weight:700;line-height:1.05;
+           font-size:clamp(15px,4.6vw,20px);color:#ff4a3d;text-shadow:0 0 7px rgba(255,60,45,.75);
+           white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stat.cyan .v{color:#4df3e6;text-shadow:0 0 7px rgba(60,240,225,.7)}
+  .stat.gold .v{color:var(--gold);text-shadow:0 0 7px rgba(255,210,63,.7)}
+
+  /* ---------- 倍率灯排（照片上 2x/4x/6x/8x/10x 五个椭圆灯） ---------- */
+  .leds{display:flex;gap:5px;justify-content:center}
+  .led{flex:1 1 0;min-width:0;height:26px;border-radius:13px;border:1.5px solid #2a3a86;
+       background:radial-gradient(circle at 50% 34%,#2a1430,#0a0f2c 72%);
+       display:flex;align-items:center;justify-content:center;gap:1px;
+       font-size:clamp(10px,3vw,13px);font-weight:700;color:#5b4a72;transition:none}
+  .led i{font-style:normal;font-size:.72em;opacity:.75}
+  .led.on{color:#fff;border-color:#ff6a5e;
+          background:radial-gradient(circle at 50% 34%,#ff6a55,#c01008 72%);
+          box-shadow:0 0 9px rgba(255,60,45,.85),inset 0 0 5px rgba(255,220,210,.5)}
+  .led.hot{animation:ledPulse .22s steps(1) infinite}
+  @keyframes ledPulse{0%{opacity:1}50%{opacity:.35}100%{opacity:1}}
+
+  /* ---------- 场地 ---------- */
+  .stage{width:100%;max-width:440px;flex:1 1 auto;min-height:0;margin-top:7px;
+         display:flex;align-items:center;justify-content:center}
+  canvas{display:block;border-radius:12px;touch-action:none}
+
+  /* ---------- 控制条 ---------- */
+  .ctl{width:100%;max-width:440px;flex:0 0 auto;display:flex;flex-direction:column;gap:7px;margin-top:7px}
+  .row{display:flex;gap:7px}
+  .ctl button{font-family:inherit;font-weight:600;border-radius:14px;border:1px solid var(--line);
+              background:var(--panel);color:var(--txt);touch-action:none;padding:0 4px}
+  .ctl button:disabled{opacity:.36}
+  .ctl button:not(:disabled):active{filter:brightness(1.25)}
+  /* 投币口 / 开始：平分第一行 */
+  .coin{flex:1 1 0;min-width:0;height:56px;font-size:clamp(13px,3.7vw,15px);line-height:1.15}
+  .coin b{display:block;font-size:.74em;font-weight:600;color:var(--acc);letter-spacing:.5px}
+  .start{flex:1 1 0;min-width:0;height:56px;font-size:clamp(14px,4.2vw,17px);
+         background:linear-gradient(#1d7a4a,#0f4d2d);border-color:#2ea86a;letter-spacing:2px}
+  .start.hot{animation:startGlow .9s ease-in-out infinite}
+  @keyframes startGlow{0%,100%{box-shadow:0 0 0 rgba(46,168,106,0)}50%{box-shadow:0 0 14px rgba(70,240,150,.85)}}
+  /* 扳机：铺满第二行，最常用的键给最大面积 */
+  .trig{width:100%;height:64px;font-size:clamp(15px,4.6vw,19px);letter-spacing:5px;
+        background:linear-gradient(#d24534,#8e1f14);border-color:#e0705f;color:#fff}
+  .trig.ready{background:linear-gradient(#e5543f,#a5261a);border-color:#ff9c8c}
+  .trig.charging{background:linear-gradient(#ff7a5c,#c02a18)}
+
+  /* ---------- 玩法面板 ---------- */
+  .sheet{position:fixed;inset:0;background:rgba(3,6,20,.86);display:none;z-index:20;
+         padding:18px 16px calc(env(safe-area-inset-bottom) + 18px);overflow:auto}
+  .sheet.on{display:flex;align-items:center;justify-content:center}
+  .card{width:100%;max-width:400px;background:linear-gradient(#132263,#0a1136);
+        border:1px solid var(--line);border-radius:16px;padding:16px 16px 14px}
+  .card h2{margin:0 0 10px;font-size:16px;color:var(--acc);letter-spacing:1px}
+  .card ol{margin:0;padding-left:19px;font-size:13px;line-height:1.72;color:#d5ddf6}
+  .card li{margin-bottom:6px}
+  .card .hl{color:var(--gold);font-weight:700}
+  .card .rd{color:#ff7d70;font-weight:700}
+  .card button{width:100%;margin-top:13px;height:46px;border-radius:12px;border:1px solid var(--line);
+               background:var(--panel2);color:var(--txt);font-family:inherit;font-size:14px;font-weight:600}
+
+  /* ---------- 结算 / 结束 ---------- */
+  .over{position:fixed;inset:0;background:rgba(3,6,20,.88);display:none;z-index:19;
+        align-items:center;justify-content:center;padding:20px}
+  .over.on{display:flex}
+  .over .card{text-align:center}
+  .over .big{font-size:30px;font-weight:800;color:var(--red);letter-spacing:3px;
+             text-shadow:0 0 14px rgba(255,60,45,.6);margin:4px 0 8px}
+  .over .sub{font-size:13px;color:var(--dim);line-height:1.7}
+  .over .sub b{color:var(--gold);font-size:16px}
+
+  .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 96px);transform:translateX(-50%);
+         background:rgba(8,14,44,.95);border:1px solid var(--line);color:var(--txt);
+         padding:9px 15px;border-radius:11px;font-size:13px;z-index:30;opacity:0;pointer-events:none;
+         transition:opacity .22s;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
+  .toast.on{opacity:1}
+
+  /* 矮屏：把两行控制条压薄，把高度还给场地 */
+  @media (max-height:660px){
+    .coin,.start{height:48px}
+    .trig{height:54px;letter-spacing:3px}
+    .led{height:22px}
+    .board{padding:6px 7px 7px;gap:5px}
+    .stage{margin-top:5px}
+    .ctl{gap:5px;margin-top:5px}
+  }
+  @media (max-width:330px){
+    .ctl button{border-radius:11px}
+    .trig{letter-spacing:2px}
+  }
+</style>
+</head>
+<body>
+
+<div class="top" id="topbar">
+  <a href="/" aria-label="返回">←</a>
+  <h1>弹珠台 · 欢乐弹珠堂</h1>
+  <button id="btnSound">🔊 音效</button>
+  <button id="btnHelp">玩法</button>
+</div>
+
+<!-- 机台背板：代币 / 本局投币 / 倍数 + 五档倍率灯 -->
+<div class="board" id="board">
+  <div class="stats">
+    <div class="stat"><span class="k">代币</span><span class="v" id="vCoins">200</span></div>
+    <div class="stat cyan"><span class="k">本局投币</span><span class="v" id="vBet">0</span></div>
+    <div class="stat gold"><span class="k">本局倍数</span><span class="v" id="vMult">--</span></div>
+    <div class="stat"><span class="k">最高代币</span><span class="v" id="vBest">200</span></div>
+  </div>
+  <div class="leds" id="leds">
+    <div class="led" data-m="2">2<i>x</i></div>
+    <div class="led" data-m="4">4<i>x</i></div>
+    <div class="led" data-m="6">6<i>x</i></div>
+    <div class="led" data-m="8">8<i>x</i></div>
+    <div class="led" data-m="10">10<i>x</i></div>
+  </div>
+</div>
+
+<div class="stage" id="stage"><canvas id="cv"></canvas></div>
+
+<div class="ctl" id="ctlbar">
+  <div class="row">
+    <button class="coin" id="btnCoin">投币口<b>按住连投 +1</b></button>
+    <button class="start" id="btnStart" disabled>开 始</button>
+  </div>
+  <button class="trig" id="btnTrig" disabled>拉 扳 机</button>
+</div>
+
+<div class="sheet" id="sheet">
+  <div class="card">
+    <h2>玩法（照着公园那台实机做的）</h2>
+    <ol>
+      <li>开局给 <span class="hl">200 枚代币</span>。</li>
+      <li>点「投币口」投币，<span class="hl">一次 1 枚</span>（按住会连投）。本局至少投 <span class="hl">5 枚</span>，
+          最多 <span class="hl">20 枚</span>。</li>
+      <li>投够了按「<span class="hl">开始</span>」——随机抽一个倍数（<span class="hl">2x / 4x / 6x / 8x / 10x</span>），
+          然后随机点亮出口的灯。<span class="hl">倍数越低，亮的出口越多</span>。</li>
+      <li>按住「<span class="hl">拉扳机</span>」蓄力，松手把弹珠射出去。蓄力越大球飞得越远，落点越靠左。</li>
+      <li>球落进<span class="hl">亮灯的出口</span> → 返还 <span class="hl">投注 × 倍数</span> 的代币。</li>
+      <li>落进<span class="rd">没亮灯的出口</span> → 本局投注不退。本局结束，重新投币开下一局。</li>
+    </ol>
+    <button id="btnSheetClose">知道了</button>
+  </div>
+</div>
+
+<div class="over" id="over">
+  <div class="card">
+    <div class="big">代 币 用 完 了</div>
+    <div class="sub" id="overSub"></div>
+    <button id="overRetry">再 来 一 次（重置 200 枚）</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* =======================================================================
+     公园弹珠台（欢乐弹珠堂）—— 玩法照着实机照片复刻
+       · 投币（≥5 枚）→ 按「开始」抽倍数 → 随机点亮出口灯 → 拉扳机发射
+       · 落进亮灯口 = 返还「投注 × 倍数」；落进没亮的 = 本局投注不退
+     坐标系：固定逻辑尺寸 360×640（竖屏比例恒定），横屏/宽屏只加黑边，
+             所以钉阵、圆弧、出口槽的几何永远有效（沿用弹珠乐园的约定）。
+     ======================================================================= */
+
+  const $ = id => document.getElementById(id);
+  const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const hypot = (x, y) => Math.sqrt(x * x + y * y);
+
+  const cv = $('cv'), ctx = cv.getContext('2d');
+  const UI = '-apple-system,"PingFang SC","Noto Sans CJK SC",sans-serif';
+
+  /* ---------------- 逻辑坐标系 ---------------- */
+  const WFIX = 360, HFIX = 640;      // 逻辑宽高（固定，不再随屏幕比例变化）
+  const MIN_STAGE_H = 300;           // 场地最小可用高度，低于它就硬撑 + 放开滚动
+  let W = WFIX, H = HFIX, S = 1, OFFX = 0, OFFY = 0, dprNow = 1;
+
+  /* ---------------- 数值（改这里就能调平衡） ----------------
+     ★ 全部用 let 声明：tools/bench_pinball.js 通过 __pinballTune() 在运行时改这些值，
+       用来扫参数找手感（不用改源码、不用重新解析 HTML）。 */
+  const START_COINS = 200;           // ★ 开局代币
+  const MIN_BET     = 5;             // ★ 最少投 5 枚才能开一局
+  const MAX_BET     = 20;            // ★ 单局投注上限
+  const N_SLOT      = 12;            // ★ 照片上出珠口是 12 个
+
+  const MULTS  = [2, 4, 6, 8, 10];             // ★ 五档倍率（照片上的灯）
+  const MULT_W = [0.40, 0.25, 0.20, 0.10, 0.05]; // ★ 低倍更容易抽到
+  /* ★ 倍数 ↔ 亮灯数：倍数越低亮得越多（照片里 2x 亮 3 个，这里按用户选定取 4） */
+  const LAMP_N = { 2: 4, 4: 3, 6: 2, 8: 2, 10: 1 };
+
+  /* ---- 物理（可调） ---- */
+  let RB = 6.5;                      // 球半径
+  let RP = 5;                        // 钉半径
+  let G  = 380;                      // 重力
+  let REST_WALL = 0.72;              // 墙面恢复系数
+  let REST_PEG  = 0.30;              // 钉恢复系数（★ 调低过两次：钉太弹会把「力度→落点」打乱，
+                                     //    还会让球在上半场反复弹、飞行时间从 4.6s 涨到 7.5s）
+
+  /* ---- 钉阵（可调） ----
+     ★★ 最关键的一条（「满力量每次落同一个口」的根因，踩了很久）：
+        钉阵必须**铺满圆弧内侧的整个可用区域**，不能只在下面摆几行。
+        原因：球是在**圆弧导轨**上爬到某个角度才脱轨的，脱轨点 y 在 140~300 之间
+        （弧顶 y=141）。原来钉阵从 y=216 才开始 → 满力量在 y≈164 脱轨时，
+        **整个钉阵都在它下方之外**，球直接自由落体穿过空隙、一颗钉都撞不到
+        （实测「撞钉=0」），于是每次路线完全相同、必然落同一个口。
+        现在从弧顶下方一路铺到 PEG_END，球无论从哪个角度脱轨都必然进入钉阵。
+
+     ★ 密度与弹力是**飞行时长**的主要旋钮（tools/bench_pinball.js 可量）：
+       钉太密 / 太弹 → 球在上半场反复弹、悬停，实测飞行中位 7.5 秒、最长 14 秒，
+       根本没法玩。现在的值让飞行中位 ≈ 4.6 秒、最长 ≈ 7.5 秒（240 发实测无一发超 8 秒）。 */
+  let PEG_ROWS = 12, PEG_Y0 = 172, PEG_DY = 38, PEG_DX = 44;
+  let PEG_END = 456;                 // ★ 钉阵最低铺到哪个 y（再往下留给出槽的空档）
+  let PEG_JX = 15, PEG_JY = 12;      // 钉位抖动幅度（错落排布，照照片）
+
+  /* ---- 挡板（可调） ----
+     ★ 照片里能看到的挡板结构就是**出口之间的金属分流叶片**（每个出口上方一根竖条），
+       作用是让「落在分界线上的球」随机归到左边或右边那个口，不会卡在缝里。
+     ★ 我一度还加了「两侧回中挡板」（把贴墙下落的球顶回中间）。它确实能打散
+       「贴墙直落」，但**代价太大**：实测秩相关从 -0.79 掉到 -0.2（力度与落点几乎脱钩），
+       等于把技巧性换成了随机性。真正解决「满力量总落同一个口」的是
+       出手方向抖动（DIR_JIT）+ 修掉「墙/管壁把球夹死」的几何 bug，
+       所以回中挡板**默认关掉**（KICK_YS 为空），只在实验台里作为对照保留。 */
+  let BAFFLE_R = 3.2;                // 挡板粗细（胶囊体半径）
+  let REST_BAFFLE = 0.55;            // 挡板恢复系数
+  let KICK_LEN = 30;                 // 回中挡板长度（默认不生成，见上）
+  let KICK_YS = [];                  // ★ 空数组 = 不生成回中挡板（保留参数供实验台对比）
+  let BLADE_R = 2.6;                 // 出口分流叶片的粗细
+  let BLADE_ON = true;               // 出口上方分流叶片开关
+
+  /* ---- 发射（可调） ---- */
+  /* ★ 释放角：球被圆弧导轨「导」到 phiRel 才脱轨。
+     这是实机的做法 —— 发射力度决定球沿导轨爬多高、绕多远，
+     所以「力度 → 释放角 → 落点」是一条单调可控的链，而不是纯看运气。 */
+  let PHI_MIN = 0.62, PHI_MAX = 2.30;   // 释放角范围（弧度，0=正右，π=正左）
+  /* ★ PHI_MAX 为什么是 2.30 而不是 π：
+     释放点 x = ARC_CX + RC·cos φ。φ→π 时 x→22，也就是**正好贴在左墙上**，
+     切线几乎竖直向下 —— 球只是贴着墙往下掉，出手抖动完全扰动不了它，
+     实测满力量 12/12 都落最左那个口（用户报的就是这个）。
+     取 2.30 rad（132°）时释放点 x ≈ 180+159·cos132° ≈ 74，离墙 53px，
+     球带着明显的水平速度飞出去，必须穿过钉阵 → 抖动被放大、落点自然分散。
+     同时力度仍然单调决定「从哪一侧进入」，技巧性保留（秩相关约 -0.8）。 */
+  let VREL_MIN = 70, VREL_MAX = 190;    // 脱轨时的速度范围（低力度「滴」下来，高力度射出去）
+  /* ★ 出手抖动：真机同一个人同一力度也会差一点点（球在管里的微小差异被放大）。
+     没有它的话「同力度 = 同一落点」完全确定，会被一次试出来反复刷同一个亮灯口。
+     抖动幅度必须远小于力度分辨率，否则「可控」就没了。 */
+  let PHI_JIT = 0.045, VREL_JIT = 9;
+  /* ★ 出手方向抖动（弧度）：脱轨瞬间给速度方向加一点点随机偏转。
+     为什么光有上面两个抖动还不够（这是实测挖出来的真问题）：
+       释放点 x = ARC_CX + RC·cos(φ)，对 φ 求导是 −RC·sin(φ)。
+       在 φ→0 和 φ→π（也就是**力度最小和最大的两端**）sin φ → 0，
+       于是「角度抖动」几乎不改变释放点位置 —— 实测满力量连打 8 发，
+       释放点 x 的极差只有 0.78px，轨迹当然几乎一模一样、落点总在同一个口。
+     而速度方向的抖动**与释放角无关**：它直接改变初始速度矢量，
+     在任何释放角下都能产生横向散布，所以两端也散得开。
+     物理上也说得通：真机的球出膛时方向本来就有微小偏差，会被后续行程放大。 */
+  let DIR_JIT = 0.06;                // 脱轨速度方向抖动（弧度）
+  /* ★★ 指向圆心的内偏角（弧度）—— 这是「满力量每次落同一个口」的**物理根因**修法。
+     球在导轨上脱轨时位置恰好在半径 RC 的弧上，而速度是**切向**的；
+     切向运动让球离圆心越来越远 → 它立刻贴住最外圈（弧壁/竖墙）往下滑，
+     永远进不了半径 < RC−RP−RB 的钉阵区（实测「撞钉=0」），于是每发路线完全相同。
+     真机的导轨出口是**朝内**的，球一离开导轨就往钉阵里钻。
+     所以这里把脱轨速度整体向圆心偏一个角度（φ<90° 偏向右下，φ>90° 偏向左下，
+     统一写成「沿 −径向 的分量」）。 */
+  let INWARD = 0.60;                 // 内偏角（0 = 纯切向，0.6 rad ≈ 34°）
+  /* ---- 场地几何（360×640 内） ---- */
+  const ARC_CX = 180, ARC_CY = 300, RC = 159;   // 顶部圆弧：球心所在半径
+  const CX_MIN = ARC_CX - RC;                   // 球心 x 下限 = 21
+  const CX_MAX = ARC_CX + RC;                   // 球心 x 上限 = 339
+  const fieldL = CX_MIN - RB, fieldR = CX_MAX + RB;  // 墙内表面 14.5 / 345.5
+  const mouthY = 566;                           // 出口口线：球心越过它就结算
+  const floorY = 626;                           // 出口槽底
+  const slotW  = (fieldR - fieldL) / N_SLOT;    // 每个出口的宽
+
+  const LANE_X      = CX_MAX;        // 发射管道里球的 x（贴着右墙）
+  const LANE_WALL_X = 324;           // 管道内壁（竖直线段，只在 y ≥ ARC_CY 时存在）
+  const LANE_Y0     = 546;           // 球在管道里的起始 y
+  const LANE_LEN    = LANE_Y0 - ARC_CY;
+
+  /* ★ 发射 = 实机的「导轨导球」模型（不是纯弹道）：力度决定球沿顶部圆弧导轨爬多高、
+     绕多远，绕到「释放角」才脱轨。所以「力度 → 释放角 → 落点」是一条单调可控的链
+     （玩家练得出肌肉记忆），钉阵再在落点附近加一点随机。
+       · 力度 0 → 释放角 ≈ 0.16 rad（几乎还在右侧）→ 落最右几个出口
+       · 力度 1 → 释放角 ≈ 2.80 rad（绕过顶、贴着左边下来）→ 落最左几个出口
+     v0 = 进圆弧时的速度。球要爬到 φ 就必须越过弧上「最费能量」的那一点：
+       φ ≤ 90° 时最高点就是 φ 本身（sin φ 最大）；φ > 90° 时必须先翻过 90°（sin=1）。
+     所以 peak = φ>90° ? 1 : sinφ。参数本体在上面的「数值」区（let，实验台可调）。 */
+  const CHARGE_T = 1.15;             // 满蓄力秒数
+  const FLIGHT_CAP = 12;             // 单球超时兜底（正常远小于此值）
+  const FLIGHT_SOFT = 6.0;           // ★ 超过这么久就开始温和下压（收长尾，见 stepBall）
+  const FLIGHT_HARD = 20;            // ★ 硬上限：超过就直接强制结算（防卡死，见 stepBall）
+  const STUCK_V = 26, STUCK_T = 0.7; // 卡住判定：速度低于此值持续这么久就踢一脚
+
+  const ROLL_T = 0.85;               // 倍数滚动动画时长
+  const LAMP_DT = 0.075;             // 逐个点亮出口灯的间隔
+  const SETTLE_T = 2.0;              // 结算展示时长（之后回投币阶段）
+
+  /** 力度 → (释放角, 进弧速度, 出手方向抖动) —— 抽成函数，游戏与测试/实验台共用同一份。
+   *  jitter = true 时加一点出手抖动（真机手感）；实验台要测纯映射就传 false。 */
+  function aimOf(p, jitter){
+    p = clamp(p, 0, 1);
+    let phiRel = lerp(PHI_MIN, PHI_MAX, p);
+    let vRel   = lerp(VREL_MIN, VREL_MAX, p);
+    let dirJit = 0;
+    if(jitter !== false){
+      phiRel += (rng() - 0.5) * PHI_JIT;
+      vRel   += (rng() - 0.5) * VREL_JIT;
+      dirJit  = (rng() - 0.5) * DIR_JIT;
+    }
+    /* 要爬到 φRel 就得先越过弧上最费能量的点（φ>90° 时是 90°，否则是 φ 本身） */
+    const peak = phiRel > Math.PI / 2 ? 1 : Math.sin(phiRel);
+    const v0 = Math.sqrt(Math.max(0, vRel * vRel + 2 * G * RC * peak));
+    return { phiRel, vRel, v0, dirJit, vLaunch: Math.sqrt(v0 * v0 + 2 * G * LANE_LEN) };
+  }
+
+  /* ---------------- 随机（本局种子可复现） ---------------- */
+  function mulberry32(a){
+    return function(){
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  let seed = 1, rng = mulberry32(1);
+  const randInt = (a, b) => a + Math.floor(rng() * (b - a + 1));
+
+  /* ---------------- 状态 ---------------- */
+  let phase = 'bet';        // bet（投币中）| aim（已开局，等发射）| fly（球在飞）| over（代币不够）
+  let coins = START_COINS;  // 剩余代币（投币即时扣除）
+  let bet = 0;              // 本局已投注（已从 coins 扣掉）
+  let mult = 0;             // 本局倍数（0 = 还没开）
+  let lamps = new Array(N_SLOT).fill(false);   // 12 个出口的亮灯
+  let best = START_COINS;
+
+  let totalBet = 0, totalWon = 0, ballsOut = 0, ballsWon = 0, rounds = 0, roundsWon = 0;
+
+  let ball = null;
+  let pegs = [];
+  let baffles = [];        // ★ 挡板（胶囊体线段）：堵住两侧贴墙直落的通道
+  let pegHits = 0;
+
+  let charge = 0, charging = false;
+  let rollT = 0, rollI = 0, rollAcc = 0, forcedMult = 0, rolledMult = 0;
+  let lampStep = 0, lampAcc = 0, lampOrder = [];
+
+  let landSlot = -1, landWin = false, landGain = 0, settleT = 0;
+  let banner = null;        // 结算横幅 {txt, sub, win, life}
+
+  let fx = [], floats = [];
+  let tGlobal = 0;
+  let coinHold = null, coinRepeat = null;
+
+  let soundOn = true;
+  let raf = null, lastTs = 0;
+  let layoutRetry = 0;
+
+  /* ---------------- 音效 ---------------- */
+  let ac = null, chargeOsc = null, chargeGain = null, lastPegSnd = 0;
+  function audio(){
+    if(!soundOn) return null;
+    if(!ac){
+      const C = window.AudioContext || window.webkitAudioContext;
+      if(!C) return null;
+      try{ ac = new C(); }catch(e){ return null; }
+    }
+    if(ac.state === 'suspended'){ try{ ac.resume(); }catch(e){} }
+    return ac;
+  }
+  function tone(freq, dur, opt){
+    opt = opt || {};
+    const a = audio(); if(!a) return;
+    const t0 = a.currentTime + (opt.at || 0);
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = opt.type || 'sine';
+    o.frequency.setValueAtTime(freq, t0);
+    if(opt.to) o.frequency.exponentialRampToValueAtTime(Math.max(1, opt.to), t0 + dur);
+    const vol = (opt.gain == null ? 0.09 : opt.gain);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(a.destination);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  }
+  function noiseBurst(dur, opt){
+    opt = opt || {};
+    const a = audio(); if(!a) return;
+    const n = Math.floor(a.sampleRate * dur);
+    const buf = a.createBuffer(1, n, a.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = a.createBufferSource(); src.buffer = buf;
+    const g = a.createGain(); g.gain.value = opt.gain == null ? 0.08 : opt.gain;
+    const f = a.createBiquadFilter(); f.type = 'bandpass';
+    f.frequency.value = opt.freq || 1400; f.Q.value = 1.1;
+    src.connect(f); f.connect(g); g.connect(a.destination);
+    src.start();
+  }
+  const sndCoin   = () => { tone(1180, 0.06, { type:'square', gain:0.05 }); tone(1760, 0.07, { type:'square', gain:0.04, at:0.045 }); };
+  const sndDeny   = () => { tone(160, 0.14, { type:'square', gain:0.06, to:110 }); };
+  const sndStart  = () => { [64,68,71,76].forEach((n,i)=>tone(440*Math.pow(2,(n-69)/12),0.16,{type:'triangle',gain:0.09,at:i*0.075})); };
+  const sndTick   = () => { tone(900 + Math.random()*400, 0.03, { type:'square', gain:0.03 }); };
+  const sndLamp   = (i) => { tone(660 + i*70, 0.07, { type:'square', gain:0.05 }); };
+  const sndFire   = () => { tone(300, 0.2, { type:'sawtooth', gain:0.1, to:900 }); noiseBurst(0.12, { freq:2200, gain:0.06 }); };
+  const sndPeg    = () => { const now = tGlobal; if(now - lastPegSnd < 0.026) return; lastPegSnd = now; tone(1500 + Math.random()*900, 0.05, { type:'square', gain:0.035 }); };
+  const sndWall   = () => { tone(220, 0.05, { type:'sine', gain:0.04 }); };
+  const sndRail   = () => { tone(420, 0.06, { type:'sine', gain:0.035 }); };
+  function sndWin(){ [72,76,79,84].forEach((n,i)=>tone(440*Math.pow(2,(n-69)/12),0.22,{type:'triangle',gain:0.1,at:i*0.075})); }
+  function sndLose(){ [60,55].forEach((n,i)=>tone(440*Math.pow(2,(n-69)/12),0.26,{type:'triangle',gain:0.08,at:i*0.13})); }
+
+  function chargeOn(){
+    const a = audio(); if(!a) return;
+    chargeOsc = a.createOscillator(); chargeGain = a.createGain();
+    chargeOsc.type = 'sawtooth';
+    chargeOsc.frequency.setValueAtTime(90, a.currentTime);
+    chargeGain.gain.setValueAtTime(0.0001, a.currentTime);
+    chargeGain.gain.exponentialRampToValueAtTime(0.035, a.currentTime + 0.06);
+    chargeOsc.connect(chargeGain); chargeGain.connect(a.destination);
+    chargeOsc.start();
+  }
+  function chargeUpdate(c){ if(chargeOsc && ac) chargeOsc.frequency.setTargetAtTime(90 + c * 260, ac.currentTime, 0.04); }
+  function chargeOff(){
+    if(chargeOsc){ try{ chargeOsc.stop(); }catch(e){} chargeOsc = null; }
+    if(chargeGain && ac){ try{ chargeGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.03); }catch(e){} chargeGain = null; }
+  }
+
+  /* ---------------- 钉阵 + 挡板 ---------------- */
+  /* ★ 钉阵按「本局种子」生成（reset 时重掷），同一局内固定 —— 这样玩家能学会这一局的
+     场地、把「蓄力 → 落点」练成手感；换一局才换布局。 */
+  /** 点到线段的距离（生成钉阵时用来给挡板留安全间距） */
+  function distSeg(px, py, x1, y1, x2, y2){
+    const ex = x2 - x1, ey = y2 - y1;
+    const len2 = ex * ex + ey * ey;
+    let t = len2 > 0 ? ((px - x1) * ex + (py - y1) * ey) / len2 : 0;
+    t = t < 0 ? 0 : (t > 1 ? 1 : t);
+    return hypot(px - (x1 + ex * t), py - (y1 + ey * t));
+  }
+
+  function genPegs(){
+    pegs = [];
+    const DX = PEG_DX, DY = PEG_DY;
+    /* ★★ 铺满整个可用区域（这是修「满力量每次落同一个口」的核心改动）。
+       分两段铺：
+         ① 圆弧区（y < ARC_CY）：钉阵必须跟着**弧的形状**走 —— 按半径一层层往里排，
+            这样球沿导轨爬到任何角度脱轨，脚下都立刻是钉阵，不会「从钉阵上方飞过去」。
+         ② 竖直区（y ≥ ARC_CY）：按普通横排铺到接近口线。
+       ⚠️ 踩过的坑：原来只在 y≥216 摆横排，而球在 y≈164 就脱轨了 ——
+          整个钉阵都在它下方之外，球自由落体穿过旁边的空隙，一颗钉都撞不到
+          （实测「撞钉=0」），于是每发路线完全相同。 */
+    const rows = [];
+    /* ① 圆弧区：按「离弧顶多深」分层，每层的可用半宽由圆弧决定 */
+    for(let y = ARC_CY - RC + 26; y < ARC_CY; y += DY){
+      rows.push({ y, arc: true });
+    }
+    /* ② 竖直区：横排（铺到 PEG_END 为止，不一直铺到口线） */
+    for(let y = ARC_CY; y <= Math.min(mouthY - 46, PEG_END); y += DY){
+      rows.push({ y, arc: false });
+    }
+    let r = 0;
+    for(const row of rows){
+      const y = row.y;
+      let x0, x1;
+      if(row.arc){
+        /* 该高度上圆弧内侧的可用半宽（扣掉钉半径与安全间距） */
+        const dy = ARC_CY - y;
+        const half = Math.sqrt(Math.max(0, RC * RC - dy * dy));
+        x0 = ARC_CX - half + RP + RB + 4;
+        x1 = ARC_CX + half - RP - RB - 4;
+      } else {
+        x0 = CX_MIN + RB + RP + 2;
+        x1 = CX_MAX - RB - RP - 2;
+      }
+      /* 管道区：右侧那一段永远不要钉（球要从管道里上来） */
+      const x1Safe = Math.min(x1, LANE_WALL_X - RB - RP - 2);
+      if(x1Safe <= x0) { r++; continue; }
+      const off = (r % 2) ? DX / 2 : 0;
+      for(let x = x0 + off; x <= x1Safe; x += DX){
+        const px = x + (rng() - 0.5) * PEG_JX;
+        const py = y + (rng() - 0.5) * PEG_JY;
+        if(py > mouthY - 46) continue;
+        /* 钉必须离墙足够远，否则球会被「墙 + 钉」夹死（弹珠乐园 WALL_PEG_GAP 那条坑）。
+           球贴墙时球心 x = CX_MIN，球与钉不重叠要求中心距 ≥ RB+RP，
+           所以钉心必须 ≥ CX_MIN + RB + RP，否则贴墙的球必然与它重叠、被两边对推卡死。 */
+        if(px < CX_MIN + RB + RP + 2 || px > CX_MAX - RB - RP - 2) continue;
+        /* 圆弧区：钉要在弧内侧，别挡住球在导轨上的路 */
+        if(py < ARC_CY && hypot(px - ARC_CX, py - ARC_CY) > RC - RP - RB - 4) continue;
+        /* 管道区：离管道壁留出 RB+RP，否则会被「管壁 + 钉」夹死（实测卡在 x=312） */
+        if(px > LANE_WALL_X - RB - RP - 2) continue;
+        /* 钉要离**挡板**也留够间距（实测卡在 (309.9,393.4)：一边钉一边挡板对着推）。
+           球贴着挡板时球心离挡板轴 RB+BAFFLE_R；要碰不到钉则
+             dist(钉, 挡板) > 2·RB + RP + 挡板半径
+           挡板是胶囊，所以用「点到线段距离」。 */
+        let tooClose = false;
+        for(const bf of baffles){
+          if(distSeg(px, py, bf.x1, bf.y1, bf.x2, bf.y2) <= 2 * RB + RP + bf.r) { tooClose = true; break; }
+        }
+        if(tooClose) continue;
+        /* ★★ 两颗钉之间必须留出「球能通过」的净空 —— 这是**卡死**的根因（实测抓到的）：
+           球在 (162,291) 处以速度 3 卡了 370 帧（整发拖到 11.3 秒），
+           一查那附近有两颗钉 (152.2,285.4) 与 (167.4,301.6)，钉心距只有 **22.15**，
+           而球要通过需要 > 2·(RB+RP) = **23**。球正好被楔在这个缝里，
+           踢一脚又被两边的钉推回原位（速度偶尔超过阈值就把 stuckT 清零，于是永远踢不出去）。
+           几何推导：球心到每颗钉心都 ≥ RB+RP，所以球心被限制在两钉连线的中垂面上；
+           球能「挤过去」的条件是两钉心距 > 2·(RB+RP)。
+           留一点余量取 2·(RB+RP) + 1.5，让球能顺滑通过而不是勉强擦过。 */
+        const minSep = 2 * (RB + RP) + 1.5;
+        let wedged = false;
+        for(const q of pegs){
+          const dx = px - q.x, dy = py - q.y;
+          if(dx * dx + dy * dy < minSep * minSep){ wedged = true; break; }
+        }
+        if(wedged) continue;
+        pegs.push({ x: px, y: py, hit: 0 });
+      }
+      r++;
+    }
+  }
+
+  /* ★ 挡板（胶囊体线段）。为什么必须有它 —— 这是用户实测出来的 bug：
+     光靠钉阵挡不住「贴墙直落」。钉是离散的，两侧各留出一条竖直通道，
+     球一旦贴上墙就一路滑到最左/最右的出口，路径**完全确定**
+     （实测满力量 6/6 都落同一个口）。挡板是唯一能从几何上堵死这条通道的东西。
+
+     几何要点（推错过一次，记下来）：
+       要让球从「贴左墙向下」变成「往右弹开」，球必须撞到一个**法线朝右上**的面。
+       法线朝右上 ⇒ 面是「外高内低」的斜坡（外侧端点 y 小、内侧端点 y 大）。
+       写成线段就是：外端 (CX_MIN-6, y) → 内端 (CX_MIN+KICK_LEN, y+26)。
+       ⚠️ 外端要**埋进墙里**（x 比 CX_MIN 小 6px），否则球会卡在「斜坡端点与墙」
+          之间那个死角里左右反复弹（没有 pocket 才安全）。 */
+  function genBaffles(){
+    baffles = [];
+    /* 出口上方的金属分流叶片（照片里每个出口之间那根竖条）：
+       把「球落在分界线上」变成「随机归到左边或右边那个口」。 */
+    if(BLADE_ON){
+      for(let i = 1; i < N_SLOT; i++){
+        const x = fieldL + slotW * i;
+        baffles.push({ x1:x, y1:mouthY - 38, x2:x, y2:mouthY - 12, r:BLADE_R, kind:'blade' });
+      }
+    }
+    /* 两侧「回中挡板」：外高内低的斜坡，把贴墙下落的球顶回场地中间 */
+    for(const y of KICK_YS){
+      baffles.push({ x1:CX_MIN - 6, y1:y, x2:CX_MIN + KICK_LEN, y2:y + 26, r:BAFFLE_R, kind:'kick' });
+      baffles.push({ x1:CX_MAX + 6, y1:y, x2:CX_MAX - KICK_LEN, y2:y + 26, r:BAFFLE_R, kind:'kick' });
+    }
+  }
+
+  /* ---------------- 开局 / 重置 ---------------- */
+  function reset(s){
+    seed = (s == null) ? (Math.floor(Math.random() * 1e9) >>> 0) : (s >>> 0);
+    rng = mulberry32(seed);
+    phase = 'bet';
+    coins = START_COINS; bet = 0; mult = 0;
+    lamps = new Array(N_SLOT).fill(false);
+    totalBet = 0; totalWon = 0; ballsOut = 0; ballsWon = 0; rounds = 0; roundsWon = 0;
+    ball = null; pegHits = 0;
+    charge = 0; charging = false;
+    rollT = 0; rollI = 0; rollAcc = 0; forcedMult = 0; rolledMult = 0;
+    lampStep = 0; lampAcc = 0; lampOrder = [];
+    landSlot = -1; landWin = false; landGain = 0; settleT = 0;
+    banner = null; fx = []; floats = [];
+    /* ★ 先挡板、后钉阵：genPegs 要拿挡板位置算安全间距（否则球会被「钉+挡板」夹死） */
+    genBaffles();
+    genPegs();
+    syncUI();
+  }
+
+  /* ---------------- 投币 ---------------- */
+  function insertCoin(){
+    if(phase !== 'bet'){ sndDeny(); return false; }
+    if(coins <= 0){ sndDeny(); toast('代币用完了'); return false; }
+    /* ★ 单局投注上限：不封顶的话「落进亮灯口返还 投注×倍数」会滚雪球 ——
+       实验台实测熟手每局投 50、200 局后到 2 万枚，「永远投最大」成了唯一最优解，
+       投注决策就失去意义了。封顶 20 之后高投注仍有吸引力，但不会一局刷爆。 */
+    if(bet >= MAX_BET){ sndDeny(); toast('单局最多投 ' + MAX_BET + ' 枚'); return false; }
+    coins--; bet++; totalBet++;
+    sndCoin();
+    syncUI();
+    return true;
+  }
+
+  /* ---------------- 抽倍数 + 点灯 ---------------- */
+  function pickMult(){
+    if(forcedMult){ const m = forcedMult; forcedMult = 0; return m; }
+    const r = rng();
+    let acc = 0;
+    for(let i = 0; i < MULTS.length; i++){ acc += MULT_W[i]; if(r < acc) return MULTS[i]; }
+    return MULTS[MULTS.length - 1];
+  }
+  function lampCountOf(m){ return LAMP_N[m] || 1; }
+  /** 从 12 个出口里随机挑 k 个（Fisher-Yates，走本局 rng → 可复现） */
+  function pickLamps(k){
+    const idx = [];
+    for(let i = 0; i < N_SLOT; i++) idx.push(i);
+    for(let i = idx.length - 1; i > 0; i--){
+      const j = Math.floor(rng() * (i + 1));
+      const t = idx[i]; idx[i] = idx[j]; idx[j] = t;
+    }
+    return idx.slice(0, k).sort((a, b) => a - b);
+  }
+
+  function startRound(){
+    if(phase !== 'bet') return false;
+    if(bet < MIN_BET){ sndDeny(); toast('至少投 ' + MIN_BET + ' 枚才能开始（现在 ' + bet + ' 枚）'); return false; }
+    rolledMult = pickMult();
+    rollT = ROLL_T; rollI = 0; rollAcc = 0; lampStep = 0; lampAcc = 0;
+    lamps = new Array(N_SLOT).fill(false);
+    phase = 'aim';
+    sndStart();
+    syncUI();
+    return true;
+  }
+  /** 灯点完之后才算「可以拉扳机」 */
+  function aimReady(){ return phase === 'aim' && rollT <= 0 && lampStep >= lampCountOf(mult); }
+
+  /* ---------------- 发射 ---------------- */
+  function launch(power){
+    if(!aimReady()) return false;
+    const a = aimOf(power);
+    ball = { mode:'lane', x:LANE_X, y:LANE_Y0, vx:0, vy:-a.vLaunch,
+             phi:0, v0:0, phiRel:a.phiRel, vRel:a.vRel, dirJit:a.dirJit,
+             flightT:0, stuckT:0, chargeP:clamp(power, 0, 1) };
+    phase = 'fly';
+    chargeOff();
+    sndFire();
+    for(let i = 0; i < 10; i++){
+      fx.push({ x:LANE_X, y:LANE_Y0, vx:(rng()-0.5)*90, vy:-40 - rng()*130,
+                life:0.3 + rng()*0.25, max:0.55, r:1.6 + rng()*1.6, c:'#8ff6ff' });
+    }
+    syncUI();
+    return true;
+  }
+
+  /* ---------------- 圆弧导轨 ---------------- */
+  /* 球从发射管道顶端（圆弧右侧）进入导轨，沿弧逆时针爬升。
+     导轨是「有槽」的：球被导着走，爬到 release 角就脱轨抛出。
+     弧上速度由能量守恒给出：v(φ)² = v0² − 2·G·RC·sinφ
+     脱轨时速度沿切线（逆时针）→ vx = −v·sinφ, vy = −v·cosφ
+       · φ 小（右侧）→ 切线基本朝左上 → 落右半场
+       · φ 大（绕过顶）→ 切线朝左下 → 落左半场 */
+  function enterRail(b, v0){ b.mode = 'rail'; b.phi = 0; b.v0 = v0; sndRail(); }
+  function leaveRail(b){
+    const s = Math.sin(b.phi), c = Math.cos(b.phi);
+    const v2 = Math.max(0, b.v0 * b.v0 - 2 * G * RC * s);
+    const v = Math.sqrt(v2);
+    b.x = ARC_CX + RC * c;
+    b.y = ARC_CY - RC * s;
+    /* 切线方向（φ 增大方向）= (−sinφ, −cosφ)；指向圆心 = (−cosφ, +sinφ)。
+       两者**恰好垂直**（点积 = sinφcosφ − cosφsinφ = 0），而「从切线转到朝圆心」
+       是**顺时针 90°**（用 atan2 验算：φ=0 时切线 −π/2、朝圆心 π；
+       φ=90° 时切线 π、朝圆心 π/2 —— 都是**减小** π/2）。
+       ★ 所以内偏必须写成 `− INWARD`。我一开始写成 `+ INWARD`，
+         等于把球**朝外**（朝弧壁）推 —— 结果低力度球撞弧壁乱弹到中间、
+         满力量贴墙直落，而且「力度→落点」的相关性被冲掉（秩相关只剩 −0.28）。
+         这个符号错误是「满力量每次落同一个口」的最后一个成因。 */
+    const base = Math.atan2(-v * c, -v * s);
+    const ang = base - INWARD + (b.dirJit || 0);
+    b.vx = v * Math.cos(ang);
+    b.vy = v * Math.sin(ang);
+    b.mode = 'fly';
+  }
+
+  /* ---------------- 碰撞 ---------------- */
+  function hitPegs(b){
+    for(let i = 0; i < pegs.length; i++){
+      const p = pegs[i];
+      const dx = b.x - p.x, dy = b.y - p.y;
+      const rr = RB + RP;
+      const d2 = dx * dx + dy * dy;
+      if(d2 >= rr * rr || d2 === 0) continue;
+      const d = Math.sqrt(d2);
+      const nx = dx / d, ny = dy / d;
+      b.x = p.x + nx * rr;
+      b.y = p.y + ny * rr;
+      const vn = b.vx * nx + b.vy * ny;
+      if(vn < 0){
+        b.vx -= (1 + REST_PEG) * vn * nx;
+        b.vy -= (1 + REST_PEG) * vn * ny;
+        p.hit = 0.22;
+        pegHits++;
+        sndPeg();
+      }
+    }
+  }
+  /** ★ 挡板碰撞：胶囊体（线段 + 半径）vs 圆。
+   *  做法是标准的两步：① 求球心到线段最近点；② 若距离 < RB + r 就沿法线推出去并反射。
+   *  ⚠️ 必须用「线段最近点」而不是「无限长直线」—— 否则球会撞到挡板延长线上的空气。
+   *  ⚠️ 法线方向由最近点指向球心；退化情形（球心正好落在线段上，d≈0）用法线兜底，
+   *     否则会除以 0 得到 NaN，球直接飞出场外。 */
+  function hitBaffles(b){
+    for(let i = 0; i < baffles.length; i++){
+      const bf = baffles[i];
+      const ex = bf.x2 - bf.x1, ey = bf.y2 - bf.y1;
+      const len2 = ex * ex + ey * ey;
+      let t = len2 > 0 ? ((b.x - bf.x1) * ex + (b.y - bf.y1) * ey) / len2 : 0;
+      t = t < 0 ? 0 : (t > 1 ? 1 : t);
+      const cx = bf.x1 + ex * t, cy = bf.y1 + ey * t;
+      let dx = b.x - cx, dy = b.y - cy;
+      const rr = RB + bf.r;
+      let d2 = dx * dx + dy * dy;
+      if(d2 >= rr * rr) continue;
+      let d = Math.sqrt(d2), nx, ny;
+      if(d < 1e-6){
+        /* 球心正好压在挡板中轴上：取挡板法线当推出方向 */
+        const il = Math.sqrt(len2) || 1;
+        nx = -ey / il; ny = ex / il;
+        if(nx * b.vx + ny * b.vy > 0){ nx = -nx; ny = -ny; }
+        d = 0;
+      } else { nx = dx / d; ny = dy / d; }
+      b.x = cx + nx * rr;
+      b.y = cy + ny * rr;
+      const vn = b.vx * nx + b.vy * ny;
+      if(vn < 0){
+        b.vx -= (1 + REST_BAFFLE) * vn * nx;
+        b.vy -= (1 + REST_BAFFLE) * vn * ny;
+        bf.hit = 0.22;
+        sndWall();
+      }
+    }
+  }
+
+  function hitWalls(b, px){
+    if(b.y < ARC_CY){
+      /* 上半场：外边界是圆弧（球必须待在弧内侧） */
+      const dx = b.x - ARC_CX, dy = b.y - ARC_CY;
+      const d = hypot(dx, dy);
+      if(d > RC){
+        const nx = dx / d, ny = dy / d;
+        b.x = ARC_CX + nx * RC; b.y = ARC_CY + ny * RC;
+        const vn = b.vx * nx + b.vy * ny;
+        if(vn > 0){
+          b.vx -= (1 + REST_WALL) * vn * nx;
+          b.vy -= (1 + REST_WALL) * vn * ny;
+          sndWall();
+        }
+      }
+      return;
+    }
+    /* 下半场：左右竖墙 */
+    if(b.x < CX_MIN){ b.x = CX_MIN; b.vx = Math.abs(b.vx) * REST_WALL; sndWall(); }
+    if(b.x > CX_MAX){ b.x = CX_MAX; b.vx = -Math.abs(b.vx) * REST_WALL; sndWall(); }
+    /* 发射管道内壁：单向竖直挡板（用上一帧的 x 判断从哪一侧撞上来） */
+    const wx = LANE_WALL_X;
+    if(px >= wx + RB && b.x < wx + RB){ b.x = wx + RB; b.vx = Math.abs(b.vx) * REST_WALL; sndWall(); }
+    else if(px <= wx - RB && b.x > wx - RB){ b.x = wx - RB; b.vx = -Math.abs(b.vx) * REST_WALL; sndWall(); }
+  }
+
+  /* ---------------- 球的一步 ---------------- */
+  function stepBallSub(b, h){
+    if(b.mode === 'lane'){
+      b.vy += G * h;
+      b.y += b.vy * h;
+      b.x = LANE_X;
+      if(b.y <= ARC_CY) enterRail(b, Math.abs(b.vy));
+      return;
+    }
+    if(b.mode === 'rail'){
+      const s = Math.sin(b.phi);
+      const v2 = Math.max(0, b.v0 * b.v0 - 2 * G * RC * s);
+      const v = Math.sqrt(v2);
+      b.phi += (v / RC) * h;
+      /* 爬到释放角（或导轨尽头）就脱轨抛出 */
+      if(b.phi >= b.phiRel){ b.phi = b.phiRel; leaveRail(b); return; }
+      b.x = ARC_CX + RC * Math.cos(b.phi);
+      b.y = ARC_CY - RC * Math.sin(b.phi);
+      return;
+    }
+    if(b.mode === 'drop'){
+      b.vy += G * h;
+      b.y += b.vy * h;
+      if(b.y > floorY - RB){ b.y = floorY - RB; b.vy = 0; }
+      return;
+    }
+    /* fly */
+    const px = b.x;
+    b.vy += G * h;
+    b.x += b.vx * h;
+    b.y += b.vy * h;
+    hitPegs(b);
+    hitWalls(b, px);
+    hitBaffles(b);
+  }
+  function stepBall(b, dt){
+    const SUB = 4, h = dt / SUB;
+    for(let k = 0; k < SUB; k++){
+      if(!ball) return;
+      stepBallSub(b, h);
+      if(b.mode === 'fly' || b.mode === 'drop'){
+        b.flightT += h;
+        const sp = hypot(b.vx, b.vy);
+        if(sp < STUCK_V){ b.stuckT += h; } else b.stuckT = 0;
+        if(b.stuckT > STUCK_T){
+          /* 卡住踢一脚。★ 只往上加力是不够的（球可能被夹在挡板与钉之间，越推越死），
+             所以按「卡住的次数」递增力度，并且**加一点确定性的水平推力**把它推离夹缝。 */
+          b.stuckN = (b.stuckN || 0) + 1;
+          b.vy += 60 * b.stuckN;
+          b.vx += (rng() - 0.5) * 70 + (b.stuckN > 2 ? (b.x > ARC_CX ? -90 : 90) : 0);
+          b.stuckT = 0;
+        }
+        if(b.flightT > FLIGHT_CAP && b.mode === 'fly'){ b.vy += 400; }
+        /* ★ 长尾收敛：正常一发 5.5 秒内就落槽了，但极少数球会在钉阵里「低速赖着不走」
+           （实测 40 发里会有 1 发拖到 10~12 秒）。这种球速度不算「卡住」（没触发上面的
+           STUCK 逻辑），所以给它一个**随时间温和增强的下压**，把长尾收掉。
+           注意是「温和」（最多把重力加重约一倍），不是瞬移式加力 ——
+           这样正常球（5.5 秒内落槽）完全不受影响，只有赖着的球被慢慢劝下去。 */
+        if(b.flightT > FLIGHT_SOFT && b.mode === 'fly'){
+          const k = Math.min(2.5, (b.flightT - FLIGHT_SOFT) / 1.5);
+          b.vy += 150 * k * h;
+        }
+      }
+      /* ★ 硬保证：球绝不允许无限飞下去。
+         以前只在 flightT 超时时「往下加力」，但被夹死的球照样到不了口线 ——
+         实测夹住一次之后，后续每一发都返回「没落点」，整局卡死。
+         现在超过 FLIGHT_HARD 就**强制结算**（按当前 x 归到某个出口），
+         这是兜底里的兜底：宁可这一次落点略突兀，也不能让游戏卡住。 */
+      if(b.mode === 'fly' && b.flightT > FLIGHT_HARD){ settle(); return; }
+      if(b.mode === 'fly' && b.y >= mouthY){ settle(); return; }
+    }
+  }
+
+  /* ---------------- 结算 ---------------- */
+  function settle(){
+    const i = clamp(Math.floor((ball.x - fieldL) / slotW), 0, N_SLOT - 1);
+    landSlot = i;
+    landWin = !!lamps[i];
+    landGain = landWin ? bet * mult : 0;
+    coins += landGain;
+    ballsOut++;
+    if(landWin){ ballsWon++; roundsWon++; totalWon += landGain; }
+    if(coins > best) best = coins;
+    /* ★ 最高代币要落盘（启动时会读回来）：不写的话「最高代币」永远等于开局 200，
+       这个数字就完全没意义了。 */
+    try{ localStorage.setItem('pinball_best', String(best)); }catch(e){}
+    /* 让球看着落进槽里 */
+    ball.mode = 'drop';
+    ball.x = fieldL + slotW * (i + 0.5);
+    ball.vx = 0; ball.vy = Math.max(ball.vy, 140);
+    settleT = SETTLE_T;
+    banner = landWin
+      ? { txt:'中 奖', sub:'返还 ' + bet + ' × ' + mult + ' = ' + landGain + ' 枚', win:true }
+      : { txt:'未 中 奖', sub:'投注 ' + bet + ' 枚不退', win:false };
+    if(landWin) sndWin(); else sndLose();
+    const cx = ball.x;
+    for(let k = 0; k < (landWin ? 26 : 8); k++){
+      fx.push({ x:cx, y:mouthY, vx:(rng()-0.5)*230, vy:-60 - rng()*230,
+                life:0.5 + rng()*0.5, max:1.0, r:1.8 + rng()*2.2,
+                c: landWin ? (rng() < 0.5 ? '#ffd23f' : '#ff7a5c') : '#5d6ba8' });
+    }
+    if(landWin) floats.push({ x:cx, y:mouthY - 30, txt:'+' + landGain, life:1.5, max:1.5, c:'#ffd23f' });
+    syncUI();
+  }
+  function forceSettle(i){
+    if(!ball) return false;
+    /* ★ 必须把 phase 置成 'fly'：结算展示（settleT）只在 fly/结算流程里倒计时，
+       否则测试/实验台指定落点后 phase 还停在 'aim'，settleT 永远不减、这局收不掉
+       （经济性实验台就是被这个卡住，只跑了 1 局就停）。 */
+    phase = 'fly';
+    ball.x = fieldL + slotW * (clamp(i, 0, N_SLOT - 1) + 0.5);
+    ball.y = mouthY;
+    settle();
+    return true;
+  }
+
+  function endRound(){
+    rounds++;
+    bet = 0; mult = 0;
+    lamps = new Array(N_SLOT).fill(false);
+    ball = null; landSlot = -1; landWin = false; landGain = 0; banner = null;
+    rollT = 0; lampStep = 0; lampOrder = [];
+    if(coins < MIN_BET){
+      phase = 'over';
+      $('overSub').innerHTML =
+        '共玩 <b>' + rounds + '</b> 局，中奖 <b>' + roundsWon + '</b> 次<br>' +
+        '累计投币 <b>' + totalBet + '</b> 枚，累计中奖 <b>' + totalWon + '</b> 枚<br>' +
+        '剩余代币 <b>' + coins + '</b> 枚 · 最高代币 <b>' + best + '</b> 枚';
+      $('over').classList.add('on');
+    } else {
+      phase = 'bet';
+    }
+    syncUI();
+  }
+
+  /* ---------------- 特效 ---------------- */
+  function updateFx(dt){
+    for(let i = fx.length - 1; i >= 0; i--){
+      const p = fx[i];
+      p.vy += 520 * dt;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      p.life -= dt;
+      if(p.life <= 0) fx.splice(i, 1);
+    }
+    for(let i = floats.length - 1; i >= 0; i--){
+      const f = floats[i];
+      f.y -= 26 * dt; f.life -= dt;
+      if(f.life <= 0) floats.splice(i, 1);
+    }
+    for(const p of pegs) if(p.hit > 0) p.hit = Math.max(0, p.hit - dt);
+    for(const bf of baffles) if(bf.hit > 0) bf.hit = Math.max(0, bf.hit - dt);
+  }
+
+  /* ---------------- 主步进 ---------------- */
+  function step(dt){
+    tGlobal += dt;
+
+    /* 倍数滚动 → 逐个点灯 */
+    if(phase === 'aim'){
+      if(rollT > 0){
+        rollT -= dt; rollAcc += dt;
+        if(rollAcc >= 0.06){ rollAcc = 0; rollI = (rollI + 1) % MULTS.length; sndTick(); }
+        if(rollT <= 0){
+          mult = rolledMult;
+          lampOrder = pickLamps(lampCountOf(mult));
+          syncUI();
+        }
+      } else if(lampStep < lampCountOf(mult)){
+        lampAcc += dt;
+        if(lampAcc >= LAMP_DT){
+          lampAcc = 0;
+          lamps[lampOrder[lampStep]] = true;
+          lampStep++;
+          sndLamp(lampStep);
+          syncUI();
+        }
+      }
+    }
+
+    /* 蓄力 */
+    if(charging && aimReady()){
+      charge = Math.min(1, charge + dt / CHARGE_T);
+      chargeUpdate(charge);
+    }
+
+    /* 球 */
+    if(ball) stepBall(ball, dt);
+
+    /* 结算展示 → 收局 */
+    if(settleT > 0){
+      settleT -= dt;
+      if(settleT <= 0) endRound();
+    }
+
+    updateFx(dt);
+  }
+
+  /* =======================================================================
+     绘制
+     ======================================================================= */
+  function roundRect(x, y, w, h, r){
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function drawField(){
+    /* 机台底色 */
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#142a86'); g.addColorStop(0.55, '#0f1f6b'); g.addColorStop(1, '#0a1550');
+    ctx.fillStyle = g;
+    roundRect(0, 0, W, H, 12); ctx.fill();
+
+    /* 场地玻璃内区（圆弧 + 两侧竖墙围出来的形状） */
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(ARC_CX, ARC_CY, RC, Math.PI, 0);
+    ctx.lineTo(CX_MAX, floorY);
+    ctx.lineTo(CX_MIN, floorY);
+    ctx.closePath();
+    const fg = ctx.createLinearGradient(0, 100, 0, floorY);
+    fg.addColorStop(0, '#1b3aa8'); fg.addColorStop(0.5, '#16309a'); fg.addColorStop(1, '#102476');
+    ctx.fillStyle = fg; ctx.fill();
+    ctx.clip();
+    /* 细网格（照片上场地是带格子的蓝底） */
+    ctx.strokeStyle = 'rgba(255,255,255,.045)'; ctx.lineWidth = 1;
+    for(let x = 0; x <= W; x += 18){ ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for(let y = 0; y <= H; y += 18){ ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    ctx.restore();
+
+    /* 圆弧轨道（钢轨） */
+    ctx.beginPath(); ctx.arc(ARC_CX, ARC_CY, RC + RB + 1.5, Math.PI, 0);
+    ctx.strokeStyle = '#9fb4e8'; ctx.lineWidth = 3.2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(ARC_CX, ARC_CY, RC + RB + 3.6, Math.PI, 0);
+    ctx.strokeStyle = 'rgba(150,190,255,.28)'; ctx.lineWidth = 1.4; ctx.stroke();
+
+    /* 发射管道 */
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(LANE_WALL_X, ARC_CY, CX_MAX - LANE_WALL_X + RB, floorY - ARC_CY);
+    ctx.fillStyle = 'rgba(6,12,44,.55)'; ctx.fill();
+    ctx.restore();
+    ctx.beginPath();
+    ctx.moveTo(LANE_WALL_X, ARC_CY); ctx.lineTo(LANE_WALL_X, mouthY + 30);
+    ctx.strokeStyle = '#8ea6e0'; ctx.lineWidth = 3; ctx.stroke();
+    /* 管道口的单向挡片（照片里管道顶有个小门） */
+    ctx.beginPath();
+    ctx.moveTo(LANE_WALL_X, ARC_CY + 4);
+    ctx.lineTo(LANE_WALL_X - 12, ARC_CY + 16);
+    ctx.strokeStyle = 'rgba(200,220,255,.6)'; ctx.lineWidth = 2.4; ctx.stroke();
+  }
+
+  function drawPegs(){
+    for(const p of pegs){
+      /* 钉座阴影 */
+      ctx.beginPath(); ctx.arc(p.x + 0.9, p.y + 1.4, RP + 0.6, 0, 7);
+      ctx.fillStyle = 'rgba(4,8,32,.55)'; ctx.fill();
+      /* 钉体 */
+      const g = ctx.createRadialGradient(p.x - 1.6, p.y - 2, 0.6, p.x, p.y, RP);
+      if(p.hit > 0){
+        g.addColorStop(0, '#fff6d0'); g.addColorStop(1, '#ffb03a');
+      } else {
+        g.addColorStop(0, '#ffffff'); g.addColorStop(0.55, '#cdd9f2'); g.addColorStop(1, '#7d8dba');
+      }
+      ctx.beginPath(); ctx.arc(p.x, p.y, RP, 0, 7);
+      ctx.fillStyle = g; ctx.fill();
+      if(p.hit > 0){
+        ctx.beginPath(); ctx.arc(p.x, p.y, RP + 4 + p.hit * 10, 0, 7);
+        ctx.strokeStyle = 'rgba(255,190,70,' + (p.hit * 2.6) + ')'; ctx.lineWidth = 1.6; ctx.stroke();
+      }
+    }
+  }
+
+  /** ★ 挡板画成照片里那种「银色金属条」：深色描边 + 亮面高光。
+   *  画成胶囊（线段两端各一个圆头）而不是细矩形 —— 与碰撞用的胶囊体一致，
+   *  否则会出现「看着没碰到却被弹开」的观感错位。 */
+  function drawBaffles(){
+    for(const bf of baffles){
+      const hit = bf.hit > 0;
+      const il = Math.hypot(bf.x2 - bf.x1, bf.y2 - bf.y1) || 1;
+      const ux = (bf.x2 - bf.x1) / il, uy = (bf.y2 - bf.y1) / il;
+      /* 高光沿法线偏移一点，做出圆柱反光 */
+      const nx = -uy, ny = ux;
+      ctx.lineCap = 'round';
+      /* 外描边 */
+      ctx.beginPath();
+      ctx.moveTo(bf.x1, bf.y1); ctx.lineTo(bf.x2, bf.y2);
+      ctx.strokeStyle = 'rgba(6,10,34,.9)'; ctx.lineWidth = bf.r * 2 + 2.4; ctx.stroke();
+      /* 金属主体 */
+      const g = ctx.createLinearGradient(
+        bf.x1 - nx * bf.r, bf.y1 - ny * bf.r,
+        bf.x1 + nx * bf.r, bf.y1 + ny * bf.r);
+      if(hit){
+        g.addColorStop(0, '#fff3d0'); g.addColorStop(0.5, '#ffb03a'); g.addColorStop(1, '#a8631a');
+      } else {
+        g.addColorStop(0, '#8f9dc0'); g.addColorStop(0.42, '#ffffff');
+        g.addColorStop(0.62, '#d3ddf2'); g.addColorStop(1, '#6d7ba0');
+      }
+      ctx.beginPath();
+      ctx.moveTo(bf.x1, bf.y1); ctx.lineTo(bf.x2, bf.y2);
+      ctx.strokeStyle = g; ctx.lineWidth = bf.r * 2; ctx.stroke();
+      /* 端点圆头（让胶囊看起来是圆的） */
+      for(const [ex, ey] of [[bf.x1, bf.y1], [bf.x2, bf.y2]]){
+        ctx.beginPath(); ctx.arc(ex, ey, bf.r, 0, 7);
+        ctx.fillStyle = hit ? '#ffc257' : '#c9d4ea'; ctx.fill();
+      }
+      if(hit){
+        ctx.beginPath();
+        ctx.moveTo(bf.x1, bf.y1); ctx.lineTo(bf.x2, bf.y2);
+        ctx.strokeStyle = 'rgba(255,190,70,' + (bf.hit * 2.4) + ')';
+        ctx.lineWidth = bf.r * 2 + 5; ctx.stroke();
+      }
+      ctx.lineCap = 'butt';
+    }
+  }
+
+  function drawSlots(){
+    const litCount = lamps.filter(Boolean).length;
+    for(let i = 0; i < N_SLOT; i++){
+      const x0 = fieldL + slotW * i, cx = x0 + slotW / 2;
+      const lit = lamps[i];
+      const isLand = (landSlot === i && settleT > 0);
+
+      /* 槽体 */
+      const g = ctx.createLinearGradient(0, mouthY - 34, 0, floorY);
+      g.addColorStop(0, lit ? '#4a1030' : '#0a1038');
+      g.addColorStop(1, lit ? '#7d1a2c' : '#060a24');
+      ctx.fillStyle = g;
+      roundRect(x0 + 1.6, mouthY - 34, slotW - 3.2, floorY - (mouthY - 34) - 2, 5);
+      ctx.fill();
+
+      /* 槽口两侧的金属条 */
+      ctx.strokeStyle = 'rgba(160,190,240,.45)'; ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(x0 + 1.6, mouthY - 34); ctx.lineTo(x0 + 1.6, floorY - 3);
+      ctx.moveTo(x0 + slotW - 1.6, mouthY - 34); ctx.lineTo(x0 + slotW - 1.6, floorY - 3);
+      ctx.stroke();
+
+      /* 出口灯（照片上每个出口口上一颗红 LED） */
+      const ly = mouthY - 48;
+      if(lit){
+        ctx.beginPath(); ctx.arc(cx, ly, 11, 0, 7);
+        ctx.fillStyle = 'rgba(255,60,45,.22)'; ctx.fill();
+        ctx.beginPath(); ctx.arc(cx, ly, 6.4, 0, 7);
+        const lg = ctx.createRadialGradient(cx - 1.6, ly - 2, 0.6, cx, ly, 6.4);
+        lg.addColorStop(0, '#fff0ea'); lg.addColorStop(0.45, '#ff5a44'); lg.addColorStop(1, '#c01008');
+        ctx.fillStyle = lg; ctx.fill();
+      } else {
+        ctx.beginPath(); ctx.arc(cx, ly, 6.4, 0, 7);
+        const dg = ctx.createRadialGradient(cx - 1.6, ly - 2, 0.6, cx, ly, 6.4);
+        dg.addColorStop(0, '#4a2a3c'); dg.addColorStop(1, '#1c1030');
+        ctx.fillStyle = dg; ctx.fill();
+        ctx.strokeStyle = 'rgba(120,140,200,.35)'; ctx.lineWidth = 1; ctx.stroke();
+      }
+
+      /* 落点的槽口高亮 */
+      if(isLand){
+        ctx.beginPath();
+        roundRect(x0 + 1.6, mouthY - 34, slotW - 3.2, floorY - (mouthY - 34) - 2, 5);
+        ctx.strokeStyle = landWin ? 'rgba(255,215,70,.95)' : 'rgba(120,140,200,.7)';
+        ctx.lineWidth = 2.4; ctx.stroke();
+      }
+    }
+    /* 出口口线 */
+    ctx.beginPath();
+    ctx.moveTo(CX_MIN, mouthY); ctx.lineTo(CX_MAX, mouthY);
+    ctx.strokeStyle = 'rgba(180,205,255,.35)'; ctx.lineWidth = 1.2;
+    ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]);
+    return litCount;
+  }
+
+  function drawBall(){
+    if(!ball) return;
+    ctx.beginPath(); ctx.arc(ball.x + 1, ball.y + 1.4, RB, 0, 7);
+    ctx.fillStyle = 'rgba(4,8,30,.5)'; ctx.fill();
+    const g = ctx.createRadialGradient(ball.x - 2.2, ball.y - 2.6, 0.8, ball.x, ball.y, RB);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, '#e6eefc'); g.addColorStop(1, '#9aa9cf');
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, RB, 0, 7);
+    ctx.fillStyle = g; ctx.fill();
+    ctx.beginPath(); ctx.arc(ball.x - 2.1, ball.y - 2.3, 1.7, 0, 7);
+    ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.fill();
+  }
+
+  function drawFx(){
+    for(const p of fx){
+      const a = clamp(p.life / p.max, 0, 1);
+      ctx.globalAlpha = a;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7);
+      ctx.fillStyle = p.c; ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'center';
+    for(const f of floats){
+      const a = clamp(f.life / f.max, 0, 1);
+      ctx.globalAlpha = a;
+      ctx.font = '700 19px ' + UI;
+      ctx.fillStyle = 'rgba(0,0,0,.5)';
+      ctx.fillText(f.txt, f.x + 1.2, f.y + 1.4);
+      ctx.fillStyle = f.c;
+      ctx.fillText(f.txt, f.x, f.y);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
+  }
+
+  /** 蓄力条（画在发射管道旁边，竖向从下往上长） */
+  function drawCharge(){
+    if(phase !== 'aim') return;
+    const ready = aimReady();
+    const x = LANE_WALL_X - 15, y0 = floorY - 8, y1 = ARC_CY + 20;
+    const h = y0 - y1;
+    ctx.fillStyle = 'rgba(4,8,30,.6)';
+    roundRect(x - 4, y1 - 4, 11, h + 8, 5); ctx.fill();
+    if(ready && charge > 0){
+      const ch = h * charge;
+      const g = ctx.createLinearGradient(0, y0, 0, y0 - ch);
+      g.addColorStop(0, '#2fe3d8'); g.addColorStop(0.6, '#ffd23f'); g.addColorStop(1, '#ff5a44');
+      ctx.fillStyle = g;
+      roundRect(x - 2, y0 - ch, 7, ch, 3.5); ctx.fill();
+    }
+    ctx.font = '600 9px ' + UI;
+    ctx.fillStyle = ready ? 'rgba(220,235,255,.8)' : 'rgba(140,160,210,.55)';
+    ctx.save();
+    ctx.translate(x + 2, y1 - 10);
+    ctx.fillText('力', -3, 0);
+    ctx.restore();
+  }
+
+  /** 未开局时在场地中间给的引导文字 */
+  function drawGuide(){
+    if(phase === 'fly' || settleT > 0) return;
+    let t1 = '', t2 = '';
+    if(phase === 'bet'){
+      if(bet < MIN_BET){ t1 = '投币口投币'; t2 = '至少 ' + MIN_BET + ' 枚（现在 ' + bet + ' 枚）'; }
+      else { t1 = '已投 ' + bet + ' 枚'; t2 = '按「开始」抽倍数'; }
+    } else if(phase === 'aim'){
+      if(rollT > 0){ t1 = '抽 倍 数 …'; t2 = '2x · 4x · 6x · 8x · 10x'; }
+      else if(lampStep < lampCountOf(mult)){ t1 = '点亮出口灯 …'; t2 = '倍数越低，亮的出口越多'; }
+      else { t1 = '按住「拉扳机」蓄力'; t2 = '松手发射 · 力度决定落点'; }
+    } else if(phase === 'over'){ t1 = '代币用完'; t2 = '点「再来一次」重开'; }
+    if(!t1) return;
+    ctx.textAlign = 'center';
+    ctx.font = '700 16px ' + UI;
+    ctx.fillStyle = 'rgba(0,0,0,.45)';
+    ctx.fillText(t1, ARC_CX + 1.2, 200 + 1.4);
+    ctx.fillStyle = 'rgba(233,240,255,.94)';
+    ctx.fillText(t1, ARC_CX, 200);
+    ctx.font = '500 12px ' + UI;
+    ctx.fillStyle = 'rgba(180,200,245,.8)';
+    ctx.fillText(t2, ARC_CX, 222);
+    ctx.textAlign = 'left';
+  }
+
+  /** 结算横幅 */
+  function drawBanner(){
+    if(!banner || settleT <= 0) return;
+    const a = clamp(settleT / 0.35, 0, 1);
+    ctx.globalAlpha = a;
+    ctx.textAlign = 'center';
+    ctx.font = '800 30px ' + UI;
+    ctx.fillStyle = 'rgba(0,0,0,.55)';
+    ctx.fillText(banner.txt, ARC_CX + 2, 336 + 2.4);
+    ctx.fillStyle = banner.win ? '#ffd23f' : '#8b9ad0';
+    ctx.fillText(banner.txt, ARC_CX, 336);
+    ctx.font = '600 14px ' + UI;
+    ctx.fillStyle = banner.win ? '#ffe89a' : 'rgba(190,205,240,.9)';
+    ctx.fillText(banner.sub, ARC_CX, 362);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
+  }
+
+  function draw(){
+    ctx.setTransform(S * dprNow, 0, 0, S * dprNow, OFFX * dprNow, OFFY * dprNow);
+    ctx.clearRect(0, 0, W, H);
+    drawField();
+    drawBaffles();
+    drawPegs();
+    drawSlots();
+    drawBall();
+    drawCharge();
+    drawGuide();
+    drawBanner();
+    drawFx();
+  }
+
+  /* ---------------- 主循环 ---------------- */
+  function frame(ts){
+    raf = requestAnimationFrame(frame);
+    if(!lastTs) lastTs = ts;
+    let dt = (ts - lastTs) / 1000; lastTs = ts;
+    if(!(dt > 0)) dt = 1 / 60;
+    dt = Math.min(dt, 1 / 20);
+    step(dt);
+    draw();
+  }
+
+  /* ---------------- 布局 ---------------- */
+  function setSqueezed(on){
+    const root = document.documentElement;
+    if(!root || !root.classList) return;
+    if(on) root.classList.add('squeezed'); else root.classList.remove('squeezed');
+  }
+  function chromeHeight(){
+    let h = 0;
+    const t = $('topbar'), b = $('board'), c = $('ctlbar');
+    if(t) h += t.offsetHeight || 0;
+    if(b) h += b.offsetHeight || 0;
+    if(c) h += c.offsetHeight || 0;
+    return h;
+  }
+  function layout(){
+    const stage = $('stage');
+    let availW = stage.clientWidth, availH = stage.clientHeight;
+    /* ★ 黑屏兜底：预览面板（iframe）/ WebView 的首帧里 stage 常常还没尺寸。
+       拿不到就先按窗口估一版画出来，再排几次重试等真实布局。 */
+    const noSize = !availW || !availH;
+    if(noSize){
+      if(!availW) availW = Math.max(240, (window.innerWidth || 360) - 8);
+      if(!availH) availH = Math.max(240, (window.innerHeight || 640) - chromeHeight() - 10);
+      if(layoutRetry < 40) setTimeout(() => { layoutRetry++; layout(); }, 80);
+    } else layoutRetry = 0;
+
+    const squeezed = availH < MIN_STAGE_H;
+    if(squeezed){ availH = MIN_STAGE_H; stage.style.height = MIN_STAGE_H + 'px'; }
+    else if(stage.style.height) stage.style.height = '';
+    setSqueezed(squeezed);
+
+    S = Math.min(availH / HFIX, availW / WFIX);
+    OFFX = (availW - WFIX * S) / 2;
+    OFFY = (availH - HFIX * S) / 2;
+
+    const dpr = window.devicePixelRatio || 1;
+    dprNow = dpr;
+    cv.style.width = availW + 'px'; cv.style.height = availH + 'px';
+    cv.width = Math.round(availW * dpr); cv.height = Math.round(availH * dpr);
+    ctx.setTransform(S * dpr, 0, 0, S * dpr, OFFX * dpr, OFFY * dpr);
+  }
+
+  /* ---------------- UI 同步 ---------------- */
+  const ledEls = [].slice.call(document.querySelectorAll('#leds .led'));
+  function syncUI(){
+    $('vCoins').textContent = coins;
+    $('vBet').textContent = bet;
+    $('vBest').textContent = best;
+    /* 倍数：滚动动画期间显示跳动的数字，定下来后显示真值 */
+    if(phase === 'aim' && rollT > 0) $('vMult').textContent = MULTS[rollI] + 'x';
+    else if(mult) $('vMult').textContent = mult + 'x';
+    else $('vMult').textContent = '--';
+
+    const rolling = (phase === 'aim' && rollT > 0);
+    for(const el of ledEls){
+      const m = +el.dataset.m;
+      const on = rolling ? (MULTS[rollI] === m) : (mult === m);
+      el.classList.toggle('on', on);
+      el.classList.toggle('hot', rolling);
+    }
+
+    const canCoin = (phase === 'bet' && coins > 0 && bet < MAX_BET);
+    $('btnCoin').disabled = !canCoin;
+    $('btnCoin').innerHTML = (phase === 'bet' && bet >= MAX_BET)
+      ? '投币口<b>已达单局上限 ' + MAX_BET + ' 枚</b>'
+      : '投币口<b>按住连投 +1 · 单局最多 ' + MAX_BET + ' 枚</b>';
+    const canStart = (phase === 'bet' && bet >= MIN_BET);
+    $('btnStart').disabled = !canStart;
+    $('btnStart').classList.toggle('hot', canStart);
+    $('btnStart').textContent = (phase === 'bet' && bet > 0 && bet < MIN_BET)
+      ? ('还差 ' + (MIN_BET - bet) + ' 枚') : '开 始';
+
+    const ready = aimReady();
+    $('btnTrig').disabled = !ready;
+    $('btnTrig').classList.toggle('ready', ready);
+    $('btnTrig').classList.toggle('charging', charging && ready);
+  }
+
+  let toastTimer = null;
+  function toast(msg, ms){
+    const el = $('toast');
+    el.textContent = msg;
+    el.classList.add('on');
+    if(toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('on'), ms || 1600);
+  }
+
+  /* ---------------- 交互 ---------------- */
+  function bindHold(el, onDown, onUp){
+    el.addEventListener('pointerdown', e => {
+      if(el.disabled) return;
+      e.preventDefault();
+      try{ el.setPointerCapture(e.pointerId); }catch(err){}
+      onDown();
+    });
+    const up = e => { if(e) e.preventDefault(); onUp(); };
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    el.addEventListener('lostpointercapture', up);
+    el.addEventListener('contextmenu', e => e.preventDefault());
+  }
+
+  /* 投币口：按一次 +1，按住每 90ms 连投 */
+  bindHold($('btnCoin'),
+    () => {
+      insertCoin();
+      if(coinRepeat) clearInterval(coinRepeat);
+      coinRepeat = setInterval(() => { if(!insertCoin()) { clearInterval(coinRepeat); coinRepeat = null; } }, 90);
+    },
+    () => { if(coinRepeat){ clearInterval(coinRepeat); coinRepeat = null; } });
+
+  /* 开始 */
+  $('btnStart').addEventListener('click', () => { if(!startRound()) return; });
+
+  /* 扳机：按住蓄力，松手发射 */
+  bindHold($('btnTrig'),
+    () => {
+      if(!aimReady()) return;
+      charging = true; charge = 0;
+      chargeOn();
+      syncUI();
+    },
+    () => {
+      if(!charging) return;
+      charging = false;
+      const p = charge; charge = 0;
+      chargeOff();
+      launch(p);
+    });
+
+  /* 音效开关 */
+  function setSoundLabel(){ $('btnSound').textContent = soundOn ? '🔊 音效' : '🔇 音效'; }
+  $('btnSound').addEventListener('click', () => {
+    soundOn = !soundOn;
+    try{ localStorage.setItem('pinball_sound', soundOn ? '1' : '0'); }catch(e){}
+    setSoundLabel();
+    if(!soundOn) chargeOff();
+    toast(soundOn ? '音效已开' : '音效已关');
+  });
+  try{ soundOn = localStorage.getItem('pinball_sound') !== '0'; }catch(e){}
+  setSoundLabel();
+
+  /* 玩法面板 */
+  const sheet = $('sheet');
+  $('btnHelp').addEventListener('click', () => sheet.classList.add('on'));
+  $('btnSheetClose').addEventListener('click', () => sheet.classList.remove('on'));
+  sheet.addEventListener('click', e => { if(e.target === sheet) sheet.classList.remove('on'); });
+  document.addEventListener('keydown', e => {
+    if(e.key === 'Escape'){ sheet.classList.remove('on'); }
+    /* 空格 = 扳机（键盘也能玩） */
+    if(e.code === 'Space' && !e.repeat){
+      if(aimReady()){ charging = true; charge = 0; chargeOn(); syncUI(); }
+      e.preventDefault();
+    }
+  });
+  document.addEventListener('keyup', e => {
+    if(e.code === 'Space'){
+      if(charging){ charging = false; const p = charge; charge = 0; chargeOff(); launch(p); }
+      e.preventDefault();
+    }
+  });
+
+  /* 结束面板 */
+  $('overRetry').addEventListener('click', () => {
+    $('over').classList.remove('on');
+    reset(null);
+  });
+
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', () => setTimeout(layout, 120));
+
+  /* ---------------- 启动 ---------------- */
+  /* ★ 用随机种子启动（不是固定种子）：固定种子会让「每次刷新都是同一局」，
+     玩家永远看不到钉阵变化（弹珠乐园踩过这个坑）。要复现某局用 ?seed= */
+  const urlSeed = (function(){
+    const m = /[?&]seed=(\d+)/.exec(location.search || '');
+    return m ? (parseInt(m[1], 10) >>> 0) : null;
+  })();
+  reset(urlSeed);
+  try{ const b = parseInt(localStorage.getItem('pinball_best') || '', 10); if(b > 0) best = b; }catch(e){}
+  if(coins > best) best = coins;
+  syncUI();
+  layout();
+  setTimeout(layout, 60);
+  setTimeout(layout, 300);
+  if(!raf) raf = requestAnimationFrame(frame);
+
+  /* =======================================================================
+     测试钩子（tools/test_pinball.js / tools/bench_pinball.js 用）
+     ======================================================================= */
+  window.__pinball = () => ({
+    phase, coins, bet, mult, lamps: lamps.slice(), best,
+    MIN_BET, MAX_BET, START_COINS, N_SLOT, MULTS, MULT_W, LAMP_N,
+    MULTS_LEN: MULTS.length,
+    slotW, fieldL, fieldR, CX_MIN, CX_MAX, mouthY, floorY,
+    ARC_CX, ARC_CY, RC, RB, RP, G, LANE_X, LANE_WALL_X, LANE_Y0,
+    PHI_MIN, PHI_MAX, VREL_MIN, VREL_MAX, CHARGE_T, ROLL_T, LAMP_DT, SETTLE_T,
+    aimOf: p => aimOf(p),
+    totalBet, totalWon, ballsOut, ballsWon, rounds, roundsWon,
+    ball: ball ? { mode:ball.mode, x:ball.x, y:ball.y, vx:ball.vx, vy:ball.vy,
+                   phi:ball.phi, v0:ball.v0, flightT:ball.flightT } : null,
+    pegs: pegs.map(p => ({ x:p.x, y:p.y })),
+    baffles: baffles.map(b => ({ x1:b.x1, y1:b.y1, x2:b.x2, y2:b.y2, r:b.r, kind:b.kind })),
+    pegHits, seed,
+    charge, charging, rollT, lampStep,
+    landSlot, landWin, landGain, settleT,
+    aimReady: aimReady(),
+    lampCount: mult ? lampCountOf(mult) : 0,
+    lampOrder: lampOrder.slice(),
+  });
+  window.__pinballStep     = dt => step(dt);
+  window.__pinballReset    = s => { reset(s); };
+  window.__pinballInsert   = n => { let c = 0; for(let i = 0; i < n; i++) if(insertCoin()) c++; return c; };
+  /** 一次投币调用（投币口连投走的就是它），返回是否真的投进去了 */
+  window.__pinballInsertOne = () => insertCoin();
+  window.__pinballStart    = () => startRound();
+  window.__pinballForceMult= m => { forcedMult = m; };
+  window.__pinballLaunch   = p => launch(p);
+  window.__pinballLand     = i => forceSettle(i);
+  window.__pinballSetLamps = a => { lamps = a.slice(0, N_SLOT); while(lamps.length < N_SLOT) lamps.push(false); syncUI(); };
+  window.__pinballSkipAnim = () => {
+    if(phase === 'aim'){
+      rollT = 0; mult = rolledMult;
+      lampOrder = pickLamps(lampCountOf(mult));
+      lamps = new Array(N_SLOT).fill(false);
+      for(const i of lampOrder) lamps[i] = true;
+      lampStep = lampOrder.length;
+      syncUI();
+    }
+  };
+  window.__pinballPegs     = () => pegs.map(p => ({ x:p.x, y:p.y }));
+  window.__pinballDraw     = () => draw();
+  window.__pinballEndRound = () => endRound();
+  /** 实验台用：给代币充值。
+   *  ★ 必须有这个 —— 实验台要打几百发才能量出分布，而玩家只有 200 枚代币，
+   *    打到一半就没钱了，后续每一发都「发射失败」返回 slot=-1，
+   *    于是「同力度重复度」被算成 100%（全是 -1）—— 量出来的是假象，不是手感。 */
+  window.__pinballSetCoins = n => { coins = Math.max(0, n | 0); if(coins >= MIN_BET && phase === 'over') phase = 'bet'; syncUI(); return coins; };
+  /** 实验台用：运行时改可调参数（只改传进来的键），返回改后的值 */
+  window.__pinballTune = o => {
+    if(o){
+      if('G' in o) G = o.G;
+      if('RP' in o) RP = o.RP;
+      if('RB' in o) RB = o.RB;
+      if('REST_PEG' in o) REST_PEG = o.REST_PEG;
+      if('REST_WALL' in o) REST_WALL = o.REST_WALL;
+      if('PEG_ROWS' in o) PEG_ROWS = o.PEG_ROWS;
+      if('PEG_Y0' in o) PEG_Y0 = o.PEG_Y0;
+      if('PEG_DY' in o) PEG_DY = o.PEG_DY;
+      if('PEG_DX' in o) PEG_DX = o.PEG_DX;
+      if('PEG_END' in o) PEG_END = o.PEG_END;
+      if('PEG_JX' in o) PEG_JX = o.PEG_JX;
+      if('PEG_JY' in o) PEG_JY = o.PEG_JY;
+      if('PHI_MIN' in o) PHI_MIN = o.PHI_MIN;
+      if('PHI_MAX' in o) PHI_MAX = o.PHI_MAX;
+      if('VREL_MIN' in o) VREL_MIN = o.VREL_MIN;
+      if('VREL_MAX' in o) VREL_MAX = o.VREL_MAX;
+      if('PHI_JIT' in o) PHI_JIT = o.PHI_JIT;
+      if('VREL_JIT' in o) VREL_JIT = o.VREL_JIT;
+      if('DIR_JIT' in o) DIR_JIT = o.DIR_JIT;
+      if('INWARD' in o) INWARD = o.INWARD;
+      if('BAFFLE_R' in o) BAFFLE_R = o.BAFFLE_R;
+      if('REST_BAFFLE' in o) REST_BAFFLE = o.REST_BAFFLE;
+      if('KICK_LEN' in o) KICK_LEN = o.KICK_LEN;
+      if('KICK_YS' in o) KICK_YS = o.KICK_YS;
+      if('BLADE_R' in o) BLADE_R = o.BLADE_R;
+      if('BLADE_ON' in o) BLADE_ON = o.BLADE_ON;
+    }
+    return { G, RP, RB, REST_PEG, REST_WALL, PEG_ROWS, PEG_Y0, PEG_DY, PEG_DX, PEG_JX, PEG_JY, PEG_END,
+             PHI_MIN, PHI_MAX, VREL_MIN, VREL_MAX, PHI_JIT, VREL_JIT, DIR_JIT, INWARD,
+             BAFFLE_R, REST_BAFFLE, KICK_LEN, KICK_YS, BLADE_R, BLADE_ON };
+  };
+})();
+</script>
+</body>
+</html>
