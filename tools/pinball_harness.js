@@ -142,6 +142,10 @@ function load(){
    *  ★ 每局前自动给代币充值：实验台要连打几百发，玩家只有 200 枚，
    *    不充值就会打到没钱、后续全部「发射失败」，量出来的分布是假的。 */
   function openRound({ seed = null, bet = 5, mult = 2, skipAnim = true, fresh = true } = {}){
+    /* ★ 上一局如果是中奖，会停在「领奖」阶段等玩家按键（用户要的控制感）。
+       实验台/测试是"自动玩家"，所以这里替它按掉，否则 startRound() 会
+       因为 phase !== 'bet' 直接失败 —— 实测症状是"打了一发之后后面全失败"。 */
+    if(win.__pinball && win.__pinball().phase === 'collect') win.__pinballCollect();
     if(fresh) win.__pinballReset(seed);
     if(win.__pinballSetCoins) win.__pinballSetCoins(100000);
     if(mult) win.__pinballForceMult(mult);
@@ -224,6 +228,8 @@ function load(){
   }
 
   return { win, M, DT, step, run, shoot, openRound, els, ledEls, drawRec, sandbox,
+           /* ★ 替"自动玩家"按掉领奖按钮（见 openRound 的注释） */
+           collect: () => win.__pinballCollect(),
            store, sndCount: () => sndStarts, sndFreqs,
            /* ★ 取「最近 n 次起振」的频率 —— 音效计数是全局累加的，
               要单独看某一段（比如结算音乐）就得取尾部快照。 */

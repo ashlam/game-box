@@ -79,7 +79,10 @@ f.onload=()=>setTimeout(()=>{
     const ledEls=[...d.querySelectorAll('#leds .led')];
     const ledRects=ledEls.map(e=>e.getBoundingClientRect());
     const stats=[...d.querySelectorAll('.stats .stat')].map(e=>e.getBoundingClientRect());
-    const vEls=['vCoins','vBet','vMult','vBest'].map(id=>E(id));
+    /* ★ 第 4 格已从「最高代币」改成「本轮可得」（vGain）—— 见 index.html 的注释。
+       这里必须跟着改，否则 E('vBest') 返回 null，后面读 .scrollWidth 直接抛异常，
+       UI 测试会整片红（这个 bug 就是这么暴露的：它把"元素被改名"报成了"读不到游戏页面"）。 */
+    const vEls=['vCoins','vBet','vMult','vGain'].map(id=>E(id));
     /* 出口灯/出口槽是画在 canvas 里的，量不到 DOM；这里只量 DOM 部分，
        画布内容由 tools/test_pinball.js 的绘制断言覆盖。 */
     /* ★ 关键：body 是 overflow:hidden，内容一旦比视口宽**不会出滚动条、会被静默裁掉**。
@@ -108,6 +111,13 @@ f.onload=()=>setTimeout(()=>{
        trigW:trig.width, trigH:trig.height,
        trigTop:trig.top, trigLeft:trig.left, trigRight:trig.right,
        ctlH:ctl.height,
+       /* ★ 记分牌第 4 格必须是「本轮可得」（vGain）。
+          这里直接量它的文本，防止"元素被改名/删掉但没人发现"——
+          实测那个 bug 的表现很迷惑：E('vBest') 返回 null → 读 .scrollWidth 抛异常
+          → 整片报成"读不到游戏页面"，完全看不出真正原因是元素改名。 */
+       gainText:(E('vGain') ? E('vGain').textContent : null),
+       hasBest:!!E('vBest'),
+       coinLabel:(E('btnCoin') ? E('btnCoin').textContent : null),
        coinW:coin.width, coinH:coin.height,
        coinTop:coin.top, coinLeft:coin.left, coinRight:coin.right,
        startW:start.width, startH:start.height,
@@ -204,6 +214,28 @@ for(const { w, h, label, r } of results){
   const clipped = (r.valClipped || []).filter(v => v > 1);
   ok(clipped.length === 0, tag + ' 4 个数值都没被截断',
      clipped.length ? ('被截的：' + JSON.stringify(r.valClipped) + ' 文本 ' + JSON.stringify(r.valTexts)) : '');
+}
+
+section('1.5) ★ 记分牌第 4 格 = 「本轮可得」（不是历史最高纪录）');
+for(const { w, h, label, r } of results){
+  const tag = `${label} ${w}×${h}`;
+  /* ⚠️ 这里必须用 ok 而不是 okNum：gainText 是**字符串**（DOM 文本），
+     okNum 要求"有限数"，会把 '--' 判成失败（踩过）。 */
+  ok(r.gainText !== null && r.gainText !== undefined,
+     tag + ' 第 4 格 vGain 存在', '实际 ' + JSON.stringify(r.gainText));
+  ok(!r.hasBest, tag + ' 旧的「最高代币」vBest 已移除（那个数对当前玩家没意义）');
+  ok(r.gainText === '--' || /^\d+$/.test(String(r.gainText)),
+     tag + ' 第 4 格显示的是数值或 --（开局没投币时应为 --）',
+     '实际 ' + JSON.stringify(r.gainText));
+}
+
+section('1.6) ★ 投币按钮文案 = 「投币」（不是「投币口」）');
+for(const { w, h, label, r } of results){
+  const tag = `${label} ${w}×${h}`;
+  ok(/^投币/.test(String(r.coinLabel)),
+     tag + ' 按钮文案以「投币」开头', '实际 ' + JSON.stringify(r.coinLabel));
+  ok(String(r.coinLabel).indexOf('投币口') < 0,
+     tag + ' 不再出现「投币口」', '实际 ' + JSON.stringify(r.coinLabel));
 }
 
 section('2) 五档倍率灯：都在、够大、不溢出');
