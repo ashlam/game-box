@@ -91,11 +91,16 @@ const PICKS = {
 
 console.log('技术档 × 每局投注 —— 结果：玩了几局 / 是否破产 / 期末代币 / 中奖率');
 console.log('─'.repeat(88));
-const header = '技术'.padEnd(8) + ['投5','投10','投20','投50'].map(x => x.padStart(19)).join('');
+/* ★ 投注档位里必须包含 **MAX_BET（当前单局上限）本身**，否则这个实验台测不到
+   上限附近的行为 —— 上限从 20 提到 25 之后，「投20」不再是最大投注，
+   少了「投25」这一档就等于漏测了收益最高、最该盯的那一档。 */
+const MAXB = H.load().M().MAX_BET || 20;
+const BETS = [5, 10, 20, MAXB];
+const header = '技术'.padEnd(8) + BETS.map(b => ('投' + b).padStart(19)).join('');
 console.log(header);
 for (const [name, aim] of [['新手', 0.30], ['熟手', 0.65], ['高手', 0.90]]) {
   let row = name.padEnd(8);
-  for (const bet of [5, 10, 20, 50]) {
+  for (const bet of BETS) {
     const r = simulate({ aim, bet, pick: PICKS['打最亮的口(按倍数挑最值)'], rounds: ROUNDS, seedBase: 12345 });
     const tag = r.bust >= 0 ? `破产@${r.bust}` : `撑满${r.played}`;
     row += `${tag} ${String(r.coins).padStart(6)}枚 ${(r.hitRate * 100).toFixed(0)}%`.padStart(19);
@@ -104,7 +109,7 @@ for (const [name, aim] of [['新手', 0.30], ['熟手', 0.65], ['高手', 0.90]]
 }
 
 console.log('\n（「破产@N」= 第 N 局后代币不足 5 枚；「撑满N」= 打完 N 局还有钱）');
-console.log('  ⚠️ 如果「投50」也能撑满且期末代币暴涨 → 说明投注上限失控，需要加约束');
+console.log(`  ⚠️ 如果「投${MAXB}」（当前上限）也能撑满且期末代币暴涨 → 说明投注上限失控，需要加约束`);
 
 /* 单局期望收益（理论值，用来解释上面的现象） */
 console.log('\n=== 单局期望（理论） ===');

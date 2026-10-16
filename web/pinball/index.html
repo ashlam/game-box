@@ -198,7 +198,7 @@
     <ol>
       <li>开局给 <span class="hl">200 枚代币</span>。</li>
       <li>点「<span class="hl">投币</span>」投币，<span class="hl">一次 1 枚</span>（按住会连投）。本局至少投 <span class="hl">5 枚</span>，
-          最多 <span class="hl">20 枚</span>。</li>
+         最多 <span class="hl">25 枚</span>。</li>
       <li>投够了按「<span class="hl">开始</span>」——随机抽一个倍数（<span class="hl">2x / 4x / 6x / 8x / 10x</span>），
           然后随机点亮出口的灯。<span class="hl">倍数越低，亮的出口越多</span>。</li>
       <li>按住「<span class="hl">拉扳机</span>」蓄力，松手把弹珠射出去。蓄力越大球飞得越远，落点越靠左。</li>
@@ -265,7 +265,7 @@
        用来扫参数找手感（不用改源码、不用重新解析 HTML）。 */
   const START_COINS = 200;           // ★ 开局代币
   const MIN_BET     = 5;             // ★ 最少投 5 枚才能开一局
-  const MAX_BET     = 20;            // ★ 单局投注上限
+  const MAX_BET     = 25;            // ★ 单局投注上限（用户要求从 20 提到 25）
   const N_SLOT      = 12;            // ★ 照片上出珠口是 12 个
 
   const MULTS  = [2, 4, 6, 8, 10];             // ★ 五档倍率（照片上的灯）
@@ -996,7 +996,11 @@
     if(coins <= 0){ sndDeny(); toast('代币用完了'); return false; }
     /* ★ 单局投注上限：不封顶的话「落进亮灯口返还 投注×倍数」会滚雪球 ——
        实验台实测熟手每局投 50、200 局后到 2 万枚，「永远投最大」成了唯一最优解，
-       投注决策就失去意义了。封顶 20 之后高投注仍有吸引力，但不会一局刷爆。 */
+       投注决策就失去意义了。封顶 20 之后高投注仍有吸引力，但不会一局刷爆。
+       ⚠️ 用户要求把上限从 20 提到 25。提上限会**放大**雪球效应
+       （同样的倍数下最高可拿 25×10=250），所以这条的收益上限跟着变成 250 ——
+       好在倍数和亮灯数是同时受控的（高倍更难抽、亮的还少），
+       实验台（bench_pinball_econ.js）每轮都在盯这个，改完最好跑一次确认期望收益没跑偏。 */
     if(bet >= MAX_BET){ sndDeny(); toast('单局最多投 ' + MAX_BET + ' 枚'); return false; }
     coins--; bet++; totalBet++;
     sndCoin();
