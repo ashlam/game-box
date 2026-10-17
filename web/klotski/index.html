@@ -877,7 +877,7 @@
     ctx.save();
     ctx.fillStyle = 'rgba(250,248,239,.97)';
     ctx.strokeStyle = '#bbada0'; ctx.lineWidth = 2.5;
-    roundRect(W / 2 - hw, cy - 54, hw * 2, 138, 14); ctx.fill(); ctx.stroke();
+    roundRect(W / 2 - hw, cy - 54, hw * 2, 156, 14); ctx.fill(); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.fillStyle = '#8f7a66'; ctx.font = '800 20px ' + FONT;
     ctx.fillText('华容道 · 车阵', W / 2, cy - 26);
@@ -887,7 +887,12 @@
     ctx.fillStyle = '#c0392b'; ctx.font = '800 12px ' + FONT;
     ctx.fillText('把曹操挪到底部出口', W / 2, cy + 38);
     ctx.fillStyle = '#5b8cff'; ctx.font = '700 11px ' + FONT;
-    ctx.fillText('入门 8 · 中级 6 · 古典 4（共 18 关）· 点右上「关卡」选关', W / 2, cy + 74);
+    // ★ 按关卡集实时算，别再写死（加关卡后忘改就会出现「入门 8 · 中级 6（共 18 关）」）。
+    //   四套关卡的分档文案一行放不下（315px 画布需要 372px），拆成两行。
+    ctx.fillText(LEVEL_SETS.map(s => s.name.replace(/关卡集?$/, '') + ' ' + s.levels.length).join(' · '),
+                 W / 2, cy + 70);
+    ctx.fillText('共 ' + LEVEL_SETS.reduce((n, s) => n + s.levels.length, 0) + ' 关 · 点右上「关卡」选关',
+                 W / 2, cy + 86);
     ctx.fillStyle = '#a39489'; ctx.font = '11px ' + FONT;
     ctx.fillText('（同一辆车滑一次算 1 步）', W / 2, cy + 56);
     ctx.restore();
