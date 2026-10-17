@@ -74,6 +74,8 @@ const resetIntro = () => { win.__klotskiGoto(0, 0); };
 const moveByName = (n, dr, dc, want) => win.__klotskiMoveByName(n, dr, dc, want);
 const drag = (r, c, dr, dc) => win.__klotskiDrag(r, c, dr, dc);
 const allNodes = () => sndNodes + noiseNodes;
+// ★ 过关后要等庆祝动画放完才弹面板，这个助手把它快进到面板出现
+const settleWin = () => { run(200); };
 
 let pass = 0, fail = 0; const failures = [];
 function ok(cond, name, detail){
@@ -270,9 +272,19 @@ section('4) 过关判定（曹操到出口）');
   const s1 = R();
   ok(s1.won === true && s1.state === 'won', '★ 曹操左上角到 (3,1) → 判定过关');
   ok(s1.steps === 0, '（人为摆放不计步）');
-  ok(els.over.classList.contains('on'), '过关面板弹出');
+  // ★ 关键改变：过关后面板不该立刻弹，先放庆祝动画
+  ok(!els.over.classList.contains('on'), '★ 过关瞬间不弹面板（先放庆祝动画）');
+  ok(s1.winFx === true, '★ 庆祝动画已启动');
+  // 放一会儿，动画进行中面板仍然不弹
+  run(60);                                       // ≈1 秒
+  ok(!els.over.classList.contains('on'), '★ 庆祝动画进行中（1 秒）面板仍不弹');
+  ok(R().winFx === true, '（动画还在跑）');
+  // 再放够时间，面板才弹出来
+  run(150);                                      // ≈2.5 秒，累计 > 2.3 秒
+  ok(els.over.classList.contains('on'), '★ 庆祝动画放完（>2.3 秒）才弹出过关面板');
   reset();
   ok(R().won === false && R().steps === 0, '重开一局：步数与过关状态清零');
+  ok(R().winFx === false, '重开一局：庆祝动画也清掉了');
 }
 
 /* ================= 5) 拖动输入 ================= */
@@ -406,6 +418,14 @@ section('9) 音效与重置');
   els.btnSound.onclick();
   ok(R().soundOn === true, '重新打开音效');
   ok(store['gklotski_sound'] !== undefined, '音效偏好已落盘');
+
+  // ★ 过关庆祝要有像样的音响：琶音 + 和弦 + 驶出音效，不能只有孤零零一个音
+  reset();
+  const s0 = allNodes();
+  win.__klotskiSetPiece('曹操', 3, 1);
+  win.__klotskiCheckWin();
+  const added = allNodes() - s0;
+  ok(added >= 8, '★ 过关发出成套音效（新增 ' + added + ' 个发声节点：琶音 + 和弦 + 驶出）');
 }
 
 /* ================= 10) ★ 关卡集：每关都可解且步数属实 ================= */
@@ -681,7 +701,7 @@ section('13) ★ 演示生命周期（看完 / 退出收拾干净）+ 关卡集�
   ok(s.setId === 0 && s.lvIdx === 29, '定位到「入门关卡」最后一关（第 30 关）');
   win.__klotskiSetPiece('曹操', 3, 1);
   win.__klotskiCheckWin();
-  run(20);
+  settleWin();                                   // ★ 等庆祝动画放完，面板才出来
   const btn = win.__klotskiOverNext();
   ok(btn.shown === true, '★ 本集最后一关通关后，「下一关」按钮仍可用（会跨集）');
   ok(/中级/.test(btn.text), '★ 按钮文案提示进入中级关卡集：' + btn.text);
@@ -695,7 +715,7 @@ section('13) ★ 演示生命周期（看完 / 退出收拾干净）+ 关卡集�
   ok(R().setId === 1 && R().lvIdx === 49, '定位到「中级关卡」最后一关（第 50 关）');
   win.__klotskiSetPiece('曹操', 3, 1);
   win.__klotskiCheckWin();
-  run(20);
+  settleWin();
   const toHigh = win.__klotskiOverNext();
   ok(/高级/.test(toHigh.text), '★ 中级通关后按钮提示进入高级关卡集：' + toHigh.text);
   const jumpedHigh = win.__klotskiNext();
@@ -704,7 +724,7 @@ section('13) ★ 演示生命周期（看完 / 退出收拾干净）+ 关卡集�
   win.__klotskiGoto(3, 3);
   win.__klotskiSetPiece('曹操', 3, 1);
   win.__klotskiCheckWin();
-  run(20);
+  settleWin();
   const last = win.__klotskiOverNext();
   ok(last.shown === false, '★ 四套走完的最后一关：不再显示「下一关」');
   ok(/全部通关/.test(last.body), '★ 面板正文提示全部通关：…' + last.body.slice(-18));

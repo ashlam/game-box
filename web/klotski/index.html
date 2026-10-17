@@ -326,6 +326,12 @@
   let pieces = [], nextId = 1, steps = 0, best = 0, state = 'play', won = false;
   let anim = null, effects = [], tGlobal = 0, shake = 0, glowT = 0, selected = null;
   let soundOn = true, lastTs = 0, raf = 0, hintOn = true;
+  /* ★ 过关庆祝：不再立刻弹面板，先放一段"曹操驶出出口 + 彩带 + 光环 + 横幅"的动画和音效，
+     动画放到一半多再弹面板，让玩家有时间享受一下 */
+  let winFx = null;                             // { t, bossOut, confetti[], rings[], banner }
+  let winPanelT = 0, winPending = false;        // 延迟弹面板的倒计时
+  const WIN_PANEL_DELAY = 2.3;                  // 多久之后才弹过关面板（秒）
+  const WIN_BOSS_OUT = 0.95;                    // 曹操驶出出口用多久
   const active = new Map();                     // 触控：id → { x, y, pid, sx, sy }
   let history = [];                             // ★ 撤销栈：每步记录 { id, r, c }（移动前的位置）
   let hintMove = null;                          // ★ 提示：{ id, dr, dc, t }
@@ -351,6 +357,7 @@
                                      fr: lv.pos[i * 2], fc: lv.pos[i * 2 + 1] }));
     steps = 0; state = 'play'; won = false; anim = null; effects = [];
     shake = 0; glowT = 0; selected = null; hintOn = true; active.clear();
+    winFx = null; winPending = false; winPanelT = 0;
     $('over').classList.remove('on');
     sndReset();
   }
@@ -395,7 +402,7 @@
   /** ★ 撤销一步：回到该棋子移动前的位置；若已过关则顺便退回对局状态 */
   function undo(){
     if(anim && anim.active) finishAnim();
-    if(state === 'won'){ won = false; state = 'play'; glowT = 0; $('over').classList.remove('on'); }
+    if(state === 'won'){ won = false; state = 'play'; glowT = 0; winFx = null; winPending = false; winPanelT = 0; $('over').classList.remove('on'); }
     if(!history.length){ toast('已经回到最初了'); sndBlocked(); return 0; }
     const h = history.pop();
     const p = pieces.find(q => q.id === h.id);
@@ -521,7 +528,9 @@
     if(!won && b.r === WIN_R && b.c === WIN_C){
       won = true; state = 'won'; glowT = 1; shake = 1;
       sndWin();
-      effects.push({ x: BX + BOARD / 2, y: BY + BOARD * 0.45, t: 0, txt:'曹操脱险！' + steps + ' 步', color:'#ffd166' });
+      sndSwoosh();
+      /* 原来这里还推一条「曹操脱险！N 步」的浮动文字，位置正好压在庆祝横幅上，
+         两句一样的话叠在一起很乱 —— 横幅已经负责报喜，浮动文字就不要了 */
       if(demoMove){
         // ★ 演示看完即结束，并回到本关起始状态（演示的走法不计入记录/通关）
         stopDemo(); reset();
@@ -530,9 +539,42 @@
       }
       if(!best || steps < best){ best = steps; setNum(bestKey(setId, lvIdx), best); }
       setNum(clearKey(setId, lvIdx), 1);
-      showPanel();
+      /* ★ 关键：这里不再立刻 showPanel()。先放庆祝动画，过 WIN_PANEL_DELAY 秒再弹面板 */
+      startWinFx();
     }
   }
+  /** ★ 起一段过关庆祝：曹操驶出出口、彩带、光环、横幅 */
+  function startWinFx(){
+    const rec = (best === steps) && steps > 0;
+    const confetti = [];
+    const palette = ['#ffd166', '#7dffb0', '#5b8cff', '#ff8fa3', '#c08cff', '#ffffff'];
+    // 彩带从盘面上沿喷出来，左右两簇往外飘
+    for(let i = 0; i < 64; i++){
+      const left = i % 2 === 0;
+      confetti.push({
+        x: BX + COLS * CELL * (left ? 0.16 : 0.84) + (Math.random() - 0.5) * CELL * 0.7,
+        y: BY + (Math.random() - 0.3) * CELL * 0.5,
+        vx: (left ? 1 : -1) * (40 + Math.random() * 95),
+        vy: -(120 + Math.random() * 170),
+        w: 3.5 + Math.random() * 4,
+        h: 6 + Math.random() * 7,
+        rot: Math.random() * Math.PI * 2,
+        vr: (Math.random() - 0.5) * 12,
+        color: palette[(Math.random() * palette.length) | 0],
+        delay: Math.random() * 0.22,
+      });
+    }
+    winFx = {
+      t: 0, rec: rec,
+      bossOut: 0,                                 // 曹操驶出的进度 0~1
+      confetti: confetti,
+      rings: [],                                  // 一圈圈扩散的光环
+      ringT: 0,
+    };
+    winPending = true;
+    winPanelT = 0;
+  }
+
   function showPanel(){
     $('overSteps').textContent = steps + ' 步';
     const rec = (best === steps) && steps > 0;
@@ -682,9 +724,27 @@
   function sndUndo(){ noise(0.12, { type:'bandpass', freq: 480, to: 1150, gain: 0.04, q: 0.9 }); tone(300, 0.08, { type:'sine', gain: 0.04, to: 430 }); }
   function sndReset(){ tone(420, 0.09, { type:'sine', gain: 0.05 }); tone(560, 0.09, { type:'sine', gain: 0.045, at: 0.07 }); }
   function sndPanel(){ tone(520, 0.1, { type:'sine', gain: 0.07 }); tone(780, 0.13, { type:'sine', gain: 0.06, at: 0.08 }); }
+  /* ★ 以前这里写的是 [72,76,79,84,88] —— 那是 MIDI 音符号，不是赫兹，
+     当频率用就变成 72Hz 上下的低频嗡嗡声，胜利的旋律根本没响。
+     改成 C 大调琶音的真实频率（C5 E5 G5 C6 E6）+ 尾部大三和弦。 */
   function sndWin(){
-    [72, 76, 79, 84, 88].forEach((f, i) => tone(f, 0.26, { type:'triangle', gain: 0.11, at: i * 0.11 }));
-    noise(0.5, { type:'highpass', freq: 1100, gain: 0.05 });
+    const arp = [523.25, 659.25, 783.99, 1046.50, 1318.51];
+    arp.forEach((f, i) => tone(f, 0.30, { type:'triangle', gain: 0.12, at: i * 0.10 }));
+    // 琶音走到顶之后，叠一个大三和弦"落定"，更有通关的分量
+    [523.25, 659.25, 783.99].forEach((f, i) =>
+      tone(f, 0.85, { type:'sine', gain: 0.055, at: 0.52 + i * 0.015 }));
+    noise(0.45, { type:'highpass', freq: 1400, gain: 0.045 });     // 亮亮的"沙——"
+    tone(1318.51, 0.55, { type:'sine', gain: 0.05, at: 0.55, to: 1567.98 });
+  }
+  /** ★ 曹操驶出出口的"呜——"：频率上扬 + 一点噪声，像车开走了 */
+  function sndSwoosh(){
+    noise(0.55, { type:'bandpass', freq: 500, to: 2400, gain: 0.05, q: 1.4 });
+    tone(196, 0.5, { type:'sawtooth', gain: 0.028, to: 392 });
+  }
+  /** ★ 彩带炸开的一声轻响（在第 2 波彩带时再放一次，热闹些） */
+  function sndSparkle(){
+    [1046.50, 1318.51, 1567.98, 2093.00].forEach((f, i) =>
+      tone(f, 0.16, { type:'triangle', gain: 0.055, at: i * 0.045 }));
   }
   function sndClick(){ tone(660, 0.06, { type:'sine', gain: 0.05 }); }
 
@@ -843,7 +903,22 @@
     const k = (anim && anim.active) ? clamp(anim.t / ANIM_DUR, 0, 1) : 1;
     const e = 1 - Math.pow(1 - k, 3);
     for(const p of pieces){
-      const r = lerp(p.fr, p.r, e), c = lerp(p.fc, p.c, e);
+      let r = lerp(p.fr, p.r, e), c = lerp(p.fc, p.c, e);
+      /* ★ 过关时让曹操往下驶出出口（渐隐 + 缩小一点，像开远了） */
+      if(winFx && p.boss){
+        const o = winFx.bossOut;
+        r += o * 1.55;                          // 往下开
+        c += o * 0.0;
+        ctx.save();
+        ctx.globalAlpha = 1 - o * 0.88;
+        const rc = cellRect(r, c, p.w, p.h);
+        const shrink = 1 - o * 0.16;
+        const cx0 = rc.x + rc.w / 2, cy0 = rc.y + rc.h / 2;
+        const w2 = rc.w * shrink, h2 = rc.h * shrink;
+        drawCar(cx0 - w2 / 2, cy0 - h2 / 2, w2, h2, p.color, p.type, p.name, p.boss);
+        ctx.restore();
+        continue;
+      }
       const rc = cellRect(r, c, p.w, p.h);
       if(selected && selected === p.id && state === 'play'){
         ctx.save();
@@ -852,6 +927,66 @@
         ctx.restore();
       }
       drawCar(rc.x, rc.y, rc.w, rc.h, p.color, p.type, p.name, p.boss);
+    }
+  }
+
+  /** ★ 过关庆祝：光环 + 彩带 + 横幅 */
+  function drawWinFx(){
+    if(!winFx) return;
+    const t = winFx.t;
+    // 光环：从出口位置一圈圈扩散
+    for(const rg of winFx.rings){
+      const k = rg.t / 1.0;
+      const rad = CELL * (0.5 + k * 3.4);
+      ctx.save();
+      ctx.globalAlpha = (1 - k) * 0.55;
+      ctx.strokeStyle = k < 0.5 ? '#ffe08a' : '#7dffb0';
+      ctx.lineWidth = 3.5 * (1 - k) + 0.8;
+      ctx.beginPath(); ctx.arc(rg.cx, rg.cy, rad, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+    // 彩带
+    for(const cf of winFx.confetti){
+      if(t < cf.delay) continue;
+      ctx.save();
+      ctx.globalAlpha = 0.95;
+      ctx.translate(cf.x, cf.y); ctx.rotate(cf.rot);
+      ctx.fillStyle = cf.color;
+      ctx.fillRect(-cf.w / 2, -cf.h / 2, cf.w, cf.h);
+      ctx.restore();
+    }
+    // 横幅：从上方弹下来
+    const bt = clamp((t - 0.18) / 0.42, 0, 1);
+    if(bt > 0){
+      const be = 1 - Math.pow(1 - bt, 3);       // 缓出
+      const over = Math.sin(bt * Math.PI) * 0.06; // 轻微过冲
+      const sc = 0.7 + be * 0.3 + over;
+      const cx0 = BX + COLS * CELL / 2;
+      const cy0 = BY + ROWS * CELL * 0.40;
+      ctx.save();
+      ctx.translate(cx0, cy0); ctx.scale(sc, sc);
+      ctx.globalAlpha = Math.min(1, bt * 2.2);
+      // 横幅底（不透明，别让棋子透出来）
+      const bw = Math.min(COLS * CELL * 0.92, 268), bh = 62;
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6;
+      ctx.fillStyle = '#f5c04a';
+      roundRect(-bw / 2, -bh / 2, bw, bh, 14); ctx.fill();
+      ctx.restore();
+      const gg = ctx.createLinearGradient(0, -bh / 2, 0, bh / 2);
+      gg.addColorStop(0, '#ffdf8e'); gg.addColorStop(0.55, '#f5c04a'); gg.addColorStop(1, '#e2a232');
+      ctx.fillStyle = gg;
+      roundRect(-bw / 2, -bh / 2, bw, bh, 14); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 2.5;
+      roundRect(-bw / 2, -bh / 2, bw, bh, 14); ctx.stroke();
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#5a3a06'; ctx.font = '800 25px ' + FONT;
+      ctx.fillText('曹操脱险！', 0, -4);
+      ctx.fillStyle = '#7a5510'; ctx.font = '700 13px ' + FONT;
+      ctx.fillText(steps > 0 ? steps + ' 步 · 本关最少 ' + curLevel().min + ' 步' + (winFx.rec ? ' · 新纪录！' : '')
+                             : '本关最少 ' + curLevel().min + ' 步', 0, 17);
+      ctx.restore();
+      ctx.textAlign = 'left';
     }
   }
   function drawHUD(){
@@ -946,6 +1081,7 @@
       }
     }
     drawEffects();
+    drawWinFx();                                  // ★ 彩带/光环/横幅压在最上层
     drawHUD();
     if(hintOn && state === 'play' && steps === 0) drawHint();
   }
@@ -979,6 +1115,49 @@
     if(shake > 0) shake = Math.max(0, shake - dt * 2.6);
     if(glowT > 0) glowT = Math.max(0, glowT - dt * 1.6);
     for(let i = effects.length - 1; i >= 0; i--){ effects[i].t += dt; if(effects[i].t > 1.2) effects.splice(i, 1); }
+    /* ★ 过关庆祝推进 */
+    if(winFx){
+      winFx.t += dt;
+      winFx.bossOut = clamp(winFx.t / WIN_BOSS_OUT, 0, 1);
+      // 彩带抛物线下落
+      for(const c of winFx.confetti){
+        if(winFx.t < c.delay) continue;
+        c.vy += 620 * dt;                       // 重力
+        c.vx *= (1 - 1.1 * dt);                 // 空气阻力
+        c.x += c.vx * dt; c.y += c.vy * dt;
+        c.rot += c.vr * dt;
+      }
+      // 光环：每隔一会儿放一圈
+      winFx.ringT += dt;
+      if(winFx.ringT > 0.34 && winFx.t < WIN_PANEL_DELAY){
+        winFx.ringT = 0;
+        winFx.rings.push({ t: 0, cx: BX + (WIN_C + 1) * CELL, cy: BY + (WIN_R + 1) * CELL });
+      }
+      for(let i = winFx.rings.length - 1; i >= 0; i--){
+        winFx.rings[i].t += dt;
+        if(winFx.rings[i].t > 1.0) winFx.rings.splice(i, 1);
+      }
+      // 第二波彩带 + 闪亮音效
+      if(!winFx.second && winFx.t > 0.62){
+        winFx.second = true;
+        sndSparkle();
+        const palette = ['#ffd166', '#7dffb0', '#5b8cff', '#ff8fa3', '#c08cff', '#ffffff'];
+        for(let i = 0; i < 26; i++){
+          winFx.confetti.push({
+            x: BX + Math.random() * COLS * CELL, y: BY - 6,
+            vx: (Math.random() - 0.5) * 130, vy: -(40 + Math.random() * 90),
+            w: 3 + Math.random() * 3.5, h: 5 + Math.random() * 6,
+            rot: Math.random() * Math.PI * 2, vr: (Math.random() - 0.5) * 12,
+            color: palette[(Math.random() * palette.length) | 0], delay: 0,
+          });
+        }
+      }
+    }
+    /* ★ 延迟弹过关面板：庆祝动画消化掉了再弹，别一过关就把画面盖住 */
+    if(winPending){
+      winPanelT += dt;
+      if(winPanelT >= WIN_PANEL_DELAY){ winPending = false; showPanel(); }
+    }
   }
   function frame(ts){
     raf = requestAnimationFrame(frame);
@@ -1163,6 +1342,10 @@
     pieces: pieces.map(p => ({ id:p.id, name:p.name, type:p.type, r:p.r, c:p.c, w:p.w, h:p.h, boss:!!p.boss, fr:p.fr, fc:p.fc })),
     board: (() => { const g = []; for(let r = 0; r < ROWS; r++){ const row = []; for(let c = 0; c < COLS; c++){ const p = pieces.find(q => r >= q.r && r < q.r+q.h && c >= q.c && c < q.c+q.w); row.push(p ? (p.boss ? 'B' : (p.name === '卒' ? 's' : 'C')) : '.'); } g.push(row.join('')); } return g; })(),
     selected, hintOn, soundOn, effects: effects.length,
+    winFx: !!winFx, winPanelPending: winPending, winPanelT: winPanelT,
+    winBossOut: winFx ? winFx.bossOut : 0,
+    winConfetti: winFx ? winFx.confetti.length : 0,
+    winRings: winFx ? winFx.rings.length : 0,
     hint: hintMove ? { id: hintMove.id, dr: hintMove.dr, dc: hintMove.dc, n: hintMove.n, t: hintMove.t } : null,
     demo: demo ? { idx: demo.idx, total: demo.path.length } : null,
     demoPaused: demo ? !!demo.paused : null,
