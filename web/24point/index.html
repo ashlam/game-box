@@ -77,6 +77,8 @@
   #pending .slot{min-width:1.15em;text-align:center;color:var(--acc);
                  border-bottom:2px dashed rgba(91,140,255,.55);
                  animation:slotBlink 1.05s ease-in-out infinite}
+  #pending .num.waiting{color:var(--dim);border-bottom:2px dashed var(--line);
+                        min-width:1.15em;text-align:center}
   @keyframes slotBlink{0%,100%{opacity:.35}50%{opacity:1}}
 
   /* ---------------- 运算符 ---------------- */
@@ -472,12 +474,17 @@ function snd(kind){
   else if(kind==='hint') tone(900, 0.07, 'sine', 0.06);
 }
 
-/* ---------------- 游戏状态 ---------------- */
+/* ---------------- 游戏状态 ----------------
+   交互是「一次只拿一张牌」：
+     sel  当前拿着的那张牌（null 或 id）
+     op   当前选好的运算符（null，或加、减、乘、除之一）
+   拿到「一张牌 + 一个运算符」就齐了，再点第二张牌立刻算 ——
+   所以任何时刻最多只有一个高亮，不存在「两张都亮着，然后呢」的中间态。 */
 var S = {
   tier: 0,
   idx: 0,
   cards: [],       // {id, v:分数, e:表达式树}
-  sel: [],         // 选中的牌 id（最多 2 个）
+  sel: null,       // 当前拿着的牌 id
   op: null,
   hist: [],        // 撤销快照
   state: 'play',   // play | win | dead
@@ -510,7 +517,7 @@ function firstUnfinished(){
 function loadLevel(tier, idx){
   if(!LEVELS[tier] || !LEVELS[tier][idx]) return;
   S.tier = tier; S.idx = idx;
-  S.cards = []; S.sel = []; S.op = null; S.hist = [];
+  S.cards = []; S.sel = null; S.op = null; S.hist = [];
   S.state = 'play'; S.helped = false; S.hint = null; S.nextId = 1;
   var nums = LEVELS[tier][idx];
   for(var i=0;i<nums.length;i++){
@@ -522,11 +529,15 @@ function loadLevel(tier, idx){
   render(); updateTop();
 }
 
-/* ---------------- 操作 ---------------- */
+/* ---------------- 操作 ----------------
+   两条路都通，且都不会出现「两个高亮」：
+     A. 点牌 → 点运算符 → 点第二张牌（自动算）
+     B. 点运算符 → 点牌 → 点牌（自动算）
+   只点一张牌、没点运算符时，第二张牌是「换一张拿着」，不是「加进选择」。 */
 function snapshot(){
   S.hist.push({
     cards: S.cards.map(function(c){ return {id:c.id, v:c.v, e:c.e}; }),
-    sel: S.sel.slice(), op: S.op
+    sel: S.sel, op: S.op
   });
   if(S.hist.length > 30) S.hist.shift();
 }
@@ -535,36 +546,40 @@ function undo(){
   if(!S.hist.length){ toast('没有可撤销的步骤'); return; }
   var h = S.hist.pop();
   S.cards = h.cards;
-  S.sel = []; S.op = null;          // 撤销后不保留选中和运算符，免得下一次点击意外合并
+  S.sel = null; S.op = null;        // 撤销后不保留选中和运算符，免得下一次点击意外合并
   S.state = 'play'; S.hint = null;
   hideOverlays(); render(); updateTop(); snd('tap');
 }
 
 function pick(id){
   if(S.state !== 'play') return;
-  var at = S.sel.indexOf(id);
-  if(at >= 0){ S.sel.splice(at, 1); render(); snd('tap'); return; }
+  var card = cardById(id);
+  if(!card) return;
 
-  S.sel.push(id);
-  if(S.sel.length > 2) S.sel.shift();
+  // 再点一次同一张 = 放下
+  if(S.sel === id){ S.sel = null; render(); snd('tap'); return; }
+
+  // 已经有「一张牌 + 一个运算符」，这一下就是第二张 → 立刻算
+  if(S.sel !== null && S.op) return doMerge(S.sel, id);
+
+  // 否则就是把这张拿起来（换掉之前拿的那张）
+  S.sel = id;
   S.hint = null;
-
-  if(S.sel.length === 2 && S.op) return doMerge();
   render(); snd('tap');
 }
 
 function setOp(op){
   if(S.state !== 'play') return;
-  if(S.op === op){ S.op = null; render(); return; }
+  if(S.op === op){ S.op = null; render(); return; }   // 再点一次取消
   S.op = op;
   S.hint = null;
-  if(S.sel.length === 2) return doMerge();
   render(); snd('tap');
 }
 
-function doMerge(){
-  var a = cardById(S.sel[0]), b = cardById(S.sel[1]);
-  if(!a || !b || S.sel[0] === S.sel[1]) return;
+/* 两个操作数由调用方明确给出 —— 不再依赖「选中的两张牌」这种模糊状态 */
+function doMerge(idA, idB){
+  var a = cardById(idA), b = cardById(idB);
+  if(!a || !b || idA === idB || !S.op) return;
   var v = applyOp(a.v, b.v, S.op);
   if(!v){
     toast('不能除以 0');
@@ -577,7 +592,7 @@ function doMerge(){
   S.cards = S.cards.filter(function(c){ return c !== a && c !== b; });
   var nc = { id: S.nextId++, v: v, e: mkNode(S.op, a.e, b.e) };
   S.cards.splice(at, 0, nc);
-  S.sel = []; S.op = null; S.hint = null;
+  S.sel = null; S.op = null; S.hint = null;
   render(); snd('merge');
   markPop(nc.id);
   checkEnd();
@@ -779,9 +794,9 @@ function demoStep(mark){
   var b = findCardByValue(step.b.v, a ? [a.id] : null);
   if(!a || !b) return false;
   if(mark !== false) S.helped = true;
-  S.sel = [a.id, b.id];
+  S.sel = a.id;                       // 一次只拿一张：拿着 a，选好运算符
   S.op = step.op;
-  doMerge();
+  doMerge(a.id, b.id);
   return true;
 }
 function demo(){
@@ -833,7 +848,7 @@ function render(){
     var es = exprStr(c.e);
     var expText = (es === vs) ? '' : es;
     if(expEl.textContent !== expText) expEl.textContent = expText;
-    el.classList.toggle('sel', S.sel.indexOf(c.id) >= 0);
+    el.classList.toggle('sel', S.sel === c.id);
     el.classList.toggle('hint', !!(S.hint && S.hint.ids.indexOf(c.id) >= 0));
     el.classList.toggle('dead', S.state === 'dead');
     box.appendChild(el);
@@ -863,39 +878,50 @@ function renderTip(){
   if(!tip) return;
   // 结算时提示条让位给演出（否则两句「撤销」叠在一起，反而看不清重点）
   if(S.state === 'win' || S.state === 'dead'){ tip.textContent = ''; return; }
-  var n = S.sel.length;
-  if(n === 0 && !S.op) tip.textContent = '点两张牌，再点运算符';
-  else if(n === 0) tip.textContent = '已选 ' + SYM[S.op] + ' —— 再点两张牌';
-  else if(n === 1) tip.textContent = '再点一张牌' + (S.op ? '' : '，然后选运算符');
-  else tip.textContent = '两张牌都亮了：现在点下面的运算符';
+  if(!S.sel && !S.op) tip.textContent = '点一张牌，再点运算符';
+  else if(!S.sel) tip.textContent = '已选 ' + SYM[S.op] + ' —— 再点一张牌';
+  else if(!S.op) tip.textContent = '已拿起 ' + fStr(cardById(S.sel).v) + ' —— 现在点运算符';
+  else tip.textContent = '再点一张牌，立刻算 ' + fStr(cardById(S.sel).v) + SYM[S.op] + '…';
 }
 
-/* 「待算式」：选中两张牌时把 a ? b 直接画在牌下面。
-   光让两张牌亮着，玩家看不出「然后呢」—— 空位就是缺的那个运算符。 */
+/* 「待算式」：拿起一张牌时把 a ? 画在牌下面，让玩家知道手里有东西、还缺什么。
+   · 只有牌没运算符 → 「4 ?」，空位闪，提示去点运算符
+   · 牌和运算符都有 → 「4 × ?」，提示去点第二张牌 */
 function renderPending(){
   var el = $('pending');
   if(!el) return;
-  if(S.state !== 'play' || S.sel.length !== 2){
+  if(S.state !== 'play' || !S.sel){
     if(el.classList.contains('on')){
       el.classList.remove('on');
       while(el.firstChild) el.removeChild(el.firstChild);
     }
     return;
   }
-  var a = cardById(S.sel[0]), b = cardById(S.sel[1]);
-  if(!a || !b){ el.classList.remove('on'); return; }
+  var a = cardById(S.sel);
+  if(!a){ el.classList.remove('on'); return; }
 
   // 显式清空：只写 textContent='' 在某些环境里不会摘掉子节点（测试桩就是这样），
   // 结果待算式会一层层堆起来。
   while(el.firstChild) el.removeChild(el.firstChild);
   el.classList.add('on');
+
   var n1 = document.createElement('span'); n1.className = 'num'; n1.textContent = fStr(a.v);
+  el.appendChild(n1);
+
+  // 运算符位：没选就闪，选了就固定
   var slot = document.createElement('span');
   slot.className = 'slot';
   slot.textContent = S.op ? SYM[S.op] : '?';
   if(S.op) slot.style.animation = 'none';
-  var n2 = document.createElement('span'); n2.className = 'num'; n2.textContent = fStr(b.v);
-  el.appendChild(n1); el.appendChild(slot); el.appendChild(n2);
+  el.appendChild(slot);
+
+  // 第二张牌位：只在运算符选好之后才出现，表示「等这一张」
+  if(S.op){
+    var n2 = document.createElement('span');
+    n2.className = 'num waiting';
+    n2.textContent = '?';
+    el.appendChild(n2);
+  }
 }
 
 function updateButtons(){
@@ -905,12 +931,12 @@ function updateButtons(){
     if(b.dataset.op === S.op) b.classList.add('on'); else b.classList.remove('on');
     b.disabled = (S.state !== 'play');
   }
-  // 两张牌选好、运算符还没定时，把运算符键整体「叫醒」
+  // 拿起一张牌、还没选运算符 → 把运算符键整体「叫醒」，指向下一步
   var ops = $('ops');
-  if(ops) ops.classList.toggle('want', S.state === 'play' && S.sel.length === 2 && !S.op);
+  if(ops) ops.classList.toggle('want', S.state === 'play' && !!S.sel && !S.op);
   var u = $('btnUndo'); if(u) u.disabled = (S.state !== 'play' || !S.hist.length);
   var h = $('btnHint'); if(h) h.disabled = (S.state !== 'play');
-  var r = $('btnRetry'); if(r) r.disabled = (S.state === 'play' && !S.hist.length && S.sel.length === 0);
+  var r = $('btnRetry'); if(r) r.disabled = (S.state === 'play' && !S.hist.length && !S.sel && !S.op);
 }
 
 function updateTop(){
@@ -1050,7 +1076,7 @@ function boot(){
 window.__g24 = function(){
   return {
     cards: S.cards.map(function(c){ return { id:c.id, v:fStr(c.v), n:c.v.n, d:c.v.d, expr:exprStr(c.e) }; }),
-    sel: S.sel.slice(), op: S.op, state: S.state, tier: S.tier, idx: S.idx,
+    sel: S.sel, op: S.op, state: S.state, tier: S.tier, idx: S.idx,
     helped: S.helped, hist: S.hist.length, hint: S.hint,
     level: levelNums().slice(), elapsed: S.elapsed
   };
@@ -1070,7 +1096,7 @@ window.__g24SolveAll = function(nums){
 window.__g24Count = countSolutions;
 window.__g24Levels = function(){ return JSON.parse(JSON.stringify(LEVELS)); };
 window.__g24SetCards = function(arr){
-  S.cards = []; S.sel = []; S.op = null; S.hist = []; S.state = 'play'; S.nextId = 1;
+  S.cards = []; S.sel = null; S.op = null; S.hist = []; S.state = 'play'; S.nextId = 1;
   for(var i=0;i<arr.length;i++){
     var v = fr(arr[i]);
     S.cards.push({ id: S.nextId++, v: v, e: leaf(v) });

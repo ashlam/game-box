@@ -287,42 +287,90 @@ section('4) 关卡数据');
 }
 
 /* ================= 5) 基本交互 ================= */
-section('5) 点牌 / 运算符 / 合并');
+section('5) 点牌 / 运算符 / 合并（一次只拿一张）');
 {
   load(0, 0);
   let s = R();
   ok(s.cards.length === 4, '开局 4 张牌');
   ok(s.state === 'play' && s.hist === 0, '状态 play、无历史');
-  ok(s.sel.length === 0 && s.op === null, '开局没选中、没运算符');
+  ok(s.sel === null && s.op === null, '开局手里没牌、没运算符');
 
   const a = s.cards[0].id, b = s.cards[1].id;
   pick(a);
-  ok(R().sel.length === 1 && R().sel[0] === a, '点第一张 → 选中 1 张');
+  ok(R().sel === a, '点第一张 → 手里拿着它');
   pick(b);
-  ok(R().sel.length === 2, '点第二张 → 选中 2 张');
+  ok(R().sel === b, '★ 没选运算符时点第二张 = 换一张拿着（不会同时亮两张）', String(R().sel));
+  ok(R().cards.length === 4, '换牌不会合并');
 
+  // 正确顺序：拿一张 → 选运算符 → 点第二张 → 自动算
+  pick(a);
   const va = Number(s.cards[0].v), vb = Number(s.cards[1].v);
   setOp('+');
+  ok(R().cards.length === 4, '只选运算符还不算');
+  ok(R().sel === a && R().op === '+', '手里还是那张牌，运算符已选好');
+  pick(b);
   s = R();
   ok(s.cards.length === 3, '两张牌合成一张 → 剩 3 张', '实际 ' + s.cards.length);
-  ok(s.sel.length === 0 && s.op === null, '合并后清空选中与运算符');
+  ok(s.sel === null && s.op === null, '合并后清空手里的牌与运算符');
   ok(s.hist === 1, '合并记了 1 步历史');
   const merged = s.cards.find(c => c.n === va + vb && c.d === 1);
   ok(!!merged, `牌面 ${va}+${vb}=${va + vb} 出现在结果里`,
      JSON.stringify(s.cards.map(c => c.v)));
   ok(!!merged && merged.expr.indexOf('+') >= 0, '合并出的牌带表达式');
 
-  // 选第三张会顶掉第一张（只保留最近两张）
+  // 反过来也行：先选运算符，再点两张牌
   load(0, 0);
   const ids = R().cards.map(c => c.id);
-  pick(ids[0]); pick(ids[1]); pick(ids[2]);
-  s = R();
-  ok(s.sel.length === 2 && s.sel[0] === ids[1] && s.sel[1] === ids[2], '选第三张顶掉第一张',
-     JSON.stringify(s.sel));
+  setOp('*');
+  ok(R().sel === null && R().op === '*', '先点运算符：只记下运算符');
+  pick(ids[0]);
+  ok(R().cards.length === 4, '第一张只是拿起来');
+  pick(ids[1]);
+  ok(R().cards.length === 3, '★ 第二张一点就自动算（不用再点一次运算符）');
 
-  // 再点一次取消选中
-  pick(ids[2]);
-  ok(R().sel.indexOf(ids[2]) < 0, '再点同一张 → 取消选中');
+  // 再点同一张 = 放下
+  load(0, 0);
+  const z = R().cards.map(c => c.id);
+  pick(z[0]);
+  ok(R().sel === z[0], '拿起一张');
+  pick(z[0]);
+  ok(R().sel === null, '再点同一张 → 放下');
+
+  // 再点同一个运算符 = 取消
+  setOp('+'); setOp('+');
+  ok(R().op === null, '再点同一个运算符 → 取消选择');
+}
+
+/* ================= 5b) 单选模型：任何时刻最多一个高亮 ================= */
+section('5b) ★ 任何时刻最多只有一个牌高亮');
+{
+  // 穷举一串点法，断言「sel 永远是 null 或单个 id」且「高亮数 ≤ 1」
+  load(0, 0);
+  const seq = ['pick0', 'pick1', 'op+', 'pick0', 'pick0', 'op*', 'pick0', 'pick1'];
+  let bad = null;
+  for(const act of seq){
+    const c = R().cards;
+    if(act.startsWith('pick')){
+      const idx = Math.min(Number(act.slice(4)), c.length - 1);   // 牌会越算越少，按当下张数取
+      if(idx < 0) continue;
+      pick(c[idx].id);
+    } else setOp(act.slice(2));
+    const st = R();
+    const hi = cardBox.children.filter(e => e.classList.contains('sel')).length;
+    if(hi > 1) { bad = act + ' → ' + hi + ' 个高亮'; break; }
+    if(st.sel !== null && typeof st.sel !== 'number') { bad = act + ' → sel 不是单个 id: ' + JSON.stringify(st.sel); break; }
+  }
+  ok(bad === null, '★ 一串随机点法下来，高亮始终 ≤ 1 个', String(bad));
+
+  // 明确定义：sel 只能是 null 或某张在手的牌 id
+  load(0, 1);
+  const c0 = R().cards.map(x => x.id);
+  for(const id of c0){
+    pick(id);
+    const st = R();
+    if(st.sel !== null && c0.indexOf(st.sel) < 0) { ok(false, 'sel 指向了不存在的牌'); }
+  }
+  ok(true, 'sel 始终指向手里真实存在的牌');
 }
 
 /* ================= 6) 除以 0 ================= */
@@ -336,7 +384,7 @@ section('6) 除以 0');
   // 造一个 0：先合并出 0 不现实，直接设牌
   setCards([1, 2, 3, 4]);
   let ids = R().cards.map(c => c.id);
-  pick(ids[0]); pick(ids[1]); setOp('-');     // 1-2 = -1
+  pick(ids[0]); setOp('-'); pick(ids[1]);     // 1-2 = -1
   ok(R().cards.length === 3, '1−2 合并成功', '剩 ' + R().cards.length + ' 张');
   const neg = R().cards.find(c => c.n < 0);
   ok(!!neg, '出现了负数牌（−1）', JSON.stringify(R().cards.map(c => c.v)));
@@ -344,7 +392,7 @@ section('6) 除以 0');
   // 负数 ÷ 负数 = 正数，符号要正确
   setCards([2, 2, 3, 4]);
   ids = R().cards.map(c => c.id);
-  pick(ids[0]); pick(ids[1]); setOp('/');
+  pick(ids[0]); setOp('/'); pick(ids[1]);
   const s = R();
   ok(s.cards.length === 3, '2÷2 合并成功', '剩 ' + s.cards.length + ' 张');
   ok(s.cards.some(c => c.v === '1'), '2÷2 = 1', JSON.stringify(s.cards.map(c => c.v)));
@@ -352,16 +400,16 @@ section('6) 除以 0');
   // 真的除以 0：0 只能靠 (a−a) 造出来
   setCards([5, 5, 3, 4]);
   ids = R().cards.map(c => c.id);
-  pick(ids[0]); pick(ids[1]); setOp('-');   // 5−5 = 0
+  pick(ids[0]); setOp('-'); pick(ids[1]);   // 5−5 = 0
   let z = R();
   ok(z.cards.some(c => c.v === '0'), '5−5 造出一个 0', JSON.stringify(z.cards.map(c => c.v)));
   const zeroId = z.cards.find(c => c.v === '0').id;
   const otherId = z.cards.find(c => c.v !== '0').id;
-  pick(otherId); pick(zeroId); setOp('/');  // x ÷ 0
+  pick(otherId); setOp('/'); pick(zeroId);  // x ÷ 0
   z = R();
   ok(z.cards.length === 3, '★ 除以 0 不合并（牌数不变）', String(z.cards.length));
   ok(z.cards.some(c => c.v === '0'), '★ 0 那张牌还在');
-  ok(z.op === null && z.sel.length === 0, '★ 除 0 后清空运算符与选中，不卡住界面');
+  ok(z.op === null && z.sel === null, '★ 除 0 后清空运算符与手里的牌，不卡住界面');
 }
 
 /* ================= 7) 撤销 ================= */
@@ -370,7 +418,7 @@ section('7) 撤销');
   load(0, 0);
   const before = R().cards.map(c => c.v).join(',');
   const ids = R().cards.map(c => c.id);
-  pick(ids[0]); pick(ids[1]); setOp('*');
+  pick(ids[0]); setOp('*'); pick(ids[1]);
   ok(R().cards.length === 3, '先做一步合并');
   undo();
   let s = R();
@@ -401,7 +449,7 @@ section('8) 死局判定');
   let s = R();
   ok(s.state === 'play', '开局先不判死（4 张 1 也算「还有得算」）');
   const ids = s.cards.map(c => c.id);
-  pick(ids[0]); pick(ids[1]); setOp('+');   // 1+1 = 2，剩 2 1 1
+  pick(ids[0]); setOp('+'); pick(ids[1]);   // 1+1 = 2，剩 2 1 1
   s = R();
   ok(s.state === 'dead', '★ 2 1 1 已经算不出 24 → 立刻判死（不用等走完）', s.state + ' ' + JSON.stringify(s.cards.map(c => c.v)));
 
@@ -419,7 +467,7 @@ section('8) 死局判定');
   setCards([1, 2, 3, 4]);
   ok(R().state === 'play', '1 2 3 4 开局活着');
   const v = R().cards.map(c => c.id);
-  pick(v[0]); pick(v[1]); setOp('+');        // 1+2 = 3，剩 3 3 4
+  pick(v[0]); setOp('+'); pick(v[1]);        // 1+2 = 3，剩 3 3 4
   ok(R().state === 'play', '★ 还有救的局面不能误判死（3 3 4 还能 (3+3)×4）',
      R().state + ' ' + JSON.stringify(R().cards.map(c => c.v)));
   undo();
@@ -427,7 +475,7 @@ section('8) 死局判定');
   // 走进死胡同要当场判死：2 3 4 5 走 2+3 → 5 4 5，怎么算都到不了 24
   setCards([2, 3, 4, 5]);
   const w = R().cards.map(c => c.id);
-  pick(w[0]); pick(w[1]); setOp('+');        // 2+3 = 5，剩 5 4 5
+  pick(w[0]); setOp('+'); pick(w[1]);        // 2+3 = 5，剩 5 4 5
   ok(R().state === 'dead', '★ 2 3 4 5 走成 5 4 5 当场判死',
      R().state + ' ' + JSON.stringify(R().cards.map(c => c.v)));
   undo();
@@ -495,7 +543,7 @@ section('10) 提示');
 
   // 照提示做一步，局面仍要可解（提示不能把人带进沟里）
   const ids = s.hint.ids;
-  pick(ids[0]); pick(ids[1]); setOp(s.hint.op);
+  pick(ids[0]); setOp(s.hint.op); pick(ids[1]);
   const after = R();
   ok(after.state === 'play', '★ 照提示走一步之后还没死', 'state=' + after.state);
   const solvable = solve(after.cards.map(c => Number(c.v))) !== null ||
@@ -509,7 +557,7 @@ section('10) 提示');
     win.__g24Hint();
     const h = R().hint;
     if(!h || h.ids.length !== 2) { bad = t; break; }
-    pick(h.ids[0]); pick(h.ids[1]); setOp(h.op);
+    pick(h.ids[0]); setOp(h.op); pick(h.ids[1]);
     if(R().state === 'dead'){ bad = 'dead@' + t; break; }
   }
   ok(bad === null, '三档的第一关，提示都能安全走一步', String(bad));
@@ -552,7 +600,7 @@ section('12) 渲染一致性');
   const ids = s.cards.map(c => c.id);
   pick(ids[0]);
   ok(cardBox.children.filter(c => c.classList.contains('sel')).length === 1, '选中态反映到 DOM');
-  pick(ids[1]); setOp('+');
+  setOp('+'); pick(ids[1]);
 
   const after = R();
   ok(cardBox.children.length === 3, '合并后 DOM 也剩 3 张', String(cardBox.children.length));
@@ -569,9 +617,9 @@ section('12) 渲染一致性');
   // 死局时卡牌要带 dead 样式
   setCards([1, 1, 1, 1]);
   const z = R().cards.map(c => c.id);
-  pick(z[0]); pick(z[1]); setOp('+');
+  pick(z[0]); setOp('+'); pick(z[1]);
   const z2 = R().cards.map(c => c.id);
-  pick(z2[0]); pick(z2[1]); setOp('+');
+  pick(z2[0]); setOp('+'); pick(z2[1]);
   ok(cardBox.children.every(c => c.classList.contains('dead')), '死局时每张牌都标 dead');
 }
 
@@ -657,7 +705,7 @@ section('14) 结算演出（成功/失败都要慢下来）');
   resetTimers();
   setCards([1, 1, 1, 1]);
   const ids = R().cards.map(c => c.id);
-  pick(ids[0]); pick(ids[1]); setOp('+');    // 2 1 1 → 立刻判死
+  pick(ids[0]); setOp('+'); pick(ids[1]);    // 2 1 1 → 立刻判死
   ok(R().state === 'dead', '先造一个死局');
   b = B();
   ok(b.active === true, '★ 失败也走演出', JSON.stringify(b));
@@ -691,59 +739,72 @@ section('14) 结算演出（成功/失败都要慢下来）');
      JSON.stringify(B()));
 }
 
-/* ================= 15) 「选中两张」到底在说什么 ================= */
-section('15) 待算式（选中两张时的界面反馈）');
+/* ================= 15) 一次只拿一张：待算式与提示 ================= */
+section('15) 待算式（一次只拿一张牌）');
 {
   const P = () => win.__g24Pending();
 
   load(0, 0);
   let p = P();
-  ok(p.on === false, '什么都没选时不显示待算式');
-  ok(p.tip.indexOf('点两张牌') >= 0, '提示语：点两张牌', p.tip);
+  ok(p.on === false, '什么都没拿时不显示待算式');
+  ok(p.tip.indexOf('点一张牌') >= 0, '提示语：点一张牌', p.tip);
 
   let c = R().cards;
   pick(c[0].id);
   p = P();
-  ok(p.on === false, '只选一张时不显示待算式（还没到那一步）');
-  ok(p.tip.indexOf('再点一张') >= 0, '提示语：再点一张', p.tip);
-  ok(p.opsWant === false, '只选一张时运算符键不呼吸');
+  ok(p.on === true, '★ 拿起一张牌就出现待算式（不是等凑够两张才说）', JSON.stringify(p));
+  ok(p.parts.length === 2, '此时是「数字 + 空位」两段', JSON.stringify(p.parts));
+  ok(p.parts[0] === String(Number(c[0].v)), '★ 第一段就是拿起的那张牌', p.parts[0]);
+  ok(p.parts[1] === '?', '★ 第二段是待填的运算符空位', p.parts[1]);
+  ok(p.tip.indexOf('运算符') >= 0, '提示语让玩家去点运算符', p.tip);
+  ok(p.opsWant === true, '★ 运算符键被叫醒（指向下一步）');
 
-  pick(c[1].id);
+  // 选好运算符 → 待算式变成「4 × ?」，等着第二张牌
+  setOp('*');
   p = P();
-  ok(p.on === true, '★ 选满两张后出现待算式', JSON.stringify(p));
-  ok(p.parts.length === 3, '待算式由「数字 空位 数字」三段组成', JSON.stringify(p.parts));
-  ok(p.parts[0] === String(Number(c[0].v)) && p.parts[2] === String(Number(c[1].v)),
-     '★ 两端就是选中的那两个数', JSON.stringify(p.parts));
-  ok(p.parts[1] === '?', '★ 中间是待填空位（这就是「然后呢」）', p.parts[1]);
-  ok(p.tip.indexOf('运算符') >= 0, '提示语把下一步说清楚', p.tip);
-  ok(p.opsWant === true, '★ 运算符键同时被叫醒（指向下一步）');
+  ok(R().cards.length === 4, '只选运算符还不算');
+  ok(p.on === true, '待算式还在');
+  ok(p.parts.length === 3, '★ 选好运算符后变成「数字 运算符 空位」三段', JSON.stringify(p.parts));
+  ok(p.parts[1] === '×', '中间填上了 ×', p.parts[1]);
+  ok(p.parts[2] === '?', '★ 第三段是等第二张牌的空位', p.parts[2]);
+  ok(p.tip.indexOf('再点一张牌') >= 0, '提示语让玩家点第二张牌', p.tip);
+  ok(p.opsWant === false, '运算符已选好，运算符键不再呼吸');
 
-  // 选好运算符后空位填上，呼吸停掉
-  setOp('+');
+  // 点第二张牌 → 自动合并
+  pick(c[1].id);
   const after = R();
-  ok(after.cards.length === 3, '选运算符后正常合并');
+  ok(after.cards.length === 3, '点第二张牌后自动合并', '剩 ' + after.cards.length + ' 张');
   p = P();
   ok(p.on === false, '合并后待算式消失');
   ok(p.opsWant === false, '合并后运算符键停止呼吸');
 
-  // 取消选中也要收回去
+  // 拿起再放下
   load(0, 0);
   c = R().cards;
-  pick(c[0].id); pick(c[1].id);
-  ok(P().on === true, '再次选满两张');
-  pick(c[1].id);
-  ok(P().on === false, '取消选中一张后待算式收回');
+  pick(c[0].id);
+  ok(P().on === true, '拿起一张');
+  pick(c[0].id);
+  ok(P().on === false, '再点同一张 → 放下，待算式收回');
 
-  // 先点运算符、再点两张牌：空位一开始就填好了
+  // 没选运算符时点第二张 = 换一张，不是合并
+  load(0, 0);
+  c = R().cards;
+  pick(c[0].id);
+  pick(c[1].id);
+  const sw = R();
+  ok(sw.cards.length === 4, '没选运算符时点第二张不会合并');
+  ok(sw.sel === c[1].id, '★ 而是换成了第二张', String(sw.sel));
+  ok(P().parts[0] === String(Number(c[1].v)), '待算式跟着换成新拿的那张', P().parts[0]);
+
+  // 先点运算符、再点两张牌
   load(0, 0);
   c = R().cards;
   setOp('*');
-  ok(P().on === false, '只点了运算符，还没有待算式');
+  ok(P().on === false, '只点了运算符，还没拿牌，没有待算式');
   pick(c[0].id);
-  ok(P().on === false, '此时只选一张');
+  ok(P().parts.length === 3, '拿牌后直接是「数字 × 空位」');
   pick(c[1].id);
-  const merged = R();
-  ok(merged.cards.length === 3, '两张凑齐就直接合并了（不用再点一次运算符）');
+  ok(R().cards.length === 3, '两张凑齐就直接合并（不用再点一次运算符）');
 
   // 结算时待算式不该残留
   load(0, 1);
@@ -756,12 +817,11 @@ section('15) 待算式（选中两张时的界面反馈）');
   resetTimers();
   setCards([1, 1, 1, 1]);
   const z = R().cards.map(x => x.id);
-  pick(z[0]); pick(z[1]); setOp('+');
+  pick(z[0]); setOp('+'); pick(z[1]);
   ok(R().state === 'dead', '造一个死局');
   ok(P().on === false, '死局状态下不显示待算式');
   ok(P().opsWant === false, '死局状态下运算符键不呼吸');
 }
-
 /* ---------------- 汇总 ---------------- */
 console.log('\n' + '='.repeat(52));
 if(fail === 0) console.log(`全部通过：${pass} 项`);
