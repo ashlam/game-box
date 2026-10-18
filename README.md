@@ -101,22 +101,22 @@ node tools/test_2048.js         # 92 项
 node tools/test_blockpuzzle.js  # 96 项
 node tools/test_breakout.js     # 23 项
 node tools/test_frog.js         # 53 项
-node tools/test_klotski.js      # 197 项
+node tools/test_klotski.js      # 203 项
 node tools/test_marble.js       # 弹珠乐园逻辑：455 项
 node tools/test_marble_ui.js    # 弹珠乐园**真机布局**：79 项（需真 Chrome + 本地站，见下）
-node tools/test_othello.js      # 黑白棋整局对局 + 计时断言
+node tools/test_othello.js      # 黑白棋整局对局 + 计时断言（行为断言，不计数）
 node tools/test_parking.js      # 停车场华容道：77 项
-node tools/test_pinball.js      # 弹珠台逻辑：312 项
+node tools/test_pinball.js      # 弹珠台逻辑：315 项
 node tools/test_pinball_ui.js   # 弹珠台**真机布局**：247 项（需真 Chrome + 本地站）
 node tools/test_sokoban.js      # 两套关卡逐关重放解法：30 项
 node tools/test_watersort.js    # 倒水分拣：48 项
-node tools/test_24point.js      # 24点逻辑：113 项
-node tools/test_24point_ui.js   # 24点**真机布局**：114 项 / 6 视口（需真 Chrome + 本地站）
+node tools/test_24point.js      # 24点逻辑：183 项
+node tools/test_24point_ui.js   # 24点**真机布局**：228 项 / 6 视口（需真 Chrome + 本地站）
 node tools/test_schulte.js      # 舒尔特方格逻辑：252 项
 node tools/test_schulte_ui.js   # 舒尔特方格**真机布局**：948 项 / 6 视口（需真 Chrome + 本地站）
 ```
 
-合计 2400+ 项断言，全绿（2026-10-18 实测）。
+合计 3400+ 项断言，全绿（2026-10-18 实测）。
 
 > ⚠️ `tools/test_othello.js` 原来把游戏路径写死成迁移前的绝对路径
 > （`/volume1/docker/hermes/.../web/othello/index.html`），迁移到新目录后一直 `ENOENT` ——
@@ -1198,6 +1198,32 @@ bash android/build_apk.sh --genkey     # 密钥丢失时先生成一把新的
 | 网页有、APK 没有 | 加新游戏后忘了跑 `sync_assets.py` |
 
 > 静态校验通过 ≠ 真机验收。最终仍需在设备上**飞行模式**启动，验证主页、各游戏、触控、音效与进度保存。
+
+### ⚠️ 本机当前打不了 APK（2026-10-18）
+
+`releases/` 和 `web/` 里的 APK 是 **10/16 的构建**，里面只有 **12 个游戏** ——
+**缺 24 点和舒尔特方格**（用 `zipfile` 列 `assets/*.html` 可验证）。
+
+原因不是脚本坏了，是本机缺 JDK 17：
+
+| 组件 | 状态 |
+|---|---|
+| Android SDK | ✅ `C:\Users\Administrator\AppData\Local\Android\Sdk`（build-tools 34/36.1/37，platforms 34/35/36.1） |
+| bash | ✅ WSL + git-bash 都可用 |
+| **JDK 17** | ❌ 只有 `jdk1.8.0_201` |
+
+`d8` 实测报 `UnsupportedClassVersionError: class file version 55.0`（= Java 11+），
+所以哪怕把 `ANDROID_BASE` 指到本机 SDK，`javac`/`d8` 这两步也过不去。
+
+下次要打包，先装 JDK 17（或 Android Studio 自带的 jbr），然后：
+
+```bash
+export ANDROID_BASE=/path/to/toolchain   # 里面要有 jdk-17 / build-tools/35.0.0 / platforms/android-35
+bash android/build_apk.sh
+```
+
+或者在 WSL 里装 `openjdk-17-jdk-headless` + Android command-line tools，用同样的脚本构建。
+**在补上 APK 之前，网页版是最新且完整的**（14 个游戏都在 `web/` 里）。
 
 ## 加新游戏时要动的地方
 
