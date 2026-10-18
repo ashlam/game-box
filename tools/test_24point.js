@@ -88,13 +88,40 @@ const documentStub = {
 };
 
 const store = {};
+/* 定时器不用真等：全部压进队列，测试里 flushTimers() 按时间顺序一次跑完。
+   这样既能验「结算演出分了几拍」，又不会让测试跑三秒钟。
+   队列用**虚拟时钟**排绝对时间，嵌套 setTimeout 也排得对。 */
 let timers = [];
+let timerSeq = 0;
+let vclock = 0;
+/** 推进虚拟时钟 delta 毫秒，把这段时间内到期的定时器全跑掉（含期间新排的嵌套定时器）。 */
+function flushTimers(delta){
+  const until = vclock + (delta === undefined ? Infinity : delta);
+  let guard = 0;
+  while(timers.length && guard++ < 2000){
+    timers.sort((a, b) => a.at - b.at || a.id - b.id);
+    if(timers[0].at > until) break;
+    const t = timers.shift();
+    vclock = Math.max(vclock, t.at);
+    if(t.fn) t.fn();
+  }
+  vclock = Math.max(vclock, until === Infinity ? vclock : until);
+}
+function flushAll(){ flushTimers(Infinity); }
+function resetTimers(){ timers = []; vclock = 0; }
+function pendingTimers(){ return timers.length; }
 const sandbox = {
-  console, setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
-  clearTimeout: id => { if(timers[id - 1]) timers[id - 1].fn = null; },
+  console, setTimeout: (fn, ms) => {
+    const id = ++timerSeq;
+    timers.push({ id, at: vclock + (ms || 0), fn });
+    return id;
+  },
+  clearTimeout: id => { timers = timers.filter(t => t.id !== id); },
   setInterval: () => 0, clearInterval(){},
   performance: { now: () => Date.now() },
-  requestAnimationFrame: () => 1, cancelAnimationFrame(){},
+  // rAF 立刻回调（假 DOM 里没有渲染帧，但类名切换的顺序要照样跑到）
+  requestAnimationFrame: fn => { if(fn) fn(); return 1; },
+  cancelAnimationFrame(){},
   localStorage: {
     getItem: k => (k in store ? store[k] : null),
     setItem: (k, v) => { store[k] = String(v); },
@@ -569,6 +596,99 @@ section('13) 选关面板');
   const doneBtn = grid.children[0];
   ok(doneBtn.classList.contains('done') || doneBtn.classList.contains('help'),
      '通关过的关卡有标记', doneBtn.className);
+}
+
+/* ================= 14) 结算演出的节奏 ================= */
+section('14) 结算演出（成功/失败都要慢下来）');
+{
+  const B = () => win.__g24Banner();
+  const winOv = documentStub.getElementById('winOv');
+  const deadOv = documentStub.getElementById('deadOv');
+
+  // ---- 成功：分拍推进，面板最后才出来 ----
+  resetTimers();
+  load(0, 0);
+  while(R().state === 'play'){ if(!win.__g24DemoStep(false)) break; }
+  ok(R().state === 'win', '先通一关');
+
+  let b = B();
+  ok(b.active === true, '★ 结算一开始面板没弹，演出先接管', JSON.stringify(b));
+  ok(!winOv.classList.contains('on'), '★ 通关瞬间不弹面板（牌桌先自己说话）');
+  ok(b.timers > 0, '排了多拍定时器', String(b.timers));
+
+  // 第一拍之前：连大字都还没出来
+  ok(b.title === '过 关', '大字标题已备好', b.title);
+
+  // 节奏常量：断言跟着真实数字走，不写死
+  const T = b;
+  ok(T.total > 3000, '★ 整段演出 > 3 秒（比旧版 0.82s 明显放慢）', T.total + 'ms');
+  ok(T.total < 5000, '也不至于拖到 5 秒以上', T.total + 'ms');
+
+  // 推进到大字那一拍：大字浮出，但面板还没
+  flushTimers(T.big);
+  b = B();
+  ok(b.kind.indexOf('on') >= 0, T.big + 'ms 大字浮出', b.kind);
+  ok(!winOv.classList.contains('on'), T.big + 'ms 还没弹面板');
+
+  // 推进到第一行说明那一拍：算式浮出
+  flushTimers(T.lineAt - T.big + 200);
+  b = B();
+  ok(b.line.indexOf('24') >= 0, T.lineAt + 'ms 浮出算式', b.line);
+
+  // 推进到收尾：面板才出来
+  flushTimers(T.total);
+  ok(winOv.classList.contains('on'), '★ ' + T.total + 'ms 后才弹结算面板');
+  ok(winOv.classList.contains('show'), '面板走的是淡入（show 类）');
+  ok(B().active === false, '面板出来后演出收工');
+
+  // ---- 演出时长要真的变长了（不是原来 820ms 那一版）----
+  resetTimers();
+  load(0, 3);
+  while(R().state === 'play'){ if(!win.__g24DemoStep(false)) break; }
+  ok(R().state === 'win', '再通一关');
+  ok(!winOv.classList.contains('on'), '第二次通关同样先演出');
+  // 820ms（老节奏）时还远没到面板
+  flushTimers(820);
+  ok(!winOv.classList.contains('on'), '★ 0.82s 时面板还没出来（比旧节奏慢）', 'winOv=' + winOv.className);
+  flushTimers(4000);
+  ok(winOv.classList.contains('on'), '放到 4s 时面板已出');
+
+  // ---- 失败：同样有演出，并且剩下的牌抖一下 ----
+  resetTimers();
+  setCards([1, 1, 1, 1]);
+  const ids = R().cards.map(c => c.id);
+  pick(ids[0]); pick(ids[1]); setOp('+');    // 2 1 1 → 立刻判死
+  ok(R().state === 'dead', '先造一个死局');
+  b = B();
+  ok(b.active === true, '★ 失败也走演出', JSON.stringify(b));
+  ok(!deadOv.classList.contains('on'), '★ 失败瞬间不弹面板');
+  ok(b.title === '凑不出 24', '失败大字标题', b.title);
+  ok(b.kind.indexOf('bad') >= 0, '失败用 bad 配色', b.kind);
+  ok(cardBox.children.some(c => c.classList.contains('lose')),
+     '剩下的牌里有一张标了 lose（抖动）');
+
+  flushTimers(800);
+  ok(B().kind.indexOf('on') >= 0, '失败大字浮出');
+  flushTimers(B().total + 500);
+  ok(deadOv.classList.contains('on'), '★ 失败面板也是慢一拍才出来');
+
+  // ---- 点一下能跳过等待 ----
+  resetTimers();
+  load(0, 5);
+  while(R().state === 'play'){ if(!win.__g24DemoStep(false)) break; }
+  ok(!winOv.classList.contains('on'), '跳过前：面板还没出');
+  B().skip();
+  ok(winOv.classList.contains('on'), '★ 轻点一下直接弹面板（不逼玩家干等）');
+  ok(B().active === false, '跳过后演出收工');
+
+  // ---- 跳过是幂等的：重复点不会重复回调 ----
+  const again = B();
+  ok(again.active === false, '演出已结束时再点不报错');
+
+  // ---- 换关要清掉残留的大字 ----
+  load(0, 6);
+  ok(B().title === '' || B().kind === '', '换关后演出残留被清干净',
+     JSON.stringify(B()));
 }
 
 /* ---------------- 汇总 ---------------- */

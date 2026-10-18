@@ -70,11 +70,12 @@ f.onload=()=>setTimeout(()=>{
   let o;
   try{
     const d=f.contentDocument, E=id=>d.getElementById(id), g=id=>E(id).getBoundingClientRect();
-    const cards=[...d.querySelectorAll('#cards .card')].map(e=>{const r=e.getBoundingClientRect();return {w:r.width,h:r.height,top:r.top,bottom:r.bottom,left:r.left,right:r.right};});
-    const ops=[...d.querySelectorAll('#ops button')].map(e=>{const r=e.getBoundingClientRect();return {w:r.width,h:r.height,top:r.top,bottom:r.bottom,left:r.left,right:r.right,text:e.textContent.trim()};});
-    const tools=[...d.querySelectorAll('#tools button')].map(e=>{const r=e.getBoundingClientRect();return {w:r.width,h:r.height,top:r.top,bottom:r.bottom,left:r.left,right:r.right,text:e.textContent.trim()};});
+    const rect=e=>{const r=e.getBoundingClientRect();return {w:r.width,h:r.height,top:r.top,bottom:r.bottom,left:r.left,right:r.right};};
+    const cards=[...d.querySelectorAll('#cards .card')].map(rect);
+    const ops=[...d.querySelectorAll('#ops button')].map(e=>Object.assign(rect(e),{text:e.textContent.trim()}));
+    const tools=[...d.querySelectorAll('#tools button')].map(e=>Object.assign(rect(e),{text:e.textContent.trim()}));
     const body=d.body, de=d.documentElement;
-    o={
+    const base={
       ok:true,
       vw:de.clientWidth, vh:de.clientHeight,
       bodyScrollH:body.scrollHeight, bodyClientH:body.clientHeight,
@@ -86,8 +87,38 @@ f.onload=()=>setTimeout(()=>{
       cardFont:parseFloat(getComputedStyle(d.querySelector('#cards .card .val')).fontSize),
       tipH:g('tip').height,
     };
-  }catch(e){ o={ok:false,err:e.message}; }
-  document.getElementById('out').textContent=JSON.stringify(o);
+
+    /* ★ 结算演出也要量。做法：直接把这局推到通关，再等到「大字 + 两行说明」都出来那一拍，
+       量演出区的位置与整页溢出 —— 演出要是把牌盖住或者把按钮顶出屏幕，这里必须红。 */
+    const w=f.contentWindow;
+    let guard=0;
+    while(w.__g24().state==='play' && guard++<8){ if(!w.__g24DemoStep(false)) break; }
+    const BS=w.__g24Banner();
+
+    setTimeout(()=>{
+      try{
+        const bn=E('banner'), big=E('bannerBig'), line=E('bannerLine');
+        const rb=bn.getBoundingClientRect(), rbig=big.getBoundingClientRect();
+        const cardRects=[...d.querySelectorAll('#cards .card')].map(rect);
+        base.settle={
+          state: w.__g24().state,
+          title: BS.title,
+          bannerH: rb.height,
+          bannerTop: rb.top, bannerBottom: rb.bottom,
+          bigTop: rbig.top, bigBottom: rbig.bottom,
+          cardBottom: cardRects.length ? Math.max(...cardRects.map(r=>r.bottom)) : 0,
+          lineText: line.textContent,
+          overflowY: d.body.scrollHeight-d.body.clientHeight,
+          overflowX: d.documentElement.scrollWidth-d.documentElement.clientWidth,
+          toolsBottom: Math.max(...tools.map(t=>t.bottom)),
+          total: BS.total,
+        };
+      }catch(e){ base.settleErr=e.message; }
+      document.getElementById('out').textContent=JSON.stringify(base);
+    }, 3400);
+  }catch(e){
+    document.getElementById('out').textContent=JSON.stringify({ok:false,err:e.message});
+  }
 },700);
 </script></body></html>`;
   const tmpPage = path.join(siteRoot, '_ui_probe_24.html');
@@ -192,6 +223,33 @@ for(const [name, w, h, r] of results){
   // 最后一行按钮必须在屏幕内
   const lastBottom = Math.max(...r.tools.map(t => t.bottom), r.opsBottom);
   okNum(lastBottom, v => v <= h + 1, '底部按钮没被挤出屏幕', '最低点 ' + lastBottom.toFixed(1) + ' / 屏高 ' + h);
+
+  /* ---------- 结算演出（通关后那一拍） ---------- */
+  section(`${name} ${w}×${h} · 结算演出`);
+  if(r.settleErr){
+    ok(false, '结算演出量不到', r.settleErr);
+  } else if(!r.settle){
+    ok(false, '结算演出没量到（探针没跑完）');
+  } else {
+    const s = r.settle;
+    ok(s.state === 'win', '探针把局面推到了通关', s.state);
+    ok(s.title === '过 关', '演出大字已就位', s.title);
+    okNum(s.bannerH, v => v > 40, '演出区有实际高度（大字+说明真的显示出来了）', s.bannerH.toFixed(1) + 'px');
+    ok(s.lineText.length > 0, '说明文字已经浮出', JSON.stringify(s.lineText));
+
+    // ★ 演出不能盖住那张 24
+    ok(s.bannerTop >= s.cardBottom - 1, '★ 演出排在牌的下面，不遮挡那张 24',
+       `banner.top=${s.bannerTop.toFixed(1)} card.bottom=${s.cardBottom.toFixed(1)}`);
+    ok(s.bigTop >= s.cardBottom - 1, '★ 大字也不压牌',
+       `big.top=${s.bigTop.toFixed(1)} card.bottom=${s.cardBottom.toFixed(1)}`);
+
+    // 演出期间页面仍然不能溢出、按钮不能被顶出去
+    okNum(s.overflowY, v => v <= 1, '演出期间仍不纵向溢出', '溢出 ' + s.overflowY + 'px');
+    okNum(s.overflowX, v => v <= 1, '演出期间仍不横向溢出', '溢出 ' + s.overflowX + 'px');
+    okNum(s.toolsBottom, v => v <= h + 1, '演出期间底部按钮还在屏幕内',
+       '最低点 ' + s.toolsBottom.toFixed(1) + ' / 屏高 ' + h);
+    okNum(s.total, v => v > 3000, '演出总时长 > 3 秒（放慢过）', s.total + 'ms');
+  }
 }
 
 console.log('\n' + '='.repeat(52));
