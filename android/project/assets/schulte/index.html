@@ -87,12 +87,15 @@
     transition:background .16s,border-color .16s,color .16s,opacity .2s,transform .09s;
   }
   .cell:active{transform:scale(.93);border-color:#4a72c8}
-  /* 点对：只闪一下，随即恢复原样。
-     ⚠️ 曾经是「点过的格子永久变绿并压暗」—— 那是错的：
-     绿色格子越点越多，等于把「哪些数字已经点过」直接标在盘面上，
-     剩下的数字一眼就能扫出来，难度被自己的反馈一点点削平了。
-     舒尔特方格的全部难度就来自「你要自己在满盘数字里找下一个」，
-     所以这里只能给一次瞬时确认，不能留下任何持久痕迹。 */
+  /* 点对：那一下闪蓝光，随即变成「上一个正确数字」的绿色。
+     ⚠️ 这里的设计约束是「**盘面上永远只有一格是绿的**」：
+       · 曾经做成「点过的格子永久变绿并压暗」→ 绿格子越点越多，
+         等于把「哪些数字已经点过」整片标出来，剩下的数字扫一眼就能挑出来，
+         难度被自己的反馈一点点削平了。
+       · 也不能一格都不留 → 玩家没法确认「我是不是刚点对了 3」，
+         而舒尔特方格的关键就是「别丢进度」。
+     所以折中是：**绿色永远只跟着「上一个正确数字」走**，点了下一个就迁移过去。
+     它只回答「我刚才点到几了」，不回答「还有哪些没点」—— 后者正是难度本身。 */
   .cell.hit{animation:cellHit .30s ease-out 1}
   @keyframes cellHit{
     0%{transform:scale(1);background:linear-gradient(180deg,#2b4a86,#22304a);
@@ -101,6 +104,13 @@
         border-color:#5b8cff;color:#fff;box-shadow:0 0 14px rgba(91,140,255,.5)}
     100%{transform:scale(1);box-shadow:inset 0 1px 0 rgba(255,255,255,.045)}
   }
+  /* 上一个正确数字：绿色，而且永远只有这一格 */
+  .cell.prev{
+    background:linear-gradient(180deg,#1b4436,#153227);
+    border-color:#3d8f6c;color:#5ff0b4;
+    box-shadow:0 0 0 1px rgba(78,226,173,.28),0 0 16px rgba(56,211,159,.22);
+  }
+  .cell.prev:active{transform:scale(.93)}
   .cell.bad{animation:badShake .34s cubic-bezier(.36,.07,.19,.97) 1;
             background:linear-gradient(180deg,#3a1f1f,#2a1618);border-color:rgba(255,123,114,.85);
             color:#ff9a92;
@@ -862,7 +872,33 @@ function updateHud(){
   if(st && st.children && st.children[1] && st.children[1].classList){
     st.children[1].classList.toggle('hot', S.state !== 'done');
   }
+  syncPrev();
   updateTimer();
+}
+
+/* 盘面上「绿色」的迁移 —— 全作唯一的持久标记，且**永远只有一格**。
+   绿色跟着 S.next 的前一个数字走：
+     · 该按 4 时，3 是绿的；
+     · 按完 4，绿色立刻从 3 挪到 4，3 恢复成普通格子。
+   这样它只回答「我刚点到几」，不回答「还有哪些没点」——
+   后者才是这个游戏的难度所在（把已点过的全标绿，剩下的数字一眼就能扫出来）。
+   用增量「摘掉旧的 / 挂上新的」而不是遍历全盘：9×9 每点一下也就两次 class 操作。 */
+function syncPrev(){
+  var board = $('board');
+  if(!board || !board.children) return;
+  var want = (S.state === 'done' || S.next <= 1) ? 0 : (S.next - 1);   // 0 = 没有
+  var keep = null;
+  for(var i=0;i<board.children.length;i++){
+    var el = board.children[i];
+    if(!el || !el.classList || !el.classList.contains('prev')) continue;
+    var v = parseInt(el.dataset && el.dataset.v, 10);
+    if(v === want) keep = el;
+    else el.classList.remove('prev');
+  }
+  if(want && !keep){
+    var target = cellOf(want);
+    if(target && target.classList) target.classList.add('prev');
+  }
 }
 
 function updateBest(){
@@ -1044,9 +1080,11 @@ window.__schulteCells = function(){
     out.push({
       v: parseInt(el.dataset && el.dataset.v, 10),
       text: el.textContent,
-      /* hit = 刚点对时那一下的闪光（几百毫秒后自动消失），
-         不是持久标记 —— 盘面上不该留下「这个已经点过」的线索。 */
+      /* hit = 刚点对时那一下的闪光（几百毫秒后自动消失）；
+         prev = 上一个正确数字的绿色标记（**全盘永远只有一格**）。
+         两者都不是「已点过」的累积标记 —— 那会把答案整片标在盘面上。 */
       hit: !!(el.classList && el.classList.contains('hit')),
+      prev: !!(el.classList && el.classList.contains('prev')),
       bad: !!(el.classList && el.classList.contains('bad')),
       cls: (el.className || ''),
       w: el.style && el.style.getPropertyValue ? el.style.getPropertyValue('--w') : null

@@ -289,25 +289,34 @@ section('4) 点对：进度推进');
   const one = c.find(x => x.v === 1);
   ok(one && one.hit, '点过的 1 号格子立刻闪一下（hit）');
   ok(c.filter(x => x.hit).length === 1, '只有刚点的那一格在闪（实际 ' + c.filter(x => x.hit).length + '）');
+  /* ★ 上一个正确数字变绿（只此一格），用来提醒进度 */
+  ok(one && one.prev, '★ 刚点对的 1 变成绿色（上一个正确数字）');
+  ok(c.filter(x => x.prev).length === 1, '绿色只有一格（实际 ' + c.filter(x => x.prev).length + '）');
 
   tap(2);
   ok(S().next === 3, '下一个变成 3');
-  /* ★ 核心不变量：盘面上不能留下任何「已经点过」的持久标记。
-     否则绿色格子越点越多，剩下的数字一眼就能扫出来，难度被自己的反馈削平。 */
-  const marked = cells().filter(x => /(^|\s)(done|hit|ok|cleared|visited)(\s|$)/.test(x.cls));
-  ok(marked.length <= 2, '★ 只有最近点的一两格还在闪光，不会越积越多（当前 ' + marked.length + ' 格）',
-     marked.map(x => x.v + ':' + x.cls).join(','));
+  /* ★ 核心不变量：绿色必须「迁移」而不是「累积」——
+     该按 3 时只有 2 是绿的，1 已经恢复。 */
+  const g = cells().filter(x => x.prev);
+  ok(g.length === 1, '★ 绿色永远只有一格（点 2 之后实际 ' + g.length + ' 格）',
+     g.map(x => x.v).join(','));
+  ok(g[0].v === 2, '★ 绿色跟着走：现在是 2（' + (g[0] || {}).v + '）');
+  ok(!cells().find(x => x.v === 1).prev, '★ 1 已经不再绿了（不累积）');
 
   // 进度条
   const fill = els.barFill;
   ok(fill.style.width === '8.0%', '进度条 = 2/25 = 8.0%（实际 ' + fill.style.width + '）');
   tap(3);
   ok(fill.style.width === '12.0%', '进度条跟着涨到 12.0%（实际 ' + fill.style.width + '）');
+  ok(cells().filter(x => x.prev)[0].v === 3, '★ 点 3 之后绿色挪到 3');
+  ok(!cells().find(x => x.v === 2).prev, '2 同时不再绿');
 
   // 重复点已经点过的数字 = 点错（不会把进度搞坏）
   const r = tap(2);
   ok(r === 'bad', '★ 重复点已完成的数字算点错');
   ok(S().next === 4, '但进度不受影响（仍是 4）');
+  const g2 = cells().filter(x => x.prev);
+  ok(g2.length === 1 && g2[0].v === 3, '★ 点错不会把绿色挪走（仍是 3）');
 
   // HUD
   ok(els.next.textContent === '4', 'HUD 显示下一个数字（' + els.next.textContent + '）');
@@ -316,8 +325,8 @@ section('4) 点对：进度推进');
      '★ 玩到一半时提示条显示进度（' + els.hint.textContent + '）');
 }
 
-/* ================= 4b) ★ 点过的格子不能留下痕迹 ================= */
-section('4b) ★ 点过的格子不能变绿/变暗（会削平难度）');
+/* ================= 4b) ★ 绿色只跟着上一个正确数字，绝不累积 ================= */
+section('4b) ★ 绿色不累积（否则等于把答案标在盘面上）');
 {
   newGame(6, 77);
   clock.t = 1000;
@@ -326,38 +335,44 @@ section('4b) ★ 点过的格子不能变绿/变暗（会削平难度）');
   const c = cells();
   ok(c.length === 36, '6×6 有 36 格');
 
-  /* 立刻检查：只有刚点的 18 号还在闪（320ms 内），前面 17 格必须已经干净 */
+  /* 立刻检查：只有刚点的 18 号还在闪（320ms 内），绿色只有 17 号一格 */
   const flashing = c.filter(x => x.hit);
   ok(flashing.length === 1 && flashing[0].v === 18,
      '★ 只有刚点的那一格在闪光（' + flashing.map(x => x.v).join(',') + '）');
-  const dirty = c.filter(x => /(^|\s)(done|ok|cleared|visited)(\s|$)/.test(x.cls));
-  ok(dirty.length === 0, '★ 盘面上没有任何「已点过」的持久标记（' + dirty.length + ' 格）',
-     dirty.map(x => x.v + ':' + x.cls).join(','));
+  const greens = c.filter(x => x.prev);
+  ok(greens.length === 1, '★ 点了 18 个之后，绿色仍然只有 1 格（实际 ' + greens.length + ' 格）',
+     greens.map(x => x.v).join(','));
+  ok(greens[0].v === 18, '★ 绿色是刚点对的 18（下一个该点 19）');
+  ok(!c.find(x => x.v === 17).prev, '★ 17 已经恢复成普通格子');
+  ok(!c.find(x => x.v === 1).prev, '★ 1 早就不是绿的了');
 
-  /* 再等一会儿：连那一格闪光也要自己消失（推进假时钟 + 跑几帧 step） */
+  /* 再等一会儿：闪光自己消失，但绿色要留着（它是进度提示） */
   clock.t += 500;
   run(0.2);
-  ok(cells().every(x => !x.hit), '★ 闪光自动消失，整盘回到干净状态（0 格有标记）');
+  ok(cells().every(x => !x.hit), '★ 闪光自动消失（0 格在闪）');
+  ok(cells().filter(x => x.prev).length === 1, '★ 绿色还在，且仍然只有一格');
 
-  /* 关键对照：已点过的数字和没点过的数字，在 DOM 上必须完全一样 ——
-     只差 dataset.v 和文字，class 必须都是 "cell"。
-     否则玩家（和任何脚本）都能从样式上「读出答案」。 */
+  /* 关键对照：已点过的 17 个和没点过的 18 个，样式必须**完全一样** ——
+     唯一的差别是「上一个正确数字」那一格。
+     否则玩家（和任何脚本）都能从样式上「读出还差哪些数字」。 */
   const all = cells();
-  const clicked = all.filter(x => x.v <= 18);
-  const rest = all.filter(x => x.v > 18);
-  ok(clicked.every(x => x.cls === 'cell'), '★ 已点过的 18 格 class 全是 "cell"',
+  const clicked = all.filter(x => x.v <= 17);
+  const rest = all.filter(x => x.v >= 19);
+  ok(clicked.every(x => x.cls === 'cell'), '★ 已点过的 17 格 class 全是 "cell"（只有 18 是 prev）',
      [...new Set(clicked.map(x => x.cls))].join(' | '));
   ok(rest.every(x => x.cls === 'cell'), '★ 没点过的 18 格 class 也全是 "cell"');
-  ok(JSON.stringify(clicked.map(x => x.cls)) === JSON.stringify(rest.map(x => x.cls)),
-     '★ 已点 / 未点 两组的样式完全一致 —— 盘面上看不出任何进度线索');
+  ok(JSON.stringify([...new Set(clicked.map(x => x.cls))]) === JSON.stringify([...new Set(rest.map(x => x.cls))]),
+     '★ 已点 / 未点 两组的样式集合完全一致 —— 盘面上只有「上一格」这一个线索',
+     '已点 ' + JSON.stringify([...new Set(clicked.map(x => x.cls))]) +
+     ' vs 未点 ' + JSON.stringify([...new Set(rest.map(x => x.cls))]));
 
-  /* 反向验证：把「点过就标记」的老行为模拟出来，确认上面的断言真的会红 */
+  /* 反向验证：把「点过就累积标记」的老行为模拟出来，确认上面的断言真的会红 */
   const board = els.board;
-  board.children[0].classList.add('done');
-  const bad = cells().filter(x => /(^|\s)done(\s|$)/.test(x.cls));
-  ok(bad.length === 1, '（反证：一旦真的加了 done 标记，上面的检查能抓到它）');
-  board.children[0].classList.remove('done');
-  ok(cells().every(x => x.cls === 'cell'), '清掉之后又干净了');
+  board.children[0].classList.add('prev');
+  const bad = cells().filter(x => x.prev);
+  ok(bad.length === 2, '（反证：一旦绿色累积到 2 格，上面的检查能抓到它）');
+  board.children[0].classList.remove('prev');
+  ok(cells().filter(x => x.prev).length === 1, '清掉之后又只剩一格');
 }
 
 /* ================= 5) 点错 ================= */

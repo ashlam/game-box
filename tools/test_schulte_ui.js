@@ -134,36 +134,70 @@ f.onload=()=>setTimeout(()=>{
                             color:getComputedStyle(badEl).color,
                             border:getComputedStyle(badEl).borderColor } : null;
 
-    /* ★ 点过的格子不能留下痕迹：连点 10 个正确的数字，等闪光过期后
-       整盘的 computed 样式必须完全一致（否则等于把答案标在盘面上）。
+    /* ★ 绿色只跟着「上一个正确数字」走，绝不累积：
+       连点 10 个正确的数字后，盘面上必须**恰好一格**是绿的（10 号），
+       其余 35 格（包括已点过的 1~9）的 computed 样式必须完全一致 ——
+       否则等于把「哪些数字已经点过」标在盘面上，难度被自己的反馈削平。
        ⚠️ 不能在探测页里忙等真实时间 —— 无头 Chrome 的虚拟时间不会因为空转前进，
        那样会直接把 --virtual-time-budget 耗死。改成接管游戏时钟，确定性推进。 */
     let fakeT = 1000;
     w0.__schulteSetClock(()=>fakeT);
     w0.__schulteNewGame(6);
     const probeCells=[...d.querySelectorAll('#board .cell')];
-    for(let v=1;v<=10;v++) w0.__schulteTap(v);
+    for(let v=1;v<=10;v++){ fakeT += 50; w0.__schulteTap(v); }
     const snapshot=()=>probeCells.map(e=>{
       const cs=getComputedStyle(e);
       return [cs.backgroundImage,cs.backgroundColor,cs.color,cs.borderColor,cs.opacity,
-              e.className].join('|');
+              cs.boxShadow,e.className].join('|');
     });
     const withFlash = snapshot();
     const hitCount = probeCells.filter(e=>e.classList.contains('hit')).length;
+    const greenDuring = probeCells.filter(e=>e.classList.contains('prev')).length;
+    /* 对照用：刚点的那一格（v=10）在「闪光中」和「闪光后」的样式必须不同 ——
+       否则「其余 35 格样式一致」可能只是因为它压根没画 */
+    const flashCellIdx = probeCells.findIndex(e=>e.dataset.v === '10');
+    const flashCellStyle = snapshot()[flashCellIdx];
     fakeT += 1000;                       // 闪光早已过期
-    w0.__schulteStep(0.016);             // step 里会 prune
+    w0.__schulteStep(0.016);             // step 里会 prune 掉过期闪光
     const clean = snapshot();
+    const flashCellStyleAfter = clean[flashCellIdx];
     const uniqClean = [...new Set(clean)];
     const hitLeft = probeCells.filter(e=>e.classList.contains('hit')).length;
+    const greenCells = probeCells.filter(e=>e.classList.contains('prev'));
+    const greenVs = greenCells.map(e=>e.dataset.v);
+    /* 除了那一格绿，其余 35 格的样式必须只有 1 种 */
+    const others = probeCells.filter(e=>!e.classList.contains('prev'))
+                             .map(e=>{const cs=getComputedStyle(e);
+                               return [cs.backgroundImage,cs.backgroundColor,cs.color,
+                                       cs.borderColor,cs.opacity,cs.boxShadow,e.className].join('|');});
+    const uniqOthers = [...new Set(others)];
+    /* 已点过的 1~9 必须和没点过的 11~36 完全同款 */
+    const clickedStyles = probeCells.filter(e=>{
+      const v=+e.dataset.v; return v>=1 && v<=9; })
+      .map(e=>{const cs=getComputedStyle(e);
+        return [cs.backgroundImage,cs.backgroundColor,cs.color,cs.borderColor,cs.opacity,
+                cs.boxShadow,e.className].join('|');});
+    const restStyles = probeCells.filter(e=>+e.dataset.v >= 11)
+      .map(e=>{const cs=getComputedStyle(e);
+        return [cs.backgroundImage,cs.backgroundColor,cs.color,cs.borderColor,cs.opacity,
+                cs.boxShadow,e.className].join('|');});
     w0.__schulteSetClock(null);          // 还原真实时钟
     out.leak = {
       total: probeCells.length,
       hitDuring: hitCount,
       hitLeft,
+      greenDuring,
+      greenCount: greenCells.length,
+      greenVs,
       withFlashUniq: [...new Set(withFlash)].length,
       cleanUniq: uniqClean.length,
-      classes: [...new Set(probeCells.map(e=>e.className))],
-      sample: uniqClean.slice(0,3),
+      flashChanged: flashCellStyle !== flashCellStyleAfter,
+      flashStyleBefore: flashCellStyle,
+      flashStyleAfter: flashCellStyleAfter,
+      uniqOthers: uniqOthers.length,
+      clickedUniq: [...new Set(clickedStyles)].length,
+      restUniq: [...new Set(restStyles)].length,
+      sample: uniqOthers.slice(0,2),
     };
 
     /* 通关演出：棋盘要进 won 状态，撒花画布要真的在画 */
@@ -374,18 +408,25 @@ for(const [name, w, h, r] of results){
     ok(r.badCell.border && r.badCell.border !== 'rgba(0, 0, 0, 0)', '边框也变了（' + r.badCell.border + '）');
   }
 
-  /* ---------- ★ 点过的格子不留痕迹 ---------- */
-  section(`${name} ${w}×${h} · 点过的格子不留痕迹`);
+  /* ---------- ★ 绿色只跟着上一个正确数字 ---------- */
+  section(`${name} ${w}×${h} · 绿色不累积`);
   const lk = r.leak || {};
   ok(lk.total === 36, '6×6 共 36 格', String(lk.total));
   ok(lk.hitDuring >= 1, '刚点的那一格确实闪了一下（hit）', '闪烁 ' + lk.hitDuring + ' 格');
   ok(lk.hitLeft === 0, '★ 闪光过期后一格都不剩', '残留 ' + lk.hitLeft + ' 格');
-  ok(JSON.stringify(lk.classes) === JSON.stringify(['cell']),
-     '★ 全部 36 格的 class 完全一致（只有 "cell"）', JSON.stringify(lk.classes));
-  ok(lk.cleanUniq === 1, '★ 36 格的 computed 样式只有 1 种 —— 已点过 / 没点过在视觉上无法区分',
-     '出现 ' + lk.cleanUniq + ' 种：' + JSON.stringify((lk.sample || []).slice(0, 2)));
-  ok(lk.withFlashUniq > lk.cleanUniq, '（对照：闪光期间样式确实不同，说明上面的"一致"不是因为压根没画）',
-     lk.withFlashUniq + ' vs ' + lk.cleanUniq);
+  ok(lk.greenCount === 1, '★ 点了 10 个之后，绿色仍然只有 1 格（实际 ' + lk.greenCount + ' 格）',
+     JSON.stringify(lk.greenVs));
+  ok(JSON.stringify(lk.greenVs) === JSON.stringify(['10']),
+     '★ 绿的是刚点对的 10（下一个该点 11）', JSON.stringify(lk.greenVs));
+  ok(lk.uniqOthers === 1,
+     '★ 除那一格绿之外，其余 35 格的 computed 样式只有 1 种',
+     '出现 ' + lk.uniqOthers + ' 种');
+  ok(lk.clickedUniq === 1 && lk.restUniq === 1,
+     '★ 已点过的 1~9 与没点过的 11~36 视觉上完全一样',
+     '已点 ' + lk.clickedUniq + ' 种 / 未点 ' + lk.restUniq + ' 种');
+  ok(lk.flashChanged === true,
+     '（对照：刚点那一格在闪光中和闪光后的样式确实不同 —— 说明"其余 35 格一致"不是因为压根没画）',
+     JSON.stringify(lk.flashStyleBefore) + ' vs ' + JSON.stringify(lk.flashStyleAfter));
 
   /* ---------- 过关特效 ---------- */
   section(`${name} ${w}×${h} · 过关特效`);
