@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>24点 · 小游戏盒子</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161a22; --card:#191d26; --card2:#232a37; --line:#2b3242;
+    --txt:#e8ecf3; --dim:#8b95a7; --acc:#5b8cff; --ok:#38d39f; --gold:#ffd166; --bad:#ff7b72;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{
+    background:radial-gradient(1100px 560px at 50% -12%,#1b2233 0%,var(--bg) 62%);
+    color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;overflow:hidden;
+    user-select:none;-webkit-user-select:none;
+    padding:calc(env(safe-area-inset-top) + 6px) 12px calc(env(safe-area-inset-bottom) + 10px);
+  }
+
+  /* ---------------- 顶栏 ---------------- */
+  .top{display:flex;align-items:center;gap:8px;flex:0 0 auto;margin-bottom:2px}
+  .top .back{color:var(--dim);text-decoration:none;font-size:19px;line-height:1;padding:7px 10px;
+             border-radius:10px;background:var(--card);border:1px solid var(--line)}
+  .top .ttl{font-size:15px;font-weight:700;letter-spacing:1px}
+  .top .chip{font-size:11.5px;color:var(--dim);border:1px solid var(--line);background:var(--card);
+             padding:4px 9px;border-radius:99px;white-space:nowrap}
+  .top .sp{flex:1}
+  .top .tmr{font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums;min-width:42px;text-align:right}
+  .top .ico{font:inherit;font-size:15px;line-height:1;padding:8px 10px;border-radius:10px;
+            background:var(--card);border:1px solid var(--line);color:var(--txt)}
+
+  /* ---------------- 牌桌 ---------------- */
+  #stage{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;
+         align-items:center;justify-content:center;gap:10px}
+  .goal{font-size:11.5px;color:var(--dim);letter-spacing:2px;display:flex;align-items:center;gap:7px}
+  .goal b{color:var(--gold);font-size:15px;letter-spacing:0;font-variant-numeric:tabular-nums}
+  #cards{display:flex;flex-wrap:wrap;justify-content:center;align-content:center;gap:12px;
+         width:100%;max-width:356px}
+  .card{
+    position:relative;width:calc((100% - 12px)/2);max-width:172px;
+    aspect-ratio:1/1;min-height:88px;
+    border-radius:20px;border:1px solid var(--line);
+    background:linear-gradient(180deg,var(--card2),var(--card));
+    box-shadow:0 8px 22px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.05);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+    padding:6px;cursor:pointer;
+    transition:transform .14s cubic-bezier(.2,.9,.3,1.35),border-color .14s,box-shadow .14s,opacity .14s;
+  }
+  .card .val{font-size:clamp(32px,11.5vw,54px);font-weight:800;line-height:1;
+             font-variant-numeric:tabular-nums;letter-spacing:-1px}
+  .card .val.small{font-size:clamp(21px,7vw,34px);letter-spacing:0}
+  .card .exp{font-size:10.5px;color:var(--dim);max-width:94%;text-align:center;line-height:1.3;
+             word-break:break-all}
+  .card.sel{border-color:var(--acc);transform:translateY(-3px) scale(1.035);
+            box-shadow:0 12px 26px rgba(91,140,255,.32),0 0 0 2px rgba(91,140,255,.34)}
+  .card.sel .val{color:#bcd0ff}
+  .card.hint{border-color:var(--gold);box-shadow:0 0 0 2px rgba(255,209,102,.38),0 10px 24px rgba(255,209,102,.22)}
+  .card.win{border-color:var(--ok);background:linear-gradient(180deg,#1d3b31,#16261f);
+            box-shadow:0 0 0 3px rgba(56,211,159,.45),0 14px 34px rgba(56,211,159,.35);
+            animation:pop .55s cubic-bezier(.2,1.5,.4,1) 1}
+  .card.dead{border-color:rgba(255,123,114,.5);opacity:.72}
+  .card.pop{animation:pop .3s cubic-bezier(.2,1.5,.4,1) 1}
+  @keyframes pop{0%{transform:scale(.86)}60%{transform:scale(1.06)}100%{transform:scale(1)}}
+  #tip{font-size:12px;color:var(--dim);min-height:17px;text-align:center;padding:0 10px;line-height:1.4}
+
+  /* ---------------- 运算符 ---------------- */
+  #ops{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;flex:0 0 auto;
+       width:100%;max-width:356px;margin:0 auto 10px}
+  #ops button{
+    font:inherit;font-size:24px;font-weight:600;line-height:1;padding:16px 0;border-radius:16px;
+    border:1px solid var(--line);background:linear-gradient(180deg,var(--card2),var(--card));
+    color:var(--txt);transition:transform .1s,border-color .12s,background .12s;
+  }
+  #ops button:active{transform:scale(.95)}
+  #ops button.on{background:linear-gradient(180deg,#2f4d8f,#26406f);border-color:#4a72c8;color:#fff;
+                 box-shadow:0 0 0 2px rgba(91,140,255,.3),0 8px 20px rgba(91,140,255,.3)}
+  #ops button:disabled{opacity:.35}
+
+  /* ---------------- 工具条 ---------------- */
+  #tools{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;flex:0 0 auto;
+         width:100%;max-width:356px;margin:0 auto}
+  #tools button{font:inherit;font-size:13.5px;padding:12px 0;border-radius:14px;
+                border:1px solid var(--line);background:var(--card);color:var(--txt);
+                white-space:nowrap}
+  #tools button:active{background:var(--card2)}
+  #tools button:disabled{opacity:.35}
+
+  /* ---------------- 浮层 ---------------- */
+  .ov{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:20px;
+      background:rgba(8,10,14,.82);backdrop-filter:blur(3px);z-index:8}
+  .ov.on{display:flex}
+  .panel{width:100%;max-width:330px;background:var(--panel);border:1px solid var(--line);
+         border-radius:18px;padding:20px 18px 16px;text-align:center;
+         box-shadow:0 20px 50px rgba(0,0,0,.55)}
+  .panel h2{margin:0 0 6px;font-size:20px;letter-spacing:1px}
+  .panel .sub{color:var(--dim);font-size:12.5px;line-height:1.6;margin-bottom:12px}
+  .panel .big{font-size:38px;font-weight:800;color:var(--ok);line-height:1.1;letter-spacing:1px}
+  .panel .rec{color:var(--gold);font-size:12.5px;font-weight:650;margin:8px 0 14px;min-height:16px}
+  .panel .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  .panel button{font:inherit;font-size:13.5px;padding:11px 16px;border-radius:12px;
+                border:1px solid var(--line);background:var(--card2);color:var(--txt)}
+  .panel button.pri{background:#2b4a86;border-color:#3f66b0;color:#fff;font-weight:650}
+  .panel .expr{font-size:12px;color:var(--dim);background:rgba(255,255,255,.04);
+               border:1px dashed var(--line);border-radius:10px;padding:9px 10px;margin:0 0 13px;
+               word-break:break-all;line-height:1.5}
+  .panel .expr b{color:var(--txt)}
+
+  /* 菜单 */
+  #menu{position:fixed;inset:0;display:none;background:rgba(8,10,14,.84);z-index:9;padding:16px}
+  #menu.on{display:block}
+  #menu .grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;max-width:320px;margin:46px auto 0}
+  #menu button{font:inherit;font-size:13.5px;padding:16px 8px;border-radius:13px;
+               border:1px solid var(--line);background:var(--card2);color:var(--txt)}
+  #menu button:active{background:#2b3342}
+
+  /* 选关 */
+  #lv{position:fixed;inset:0;display:none;background:rgba(8,10,14,.9);z-index:10;
+      padding:14px;overflow:auto}
+  #lv.on{display:block}
+  #lv h2{font-size:15px;text-align:center;margin:14px 0 10px;letter-spacing:1px}
+  .tabs{display:flex;gap:7px;justify-content:center;margin-bottom:13px;flex-wrap:wrap}
+  .tabs button{font:inherit;font-size:12.5px;padding:8px 15px;border-radius:10px;
+               border:1px solid var(--line);background:var(--card);color:var(--dim)}
+  .tabs button.on{background:#22304a;border-color:#3d5a8f;color:#fff}
+  .lvgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:7px;max-width:352px;margin:0 auto}
+  .lvgrid button{font:inherit;font-size:13px;padding:11px 0;border-radius:11px;
+                 border:1px solid var(--line);background:var(--card);color:var(--txt);
+                 font-variant-numeric:tabular-nums}
+  .lvgrid button.cur{border-color:var(--acc);background:#22304a;box-shadow:0 0 0 2px rgba(91,140,255,.3)}
+  .lvgrid button.done{color:#7fe0a8;border-color:#2f5c46;background:#16261f}
+  .lvgrid button.help{color:var(--gold);border-color:#5a4a24;background:#241f14}
+  .lvclose{display:block;margin:16px auto 6px;font:inherit;font-size:13px;padding:11px 26px;
+           border-radius:12px;background:var(--card2);color:var(--txt);border:1px solid var(--line)}
+
+  /* toast */
+  #toast{position:fixed;left:50%;top:15%;transform:translateX(-50%);z-index:20;
+         background:rgba(22,26,34,.96);border:1px solid var(--line);color:var(--txt);
+         padding:10px 15px;border-radius:12px;font-size:13.5px;max-width:86%;text-align:center;
+         opacity:0;transition:opacity .2s;pointer-events:none;line-height:1.45}
+  #toast.on{opacity:1}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a class="back" href="/">‹</a>
+  <div class="ttl">24点</div>
+  <div class="chip" id="chip">—</div>
+  <div class="sp"></div>
+  <div class="tmr" id="tmr">0:00</div>
+  <button class="ico" id="btnMenu">☰</button>
+</div>
+
+<div id="stage">
+  <div class="goal">目标 <b>24</b></div>
+  <div id="cards"></div>
+  <div id="tip"></div>
+</div>
+
+<div id="ops">
+  <button data-op="+">＋</button>
+  <button data-op="-">－</button>
+  <button data-op="*">×</button>
+  <button data-op="/">÷</button>
+</div>
+
+<div id="tools">
+  <button id="btnUndo">↶ 撤销</button>
+  <button id="btnHint">💡 提示</button>
+  <button id="btnRetry">⟲ 重来</button>
+</div>
+
+<!-- 过关 -->
+<div class="ov" id="winOv">
+  <div class="panel">
+    <h2 id="winTitle">过关！</h2>
+    <div class="big">24</div>
+    <div class="expr" id="winExpr"></div>
+    <div class="rec" id="winRec"></div>
+    <div class="row">
+      <button id="winAgain">再来一次</button>
+      <button id="winNext" class="pri">下一关 →</button>
+    </div>
+  </div>
+</div>
+
+<!-- 走不通 -->
+<div class="ov" id="deadOv">
+  <div class="panel">
+    <h2>凑不出 24 了</h2>
+    <div class="sub" id="deadSub">这一步走岔了 —— 剩下的牌无论怎么算都到不了 24。</div>
+    <div class="row">
+      <button id="deadUndo" class="pri">↶ 撤销一步</button>
+      <button id="deadRetry">⟲ 重来</button>
+    </div>
+  </div>
+</div>
+
+<!-- 菜单 -->
+<div id="menu">
+  <div class="grid">
+    <button id="mReset">⟲ 重置本关</button>
+    <button id="mHint">💡 提示一步</button>
+    <button id="mDemo">▶ 看答案</button>
+    <button id="mLv">☰ 选关</button>
+    <button id="mSound">🔊 音效</button>
+    <button id="mClose">✕ 关闭</button>
+  </div>
+</div>
+
+<!-- 选关 -->
+<div id="lv">
+  <h2>选关</h2>
+  <div class="tabs" id="lvTabs"></div>
+  <div class="lvgrid" id="lvGrid"></div>
+  <button class="lvclose" id="lvClose">关闭</button>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function(){
+'use strict';
+
+/* =========================================================================
+   分数运算 + 24 点求解器（纯函数，不碰 DOM）
+   —— 这一段被 tools/gen_24point_levels.js 原样抠出来当模块用，
+      所以：不要在这里引用 document / window / localStorage。
+   ========================================================================= */
+/*<<SOLVER>>*/
+function gcd(a,b){ a=Math.abs(a); b=Math.abs(b); while(b){ var t=a%b; a=b; b=t; } return a||1; }
+function fr(n,d){ if(d===undefined) d=1; if(!d) return null; if(d<0){ n=-n; d=-d; }
+                  var g=gcd(n,d); return {n:n/g, d:d/g}; }
+function fAdd(a,b){ return fr(a.n*b.d + b.n*a.d, a.d*b.d); }
+function fSub(a,b){ return fr(a.n*b.d - b.n*a.d, a.d*b.d); }
+function fMul(a,b){ return fr(a.n*b.n, a.d*b.d); }
+function fDiv(a,b){ return b.n===0 ? null : fr(a.n*b.d, a.d*b.n); }
+function fEq(a,b){ return !!a && !!b && a.n===b.n && a.d===b.d; }
+function fStr(a){ return a.d===1 ? String(a.n) : a.n+'/'+a.d; }
+
+var OPS = ['+','-','*','/'];
+var SYM = {'+':'+','-':'−','*':'×','/':'÷'};
+var TARGET = 24;
+
+function applyOp(a,b,op){
+  if(op==='+') return fAdd(a,b);
+  if(op==='-') return fSub(a,b);
+  if(op==='*') return fMul(a,b);
+  if(op==='/') return fDiv(a,b);
+  return null;
+}
+
+/* 表达式树：{k:0, v:分数} 叶子 / {k:1, op, a, b, v:分数} 运算 */
+function leaf(v){ return {k:0, v:v}; }
+function mkNode(op,a,b){
+  var v = applyOp(a.v, b.v, op);
+  if(!v) return null;
+  return {k:1, op:op, a:a, b:b, v:v};
+}
+function opPrec(op){ return (op==='+'||op==='-') ? 1 : 2; }
+function nodePrec(t){ return t.k===0 ? 9 : opPrec(t.op); }
+
+/* 带最少括号的字符串：只有优先级真的需要时才加括号 */
+function exprStr(t, parentOp, isRight){
+  if(t.k===0){
+    var s0 = fStr(t.v);
+    return (t.v.d!==1 && parentOp) ? '('+s0+')' : s0;
+  }
+  var p = nodePrec(t), pp = parentOp ? opPrec(parentOp) : 0;
+  var need = p < pp || (p===pp && isRight && (parentOp==='-' || parentOp==='/'));
+  var s = exprStr(t.a, t.op, false) + SYM[t.op] + exprStr(t.b, t.op, true);
+  return need ? '('+s+')' : s;
+}
+
+/* 规范形式：可交换的 + × 按字典序固定两个操作数，用于「不同解法」去重 */
+function canon(t){
+  if(t.k===0) return fStr(t.v);
+  var a = canon(t.a), b = canon(t.b);
+  if(t.op==='+' || t.op==='*') return (a<b ? a+'|'+b : b+'|'+a) + t.op;
+  return a + t.op + b;
+}
+
+function toF(x){ return (x && typeof x==='object') ? x : fr(x); }
+
+/* 穷举所有能凑到 24 的表达式树 */
+function solveTrees(list){
+  if(list.length===1) return fEq(list[0].v, fr(TARGET)) ? [list[0]] : [];
+  var out = [];
+  for(var i=0;i<list.length;i++){
+    for(var j=i+1;j<list.length;j++){
+      var rest = [];
+      for(var k=0;k<list.length;k++) if(k!==i && k!==j) rest.push(list[k]);
+      for(var o=0;o<OPS.length;o++){
+        var op = OPS[o];
+        var n1 = mkNode(op, list[i], list[j]);
+        if(n1) out = out.concat(solveTrees(rest.concat([n1])));
+        if(op==='-' || op==='/'){
+          var n2 = mkNode(op, list[j], list[i]);
+          if(n2) out = out.concat(solveTrees(rest.concat([n2])));
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/* 不同解法的个数（难度指标） */
+function countSolutions(nums){
+  var trees = solveTrees(nums.map(function(n){ return leaf(toF(n)); }));
+  var seen = {}, n = 0;
+  for(var i=0;i<trees.length;i++){
+    var c = canon(trees[i]);
+    if(!seen[c]){ seen[c] = 1; n++; }
+  }
+  return n;
+}
+
+/* 取一个解（优先表达式最短、好读的） */
+function solveOne(nums){
+  var trees = solveTrees(nums.map(function(n){ return leaf(toF(n)); }));
+  if(!trees.length) return null;
+  var best = null, bestLen = 1e9;
+  for(var i=0;i<trees.length;i++){
+    var s = exprStr(trees[i]);
+    if(s.length < bestLen){ bestLen = s.length; best = trees[i]; }
+  }
+  return best;
+}
+
+/* 找到树里「两个操作数都是叶子」的那一步 —— 提示用的最小可执行步骤。
+   优先挑第一个操作数非负的（负数开头读起来别扭，也容易让人以为是「0 − x」） */
+function findLeafStep(t){
+  if(!t || t.k===0) return null;
+  var cands = [];
+  (function walk(n){
+    if(!n || n.k===0) return;
+    if(n.a.k===0 && n.b.k===0) cands.push(n);
+    walk(n.a); walk(n.b);
+  })(t);
+  for(var i=0;i<cands.length;i++) if(cands[i].a.v.n >= 0) return cands[i];
+  return cands[0] || null;
+}
+/*<</SOLVER>>*/
+
+/* =========================================================================
+   关卡数据（由 tools/gen_24point_levels.js 生成并回填）
+   ========================================================================= */
+var LEVELS = /*LEVELS_BEGIN*/[[[1,4,8,12],[2,6,8,12],[1,4,7,13],[5,8,9,12],[1,3,10,12],[11,13,13,13],[4,6,8,12],[2,4,6,10],[3,7,7,13],[2,8,9,12],[3,6,9,10],[2,5,7,13],[2,6,8,11],[10,11,11,13],[6,7,11,13],[2,7,10,12],[2,3,4,5],[4,6,6,7],[2,7,7,8],[5,9,12,13],[2,12,12,13],[3,5,5,11],[1,3,8,8],[3,3,7,9],[5,7,9,12],[3,6,6,7],[3,8,8,12],[1,12,12,13],[3,3,9,10],[9,9,9,12]],[[1,1,3,10],[1,3,3,3],[1,5,6,11],[2,2,6,7],[2,4,4,11],[2,7,7,11],[3,5,5,9],[4,10,11,13],[4,5,11,11],[5,6,6,8],[6,6,7,10],[7,7,9,10],[1,1,6,6],[1,3,8,11],[1,7,12,12],[2,10,10,13],[2,2,5,5],[2,5,10,12],[2,7,12,13],[3,9,9,10],[4,6,8,13],[5,8,8,8],[6,9,9,11],[1,2,5,13],[1,7,9,13],[2,4,10,11],[3,4,5,11],[4,5,10,10],[5,5,8,13],[9,9,11,12]],[[1,1,3,5],[3,4,4,4],[4,4,4,5],[2,4,7,7],[2,2,6,13],[3,5,5,12],[2,6,6,13],[5,7,7,9],[3,5,7,13],[3,7,11,11],[5,6,11,11],[5,7,10,11],[4,7,13,13],[3,12,12,12],[10,12,12,12],[1,3,4,6],[1,5,5,5],[3,3,7,7],[1,6,6,8],[2,3,5,12],[2,5,5,10],[4,4,7,7],[2,2,11,11],[2,4,10,10],[2,7,7,10],[5,5,7,11],[2,2,13,13],[5,7,7,11],[1,8,12,12],[3,3,8,8]]]/*LEVELS_END*/
+
+var TIER_NAME = ['入门','进阶','大师'];
+var LS_KEY = 'g24_v1';
+
+/* ---------------- 小工具 ---------------- */
+function $(id){ return document.getElementById(id); }
+function now(){ return Date.now(); }
+function mmss(sec){
+  sec = Math.max(0, Math.floor(sec));
+  var m = Math.floor(sec/60), s = sec%60;
+  return m + ':' + (s<10?'0':'') + s;
+}
+
+/* ---------------- 存档 ---------------- */
+var prog = { done:{}, sound:true };
+function loadProg(){
+  try{
+    var raw = localStorage.getItem(LS_KEY);
+    if(raw){
+      var o = JSON.parse(raw);
+      if(o && typeof o==='object'){
+        if(o.done && typeof o.done==='object') prog.done = o.done;
+        if(typeof o.sound === 'boolean') prog.sound = o.sound;
+      }
+    }
+  }catch(e){}
+}
+function saveProg(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(prog)); }catch(e){} }
+
+/* ---------------- 音效 ---------------- */
+var ac = null;
+function tone(freq, dur, type, vol, delay){
+  try{
+    if(!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+    if(ac.state === 'suspended') ac.resume();
+    var t0 = ac.currentTime + (delay||0);
+    var osc = ac.createOscillator(), g = ac.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol || 0.09, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g); g.connect(ac.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.02);
+  }catch(e){}
+}
+function snd(kind){
+  if(!prog.sound) return;
+  if(kind==='tap')   tone(520, 0.05, 'square', 0.05);
+  else if(kind==='merge') tone(680, 0.11, 'triangle', 0.09);
+  else if(kind==='bad')   tone(170, 0.16, 'sawtooth', 0.07);
+  else if(kind==='win'){ tone(784,0.14,'sine',0.10,0); tone(988,0.14,'sine',0.10,0.11); tone(1319,0.30,'sine',0.11,0.22); }
+  else if(kind==='lose'){ tone(300,0.16,'sine',0.08,0); tone(200,0.30,'sine',0.08,0.14); }
+  else if(kind==='hint') tone(900, 0.07, 'sine', 0.06);
+}
+
+/* ---------------- 游戏状态 ---------------- */
+var S = {
+  tier: 0,
+  idx: 0,
+  cards: [],       // {id, v:分数, e:表达式树}
+  sel: [],         // 选中的牌 id（最多 2 个）
+  op: null,
+  hist: [],        // 撤销快照
+  state: 'play',   // play | win | dead
+  helped: false,   // 用过提示/看答案
+  hint: null,      // {ids:[a,b], op}
+  nextId: 1,
+  t0: 0,
+  elapsed: 0,
+  frozen: 0,       // 停表时定格的秒数
+  lastWin: ''      // 最近一次过关的表达式（测试与结算面板都用它）
+};
+
+function cardById(id){
+  for(var i=0;i<S.cards.length;i++) if(S.cards[i].id===id) return S.cards[i];
+  return null;
+}
+function levelKey(){ return S.tier + '-' + S.idx; }
+function levelNums(){ return LEVELS[S.tier][S.idx]; }
+
+/* ---------------- 读档 / 开局 ---------------- */
+function firstUnfinished(){
+  for(var t=0;t<LEVELS.length;t++){
+    for(var i=0;i<LEVELS[t].length;i++){
+      if(prog.done[t+'-'+i] === undefined) return {tier:t, idx:i};
+    }
+  }
+  return {tier:0, idx:0};
+}
+
+function loadLevel(tier, idx){
+  if(!LEVELS[tier] || !LEVELS[tier][idx]) return;
+  S.tier = tier; S.idx = idx;
+  S.cards = []; S.sel = []; S.op = null; S.hist = [];
+  S.state = 'play'; S.helped = false; S.hint = null; S.nextId = 1;
+  var nums = LEVELS[tier][idx];
+  for(var i=0;i<nums.length;i++){
+    var v = fr(nums[i]);
+    S.cards.push({ id: S.nextId++, v: v, e: leaf(v) });
+  }
+  S.t0 = now(); S.elapsed = 0; S.frozen = 0;
+  hideOverlays();
+  render(); updateTop();
+}
+
+/* ---------------- 操作 ---------------- */
+function snapshot(){
+  S.hist.push({
+    cards: S.cards.map(function(c){ return {id:c.id, v:c.v, e:c.e}; }),
+    sel: S.sel.slice(), op: S.op
+  });
+  if(S.hist.length > 30) S.hist.shift();
+}
+
+function undo(){
+  if(!S.hist.length){ toast('没有可撤销的步骤'); return; }
+  var h = S.hist.pop();
+  S.cards = h.cards;
+  S.sel = []; S.op = null;          // 撤销后不保留选中和运算符，免得下一次点击意外合并
+  S.state = 'play'; S.hint = null;
+  hideOverlays(); render(); updateTop(); snd('tap');
+}
+
+function pick(id){
+  if(S.state !== 'play') return;
+  var at = S.sel.indexOf(id);
+  if(at >= 0){ S.sel.splice(at, 1); render(); snd('tap'); return; }
+
+  S.sel.push(id);
+  if(S.sel.length > 2) S.sel.shift();
+  S.hint = null;
+
+  if(S.sel.length === 2 && S.op) return doMerge();
+  render(); snd('tap');
+}
+
+function setOp(op){
+  if(S.state !== 'play') return;
+  if(S.op === op){ S.op = null; render(); return; }
+  S.op = op;
+  S.hint = null;
+  if(S.sel.length === 2) return doMerge();
+  render(); snd('tap');
+}
+
+function doMerge(){
+  var a = cardById(S.sel[0]), b = cardById(S.sel[1]);
+  if(!a || !b || S.sel[0] === S.sel[1]) return;
+  var v = applyOp(a.v, b.v, S.op);
+  if(!v){
+    toast('不能除以 0');
+    S.op = null; render(); snd('bad');
+    return;
+  }
+  snapshot();
+  var ia = S.cards.indexOf(a), ib = S.cards.indexOf(b);
+  var at = Math.min(ia, ib);
+  S.cards = S.cards.filter(function(c){ return c !== a && c !== b; });
+  var nc = { id: S.nextId++, v: v, e: mkNode(S.op, a.e, b.e) };
+  S.cards.splice(at, 0, nc);
+  S.sel = []; S.op = null; S.hint = null;
+  render(); snd('merge');
+  markPop(nc.id);
+  checkEnd();
+}
+
+function checkEnd(){
+  if(S.cards.length === 1){
+    if(fEq(S.cards[0].v, fr(TARGET))) return win();
+    return dead();
+  }
+  if(!solveOne(S.cards.map(function(c){ return c.v; }))) return dead();
+  render();
+}
+
+function win(){
+  S.state = 'win';
+  S.frozen = (now() - S.t0) / 1000;
+  S.elapsed = S.frozen;
+  S.lastWin = exprStr(S.cards[0].e);
+  var sec = Math.round(S.frozen);
+  var key = levelKey();
+  var prev = prog.done[key];
+  var t = S.helped ? -1 : sec;
+  if(prev === undefined) prog.done[key] = t;
+  else if(prev < 0) prog.done[key] = t;
+  else if(t < 0) prog.done[key] = prev;
+  else prog.done[key] = Math.min(prev, t);
+  saveProg();
+
+  render(); updateTop(); snd('win');
+  var el = cardEl(S.cards[0].id);
+  if(el) el.classList.add('win');
+
+  setTimeout(function(){
+    var best = prog.done[key];
+    var box = $('winExpr');
+    if(box){
+      while(box.firstChild) box.removeChild(box.firstChild);
+      box.appendChild(document.createTextNode('解法：'));
+      var bEl = document.createElement('b');
+      bEl.textContent = S.lastWin + ' = 24';
+      box.appendChild(bEl);
+    }
+    $('winRec').textContent = (best >= 0)
+      ? '用时 ' + mmss(sec) + ' · 最佳 ' + mmss(best)
+      : '用时 ' + mmss(sec) + ' · 用过提示，本关不记最佳成绩';
+    var last = (S.idx >= LEVELS[S.tier].length - 1) && (S.tier >= LEVELS.length - 1);
+    $('winNext').textContent = last ? '回到第一关' : '下一关 →';
+    show('winOv');
+  }, 820);
+}
+
+function dead(){
+  S.state = 'dead';
+  S.frozen = (now() - S.t0) / 1000;
+  render(); updateTop(); snd('lose');
+  var left = S.cards.map(function(c){ return fStr(c.v); }).join('、');
+  $('deadSub').textContent = '剩下的 ' + left + ' 无论怎么算都到不了 24 —— 撤销一步再试试。';
+  setTimeout(function(){ show('deadOv'); }, 320);
+}
+
+function nextLevel(){
+  var t = S.tier, i = S.idx + 1;
+  if(i >= LEVELS[t].length){ t = (t + 1) % LEVELS.length; i = 0; }
+  loadLevel(t, i);
+}
+
+/* ---------------- 提示 / 看答案 ---------------- */
+function findCardByValue(v, used){
+  for(var i=0;i<S.cards.length;i++){
+    var c = S.cards[i];
+    if(used && used.indexOf(c.id) >= 0) continue;
+    if(fEq(c.v, v)) return c;
+  }
+  return null;
+}
+
+function hint(){
+  if(S.state !== 'play') return;
+  var tree = solveOne(S.cards.map(function(c){ return c.v; }));
+  if(!tree){ toast('这局已经凑不出 24 了'); return; }
+  var step = findLeafStep(tree);
+  if(!step) return;
+  var a = findCardByValue(step.a.v, null);
+  var b = findCardByValue(step.b.v, a ? [a.id] : null);
+  if(!a || !b) return;
+  S.hint = { ids: [a.id, b.id], op: step.op };
+  S.helped = true;
+  toast('试试 ' + fStr(a.v) + ' ' + SYM[step.op] + ' ' + fStr(b.v));
+  render(); snd('hint');
+}
+
+/* 自动演示：每次调用走一步，UI 里用定时器串起来（也方便测试逐个调）
+   mark !== false 时把 helped 置为 true（= 用过提示/看答案，本关不记成绩） */
+function demoStep(mark){
+  if(S.state !== 'play' || S.cards.length < 2) return false;
+  var tree = solveOne(S.cards.map(function(c){ return c.v; }));
+  if(!tree) return false;
+  var step = findLeafStep(tree);
+  if(!step) return false;
+  var a = findCardByValue(step.a.v, null);
+  var b = findCardByValue(step.b.v, a ? [a.id] : null);
+  if(!a || !b) return false;
+  if(mark !== false) S.helped = true;
+  S.sel = [a.id, b.id];
+  S.op = step.op;
+  doMerge();
+  return true;
+}
+function demo(){
+  if(S.state !== 'play') return;
+  hideOverlays(); closeMenu();
+  S.helped = true;
+  var guard = 0;
+  (function step(){
+    if(guard++ > 6) return;
+    if(S.state !== 'play') return;
+    if(demoStep()) setTimeout(step, 780);
+  })();
+}
+
+/* ---------------- 渲染 ---------------- */
+function cardEl(id){
+  var box = $('cards');
+  if(!box || !box.children) return null;
+  for(var i=0;i<box.children.length;i++){
+    if(String(box.children[i].dataset.id) === String(id)) return box.children[i];
+  }
+  return null;
+}
+
+function render(){
+  var box = $('cards');
+  if(!box) return;
+  var keep = {};
+  for(var i=0;i<S.cards.length;i++) keep[S.cards[i].id] = 1;
+
+  // 按 S.cards 的顺序逐个 append —— 已在 DOM 里的节点会被移动，顺序自然就对了
+  for(var n=0;n<S.cards.length;n++){
+    var c = S.cards[n];
+    var el = cardEl(c.id);
+    if(!el){
+      el = document.createElement('div');
+      el.className = 'card';
+      el.dataset.id = c.id;
+      var vd = document.createElement('div'); vd.className = 'val';
+      var ed = document.createElement('div'); ed.className = 'exp';
+      el.appendChild(vd); el.appendChild(ed);
+      (function(node, cid){ node.addEventListener('click', function(){ pick(cid); }); })(el, c.id);
+    }
+    var vs = fStr(c.v);
+    var valEl = el.children[0], expEl = el.children[1];
+    if(valEl.textContent !== vs) valEl.textContent = vs;
+    var vcls = 'val' + (vs.length > 2 ? ' small' : '');
+    if(valEl.className !== vcls) valEl.className = vcls;
+    var es = exprStr(c.e);
+    var expText = (es === vs) ? '' : es;
+    if(expEl.textContent !== expText) expEl.textContent = expText;
+    el.classList.toggle('sel', S.sel.indexOf(c.id) >= 0);
+    el.classList.toggle('hint', !!(S.hint && S.hint.ids.indexOf(c.id) >= 0));
+    el.classList.toggle('dead', S.state === 'dead');
+    box.appendChild(el);
+  }
+
+  // 清掉已经不在手里的牌
+  var kids = Array.prototype.slice.call(box.children || []);
+  for(var k=0;k<kids.length;k++){
+    if(!keep[String(kids[k].dataset.id)]) box.removeChild(kids[k]);
+  }
+
+  renderTip();
+  updateButtons();
+}
+
+function markPop(id){
+  var el = cardEl(id);
+  if(!el) return;
+  el.classList.remove('pop');
+  void el.offsetWidth;
+  el.classList.add('pop');
+}
+
+function renderTip(){
+  var tip = $('tip');
+  if(!tip) return;
+  if(S.state === 'win'){ tip.textContent = '漂亮！这手算到 24 了'; return; }
+  if(S.state === 'dead'){ tip.textContent = '这条路走不通，撤销一步吧'; return; }
+  var n = S.sel.length;
+  if(n === 0 && !S.op) tip.textContent = '点两张牌，再点运算符';
+  else if(n === 0) tip.textContent = '已选 ' + SYM[S.op] + ' —— 再点两张牌';
+  else if(n === 1) tip.textContent = '再点一张牌' + (S.op ? '' : '，然后选运算符');
+  else tip.textContent = '选一个运算符';
+}
+
+function updateButtons(){
+  var btns = document.querySelectorAll ? document.querySelectorAll('#ops button') : [];
+  for(var i=0;i<btns.length;i++){
+    var b = btns[i];
+    if(b.dataset.op === S.op) b.classList.add('on'); else b.classList.remove('on');
+    b.disabled = (S.state !== 'play');
+  }
+  var u = $('btnUndo'); if(u) u.disabled = (S.state !== 'play' || !S.hist.length);
+  var h = $('btnHint'); if(h) h.disabled = (S.state !== 'play');
+  var r = $('btnRetry'); if(r) r.disabled = (S.state === 'play' && !S.hist.length && S.sel.length === 0);
+}
+
+function updateTop(){
+  var chip = $('chip');
+  if(chip) chip.textContent = TIER_NAME[S.tier] + ' ' + (S.idx + 1) + '/' + LEVELS[S.tier].length;
+  updateTimer();
+}
+function updateTimer(){
+  var el = $('tmr');
+  if(!el) return;
+  el.textContent = mmss(S.state === 'play' ? (now() - S.t0) / 1000 : S.frozen);
+}
+
+/* ---------------- 浮层 ---------------- */
+function show(id){ var e = $(id); if(e) e.classList.add('on'); }
+function hide(id){ var e = $(id); if(e) e.classList.remove('on'); }
+function hideOverlays(){ hide('winOv'); hide('deadOv'); hide('lv'); closeMenu(); }
+function openMenu(){ show('menu'); }
+function closeMenu(){ hide('menu'); }
+
+var panelTier = 0;   // 选关面板正在看的档位（和「当前在玩的档位」分开，免得翻页翻跑偏）
+function buildLevelPanel(tier){
+  if(typeof tier === 'number') panelTier = tier;
+  else if(!LEVELS[panelTier]) panelTier = S.tier;
+  var tabs = $('lvTabs'), grid = $('lvGrid');
+  if(!tabs || !grid) return;
+  tabs.innerHTML = '';
+  for(var t=0;t<LEVELS.length;t++){
+    (function(tier2){
+      var b = document.createElement('button');
+      b.textContent = TIER_NAME[tier2] + ' · ' + LEVELS[tier2].length;
+      if(tier2 === panelTier) b.className = 'on';
+      b.addEventListener('click', function(){ buildLevelPanel(tier2); });
+      tabs.appendChild(b);
+    })(t);
+  }
+  grid.innerHTML = '';
+  for(var i=0;i<LEVELS[panelTier].length;i++){
+    (function(idx){
+      var b = document.createElement('button');
+      b.textContent = String(idx + 1);
+      var rec = prog.done[panelTier + '-' + idx];
+      if(rec !== undefined && rec >= 0) b.className = 'done';
+      else if(rec === -1) b.className = 'help';
+      if(panelTier === S.tier && idx === S.idx) b.classList.add('cur');
+      b.addEventListener('click', function(){ loadLevel(panelTier, idx); hide('lv'); });
+      grid.appendChild(b);
+    })(i);
+  }
+}
+
+var toastTimer = null;
+function toast(msg){
+  var el = $('toast');
+  if(!el) return;
+  el.textContent = msg;
+  el.classList.add('on');
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ el.classList.remove('on'); }, 1600);
+}
+
+/* ---------------- 事件绑定 ---------------- */
+function bind(){
+  var back = document.querySelector ? document.querySelector('.top .back') : null;
+  var ops = document.querySelectorAll ? document.querySelectorAll('#ops button') : [];
+  for(var i=0;i<ops.length;i++){
+    (function(b){
+      b.addEventListener('click', function(){ setOp(b.dataset.op); });
+    })(ops[i]);
+  }
+  var u = $('btnUndo'); if(u) u.addEventListener('click', undo);
+  var h = $('btnHint'); if(h) h.addEventListener('click', hint);
+  var r = $('btnRetry'); if(r) r.addEventListener('click', function(){ loadLevel(S.tier, S.idx); });
+
+  var m = $('btnMenu'); if(m) m.addEventListener('click', openMenu);
+  var mc = $('mClose'); if(mc) mc.addEventListener('click', closeMenu);
+  var mr = $('mReset'); if(mr) mr.addEventListener('click', function(){ closeMenu(); loadLevel(S.tier, S.idx); });
+  var mh = $('mHint'); if(mh) mh.addEventListener('click', function(){ closeMenu(); hint(); });
+  var md = $('mDemo'); if(md) md.addEventListener('click', demo);
+var ml = $('mLv'); if(ml) ml.addEventListener('click', function(){ closeMenu(); buildLevelPanel(S.tier); show('lv'); });
+  var ms = $('mSound'); if(ms) ms.addEventListener('click', function(){
+    prog.sound = !prog.sound; saveProg();
+    ms.textContent = prog.sound ? '🔊 音效' : '🔇 静音';
+    if(prog.sound) snd('tap');
+  });
+  var lc = $('lvClose'); if(lc) lc.addEventListener('click', function(){ hide('lv'); });
+
+  var wn = $('winNext'); if(wn) wn.addEventListener('click', function(){ hide('winOv'); nextLevel(); });
+  var wa = $('winAgain'); if(wa) wa.addEventListener('click', function(){ hide('winOv'); loadLevel(S.tier, S.idx); });
+  var du = $('deadUndo'); if(du) du.addEventListener('click', function(){ hide('deadOv'); undo(); });
+  var dr = $('deadRetry'); if(dr) dr.addEventListener('click', function(){ hide('deadOv'); loadLevel(S.tier, S.idx); });
+}
+
+/* ---------------- 启动 ---------------- */
+function boot(){
+  loadProg();
+  bind();
+  var start = firstUnfinished();
+  loadLevel(start.tier, start.idx);
+  var ms = $('mSound');
+  if(ms) ms.textContent = prog.sound ? '🔊 音效' : '🔇 静音';
+  setInterval(function(){
+    if(S.state === 'play') updateTimer();
+  }, 250);
+}
+
+/* ---------------- 测试钩子 ---------------- */
+window.__g24 = function(){
+  return {
+    cards: S.cards.map(function(c){ return { id:c.id, v:fStr(c.v), n:c.v.n, d:c.v.d, expr:exprStr(c.e) }; }),
+    sel: S.sel.slice(), op: S.op, state: S.state, tier: S.tier, idx: S.idx,
+    helped: S.helped, hist: S.hist.length, hint: S.hint,
+    level: levelNums().slice(), elapsed: S.elapsed
+  };
+};
+window.__g24Pick = pick;
+window.__g24Op = setOp;
+window.__g24Undo = undo;
+window.__g24Load = loadLevel;
+window.__g24Reset = function(){ loadLevel(S.tier, S.idx); };
+window.__g24Hint = hint;
+window.__g24DemoStep = demoStep;
+window.__g24Solve = function(nums){ var t = solveOne(nums); return t ? exprStr(t) : null; };
+window.__g24SolveAll = function(nums){
+  var ts = solveTrees(nums.map(function(n){ return leaf(fr(n)); }));
+  return ts.map(function(t){ return exprStr(t); });
+};
+window.__g24Count = countSolutions;
+window.__g24Levels = function(){ return JSON.parse(JSON.stringify(LEVELS)); };
+window.__g24SetCards = function(arr){
+  S.cards = []; S.sel = []; S.op = null; S.hist = []; S.state = 'play'; S.nextId = 1;
+  for(var i=0;i<arr.length;i++){
+    var v = fr(arr[i]);
+    S.cards.push({ id: S.nextId++, v: v, e: leaf(v) });
+  }
+  render();
+};
+window.__g24Prog = function(){ return JSON.parse(JSON.stringify(prog)); };
+window.__g24SetHelped = function(v){ S.helped = !!v; };
+window.__g24BuildPanel = function(t){ buildLevelPanel(t); };
+window.__g24Now = function(){ return { exprStr: exprStr, fr: fr, fStr: fStr, canon: canon }; };
+
+if(typeof document !== 'undefined' && document.getElementById) boot();
+
+})();
+</script>
+</body>
+</html>
