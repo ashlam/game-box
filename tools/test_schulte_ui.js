@@ -134,6 +134,38 @@ f.onload=()=>setTimeout(()=>{
                             color:getComputedStyle(badEl).color,
                             border:getComputedStyle(badEl).borderColor } : null;
 
+    /* ★ 点过的格子不能留下痕迹：连点 10 个正确的数字，等闪光过期后
+       整盘的 computed 样式必须完全一致（否则等于把答案标在盘面上）。
+       ⚠️ 不能在探测页里忙等真实时间 —— 无头 Chrome 的虚拟时间不会因为空转前进，
+       那样会直接把 --virtual-time-budget 耗死。改成接管游戏时钟，确定性推进。 */
+    let fakeT = 1000;
+    w0.__schulteSetClock(()=>fakeT);
+    w0.__schulteNewGame(6);
+    const probeCells=[...d.querySelectorAll('#board .cell')];
+    for(let v=1;v<=10;v++) w0.__schulteTap(v);
+    const snapshot=()=>probeCells.map(e=>{
+      const cs=getComputedStyle(e);
+      return [cs.backgroundImage,cs.backgroundColor,cs.color,cs.borderColor,cs.opacity,
+              e.className].join('|');
+    });
+    const withFlash = snapshot();
+    const hitCount = probeCells.filter(e=>e.classList.contains('hit')).length;
+    fakeT += 1000;                       // 闪光早已过期
+    w0.__schulteStep(0.016);             // step 里会 prune
+    const clean = snapshot();
+    const uniqClean = [...new Set(clean)];
+    const hitLeft = probeCells.filter(e=>e.classList.contains('hit')).length;
+    w0.__schulteSetClock(null);          // 还原真实时钟
+    out.leak = {
+      total: probeCells.length,
+      hitDuring: hitCount,
+      hitLeft,
+      withFlashUniq: [...new Set(withFlash)].length,
+      cleanUniq: uniqClean.length,
+      classes: [...new Set(probeCells.map(e=>e.className))],
+      sample: uniqClean.slice(0,3),
+    };
+
     /* 通关演出：棋盘要进 won 状态，撒花画布要真的在画 */
     w0.__schulteNewGame(5);
     for(let v=1; v<=25; v++) w0.__schulteTap(v);
@@ -341,6 +373,19 @@ for(const [name, w, h, r] of results){
        '★ 点错的格子数字变红（' + r.badCell.color + '）');
     ok(r.badCell.border && r.badCell.border !== 'rgba(0, 0, 0, 0)', '边框也变了（' + r.badCell.border + '）');
   }
+
+  /* ---------- ★ 点过的格子不留痕迹 ---------- */
+  section(`${name} ${w}×${h} · 点过的格子不留痕迹`);
+  const lk = r.leak || {};
+  ok(lk.total === 36, '6×6 共 36 格', String(lk.total));
+  ok(lk.hitDuring >= 1, '刚点的那一格确实闪了一下（hit）', '闪烁 ' + lk.hitDuring + ' 格');
+  ok(lk.hitLeft === 0, '★ 闪光过期后一格都不剩', '残留 ' + lk.hitLeft + ' 格');
+  ok(JSON.stringify(lk.classes) === JSON.stringify(['cell']),
+     '★ 全部 36 格的 class 完全一致（只有 "cell"）', JSON.stringify(lk.classes));
+  ok(lk.cleanUniq === 1, '★ 36 格的 computed 样式只有 1 种 —— 已点过 / 没点过在视觉上无法区分',
+     '出现 ' + lk.cleanUniq + ' 种：' + JSON.stringify((lk.sample || []).slice(0, 2)));
+  ok(lk.withFlashUniq > lk.cleanUniq, '（对照：闪光期间样式确实不同，说明上面的"一致"不是因为压根没画）',
+     lk.withFlashUniq + ' vs ' + lk.cleanUniq);
 
   /* ---------- 过关特效 ---------- */
   section(`${name} ${w}×${h} · 过关特效`);

@@ -87,11 +87,20 @@
     transition:background .16s,border-color .16s,color .16s,opacity .2s,transform .09s;
   }
   .cell:active{transform:scale(.93);border-color:#4a72c8}
-  .cell.done{
-    background:linear-gradient(180deg,#16342a,#12241d);
-    border-color:#2c5c48;color:#4ee2ad;opacity:.45;
+  /* 点对：只闪一下，随即恢复原样。
+     ⚠️ 曾经是「点过的格子永久变绿并压暗」—— 那是错的：
+     绿色格子越点越多，等于把「哪些数字已经点过」直接标在盘面上，
+     剩下的数字一眼就能扫出来，难度被自己的反馈一点点削平了。
+     舒尔特方格的全部难度就来自「你要自己在满盘数字里找下一个」，
+     所以这里只能给一次瞬时确认，不能留下任何持久痕迹。 */
+  .cell.hit{animation:cellHit .30s ease-out 1}
+  @keyframes cellHit{
+    0%{transform:scale(1);background:linear-gradient(180deg,#2b4a86,#22304a);
+       border-color:#5b8cff;color:#fff;box-shadow:0 0 0 2px rgba(91,140,255,.55)}
+    55%{transform:scale(1.09);background:linear-gradient(180deg,#2b4a86,#22304a);
+        border-color:#5b8cff;color:#fff;box-shadow:0 0 14px rgba(91,140,255,.5)}
+    100%{transform:scale(1);box-shadow:inset 0 1px 0 rgba(255,255,255,.045)}
   }
-  .cell.done:active{transform:none}
   .cell.bad{animation:badShake .34s cubic-bezier(.36,.07,.19,.97) 1;
             background:linear-gradient(180deg,#3a1f1f,#2a1618);border-color:rgba(255,123,114,.85);
             color:#ff9a92;
@@ -288,6 +297,7 @@ var S = {
   panelShown: false, // 结算面板此刻是否显示着
   panelDue: false,   // 结算面板还没弹（演出进行中 / 被跳过了）
   panelTimer: 0,     // 到点弹面板的定时器
+  flash: null,       // {v, until} 刚点对那一格的瞬时闪光（过期即清，绝不持久）
   wonT: 0,
   /* 布局算出来的数字，测试会读 */
   side: 0, cell: 0, gap: 0, fs: 0, rad: 0
@@ -431,6 +441,7 @@ function newGame(n, seed){
   S.prevBest = null;
   S.panelShown = false;
   S.panelDue = false;
+  S.flash = null;
   S.wonT = 0;
   hideDone();
   clearFx();
@@ -526,6 +537,41 @@ function shake(v){
   el.__badT = setTimeout(function(){ if(el.classList) el.classList.remove('bad'); }, 420);
 }
 
+/* 点对的那一格：闪一下蓝光就恢复，**不留下任何标记**。
+   给的是「这一下点对了」的即时确认，而不是「这里已经点过了」的持久线索 ——
+   后者会把盘面变成一张已经标好答案的地图，越玩越简单。
+
+   ⚠️ 清除不能只靠 setTimeout：后台标签页 / 省电模式下定时器会被节流，
+   一旦那一下没跑到，蓝框就永久留在盘面上 —— 正好是要避免的「标出答案」。
+   所以闪光是**带截止时间的状态**（S.flash），每帧 step() 和每次 paint() 都会
+   顺手清掉过期的；setTimeout 只是让它在空闲时也能及时消失。 */
+var HIT_MS = 320;
+
+function flash(v){
+  S.flash = { v: v, until: clock() + HIT_MS };
+  var el = cellOf(v);
+  if(!el || !el.classList) return;
+  el.classList.remove('hit');
+  if(el.offsetWidth !== undefined) void el.offsetWidth;     // 强制重排，动画才能重放
+  el.classList.add('hit');
+  if(el.__hitT) clearTimeout(el.__hitT);
+  el.__hitT = setTimeout(function(){ pruneFlash(); }, HIT_MS + 20);
+}
+
+/* 把过期的闪光标记摘掉。幂等，随时可调。 */
+function pruneFlash(){
+  var live = !!(S.flash && clock() < S.flash.until);
+  var board = $('board');
+  if(!board || !board.children) return live;
+  for(var i=0;i<board.children.length;i++){
+    var el = board.children[i];
+    if(!el || !el.classList || !el.classList.contains('hit')) continue;
+    var v = parseInt(el.dataset && el.dataset.v, 10);
+    if(!live || v !== S.flash.v) el.classList.remove('hit');
+  }
+  return live;
+}
+
 /* ---------------- 玩法 ---------------- */
 function tap(v){
   if(S.state === 'done'){
@@ -544,8 +590,7 @@ function tap(v){
   if(v === S.next){
     S.next++;
     if(S.next > S.n*S.n) return finish();
-    var el = cellOf(v);
-    if(el && el.classList) el.classList.add('done');
+    flash(v);                      // 点对只闪一下，不在盘面上留痕迹
     snd('tap', S.next - 1);
     paint();
     return 'ok';
@@ -776,6 +821,7 @@ function drawFx(){
    计时用「时间戳相减」而不是累加帧，所以掉帧不会让秒表变慢。 */
 function step(dt){
   if(!(dt > 0)) dt = 0;
+  if(S.flash) pruneFlash();          // 闪光过期就摘掉（不依赖定时器，rAF 停摆也安全）
   if(S.state === 'play'){
     S.elapsed = Math.max(0, clock() - S.t0);
     updateTimer();
@@ -800,16 +846,6 @@ function updateTimer(){
 }
 
 function updateHud(){
-  var board = $('board');
-  var cells = board && board.children ? board.children : [];
-  for(var i=0;i<cells.length;i++){
-    var el = cells[i];
-    var v = parseInt(el.dataset && el.dataset.v, 10);
-    if(!isFinite(v)) continue;
-    var done = v < S.next;
-    if(done){ if(el.classList) el.classList.add('done'); }
-    else { if(el.classList) el.classList.remove('done'); }
-  }
   var nx = $('next');
   if(nx) nx.textContent = (S.state === 'done') ? '✓' : String(S.next);
   var ms = $('miss');
@@ -876,8 +912,11 @@ function render(){
   }
 }
 
-/* 状态一变就整体刷一遍（模式高亮 / 按钮文案 / HUD / 棋盘标记都在这里对齐） */
-function paint(){ render(); }
+/* 状态一变就整体刷一遍（模式高亮 / 按钮文案 / HUD / 棋盘闪光都在这里对齐） */
+function paint(){
+  if(S.flash) pruneFlash();     // 顺手清掉过期闪光：绝不让「点过」的痕迹留在盘面上
+  render();
+}
 
 /* ---------------- 浮层 ----------------
    ⚠️ 这里刻意**不**用 requestAnimationFrame 去等下一帧再加 .show：
@@ -1005,8 +1044,11 @@ window.__schulteCells = function(){
     out.push({
       v: parseInt(el.dataset && el.dataset.v, 10),
       text: el.textContent,
-      done: !!(el.classList && el.classList.contains('done')),
+      /* hit = 刚点对时那一下的闪光（几百毫秒后自动消失），
+         不是持久标记 —— 盘面上不该留下「这个已经点过」的线索。 */
+      hit: !!(el.classList && el.classList.contains('hit')),
       bad: !!(el.classList && el.classList.contains('bad')),
+      cls: (el.className || ''),
       w: el.style && el.style.getPropertyValue ? el.style.getPropertyValue('--w') : null
     });
   }

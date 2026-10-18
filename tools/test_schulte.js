@@ -287,12 +287,16 @@ section('4) 点对：进度推进');
   tap(1);
   const c = cells();
   const one = c.find(x => x.v === 1);
-  ok(one && one.done, '★ 点过的 1 号格子被标记 done（视觉上会变暗）');
-  ok(c.filter(x => x.done).length === 1, '只有点过的那一格是 done（实际 ' + c.filter(x => x.done).length + '）');
+  ok(one && one.hit, '点过的 1 号格子立刻闪一下（hit）');
+  ok(c.filter(x => x.hit).length === 1, '只有刚点的那一格在闪（实际 ' + c.filter(x => x.hit).length + '）');
 
   tap(2);
-  ok(cells().filter(x => x.done).length === 2, '点 2 之后有两格 done');
   ok(S().next === 3, '下一个变成 3');
+  /* ★ 核心不变量：盘面上不能留下任何「已经点过」的持久标记。
+     否则绿色格子越点越多，剩下的数字一眼就能扫出来，难度被自己的反馈削平。 */
+  const marked = cells().filter(x => /(^|\s)(done|hit|ok|cleared|visited)(\s|$)/.test(x.cls));
+  ok(marked.length <= 2, '★ 只有最近点的一两格还在闪光，不会越积越多（当前 ' + marked.length + ' 格）',
+     marked.map(x => x.v + ':' + x.cls).join(','));
 
   // 进度条
   const fill = els.barFill;
@@ -304,13 +308,56 @@ section('4) 点对：进度推进');
   const r = tap(2);
   ok(r === 'bad', '★ 重复点已完成的数字算点错');
   ok(S().next === 4, '但进度不受影响（仍是 4）');
-  ok(cells().filter(x => x.done).length === 3, '已完成标记也没有被抹掉');
 
   // HUD
   ok(els.next.textContent === '4', 'HUD 显示下一个数字（' + els.next.textContent + '）');
   ok(els.miss.textContent === '1', 'HUD 显示误点次数（' + els.miss.textContent + '）');
   ok(els.hint.textContent.indexOf('已点 3 / 25') >= 0,
      '★ 玩到一半时提示条显示进度（' + els.hint.textContent + '）');
+}
+
+/* ================= 4b) ★ 点过的格子不能留下痕迹 ================= */
+section('4b) ★ 点过的格子不能变绿/变暗（会削平难度）');
+{
+  newGame(6, 77);
+  clock.t = 1000;
+  // 一路点到一半
+  for(let v = 1; v <= 18; v++){ clock.t += 40; tap(v); }
+  const c = cells();
+  ok(c.length === 36, '6×6 有 36 格');
+
+  /* 立刻检查：只有刚点的 18 号还在闪（320ms 内），前面 17 格必须已经干净 */
+  const flashing = c.filter(x => x.hit);
+  ok(flashing.length === 1 && flashing[0].v === 18,
+     '★ 只有刚点的那一格在闪光（' + flashing.map(x => x.v).join(',') + '）');
+  const dirty = c.filter(x => /(^|\s)(done|ok|cleared|visited)(\s|$)/.test(x.cls));
+  ok(dirty.length === 0, '★ 盘面上没有任何「已点过」的持久标记（' + dirty.length + ' 格）',
+     dirty.map(x => x.v + ':' + x.cls).join(','));
+
+  /* 再等一会儿：连那一格闪光也要自己消失（推进假时钟 + 跑几帧 step） */
+  clock.t += 500;
+  run(0.2);
+  ok(cells().every(x => !x.hit), '★ 闪光自动消失，整盘回到干净状态（0 格有标记）');
+
+  /* 关键对照：已点过的数字和没点过的数字，在 DOM 上必须完全一样 ——
+     只差 dataset.v 和文字，class 必须都是 "cell"。
+     否则玩家（和任何脚本）都能从样式上「读出答案」。 */
+  const all = cells();
+  const clicked = all.filter(x => x.v <= 18);
+  const rest = all.filter(x => x.v > 18);
+  ok(clicked.every(x => x.cls === 'cell'), '★ 已点过的 18 格 class 全是 "cell"',
+     [...new Set(clicked.map(x => x.cls))].join(' | '));
+  ok(rest.every(x => x.cls === 'cell'), '★ 没点过的 18 格 class 也全是 "cell"');
+  ok(JSON.stringify(clicked.map(x => x.cls)) === JSON.stringify(rest.map(x => x.cls)),
+     '★ 已点 / 未点 两组的样式完全一致 —— 盘面上看不出任何进度线索');
+
+  /* 反向验证：把「点过就标记」的老行为模拟出来，确认上面的断言真的会红 */
+  const board = els.board;
+  board.children[0].classList.add('done');
+  const bad = cells().filter(x => /(^|\s)done(\s|$)/.test(x.cls));
+  ok(bad.length === 1, '（反证：一旦真的加了 done 标记，上面的检查能抓到它）');
+  board.children[0].classList.remove('done');
+  ok(cells().every(x => x.cls === 'cell'), '清掉之后又干净了');
 }
 
 /* ================= 5) 点错 ================= */
@@ -360,8 +407,10 @@ section('6) 通关与成绩记录');
   ok(S().lastMs === 3750, '★ 通关后秒表定格，不会再走');
   ok(S().elapsed === 3750, 'elapsed 也定格');
 
-  // 全部格子 done
-  ok(cells().every(x => x.done), '★ 通关后每一格都是 done');
+  // 通关后盘面依旧干净（庆祝是 CSS 动画，不是给格子贴标记）
+  run(0.5);
+  ok(cells().every(x => x.cls === 'cell'), '★ 通关后盘面仍然干净（庆祝靠 CSS 动画，不是贴 done 标记）',
+     [...new Set(cells().map(x => x.cls))].join(' | '));
   ok(els.next.textContent === '✓', 'HUD 的「下一个」变成 ✓');
   ok(els.barFill.style.width === '100.0%', '进度条拉满（' + els.barFill.style.width + '）');
 
@@ -491,7 +540,7 @@ section('9) 重新开始 / 换模式');
   ok(s.state === 'ready', '★ 重新开始回到 ready');
   ok(s.next === 1 && s.miss === 0 && s.elapsed === 0, '★ 进度/误点/用时全部归零');
   ok(s.nums.join(',') !== before, '重新开始会重新洗牌（不是同一盘）');
-  ok(cells().every(c => !c.done), '★ 所有格子的 done 标记都清掉了');
+  ok(cells().every(c => c.cls === 'cell'), '★ 重新开始后整盘干净（没有任何标记残留）');
   ok(els.barFill.style.width === '0.0%', '进度条归零（' + els.barFill.style.width + '）');
   ok(!els.board.classList.contains('won'), 'won 状态被清掉');
   ok(win.__schulteFx().active === false, '残留特效被清掉');
