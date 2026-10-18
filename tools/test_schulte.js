@@ -400,8 +400,224 @@ section('5) 点错：只给反馈，没有惩罚');
   ok(vibrates === v1, '★ 点对不震动（只有点错才震）');
 }
 
-/* ================= 6) 通关与成绩 ================= */
-section('6) 通关与成绩记录');
+/* ================= 6b) ★ 排行榜：每种棋盘前 10 名 ================= */
+section('6b) ★ 排行榜（每种棋盘前 10 名）');
+{
+  /* 用独立实例，避免污染前面用例的存档 */
+  const st = {};
+  const v = makeVM(st);
+  const W = v.window;
+  const clk = v.__clock;
+  ok(W.__schulteTopN() === 10, '榜单容量 TOP_N = 10（' + W.__schulteTopN() + '）');
+
+  /** 打一局 4×4，用时 ms（用固定步长凑出来），顺带记几次误点 */
+  function play(n, ms, miss){
+    W.__schulteNewGame(n, 99);
+    clk.t = 1000;
+    const total = n * n;
+    const stepMs = ms / (total - 1);
+    for(let i = 1; i <= total; i++){
+      if(i > 1) clk.t += stepMs;
+      W.__schulteTap(i);
+    }
+    for(let k = 0; k < (miss || 0); k++) W.__schulteTap(n * n);   // 点错几下
+    return W.__schulte();
+  }
+
+  // ① 空榜
+  ok(W.__schulteBoardTop(4).length === 0, '★ 一开始榜是空的');
+  ok(W.__schulteBoardTop(9).length === 0, '其它棋盘也是空的（各记各的）');
+
+  // ② 第一条成绩 → 榜首
+  let s = play(4, 3000);
+  let top4 = W.__schulteBoardTop(4);
+  ok(top4.length === 1, '打完一局 → 榜里 1 条（' + top4.length + '）');
+  ok(s.rank === 1, '★ 名次 = 1（榜首）');
+  ok(s.newRecord === true, '★ 榜首 = 新纪录');
+  ok(Math.abs(top4[0].ms - 3000) < 5, '记下的用时正确（' + top4[0].ms + '）');
+  ok(top4[0].at > 0, '★ 记录了达成时间戳（' + top4[0].at + '）');
+
+  // ③ 更快 → 插到第 1，旧的掉到第 2
+  s = play(4, 2000);
+  top4 = W.__schulteBoardTop(4);
+  ok(s.rank === 1 && s.newRecord === true, '★ 更快的成绩拿第 1');
+  ok(top4.length === 2 && top4[0].ms < top4[1].ms, '★ 榜按用时升序（' + top4.map(e => e.ms).join(' < ') + '）');
+  ok(Math.abs(top4[0].ms - 2000) < 5 && Math.abs(top4[1].ms - 3000) < 5, '两条成绩都在榜上');
+
+  // ④ 更慢 → 排到后面，不算新纪录
+  s = play(4, 5000);
+  top4 = W.__schulteBoardTop(4);
+  ok(s.rank === 3, '★ 更慢的成绩拿第 3（实际 ' + s.rank + '）');
+  ok(s.newRecord === false, '★ 不是榜首就不算新纪录');
+  ok(s.topMs !== null && Math.abs(s.topMs - 2000) < 5, '榜首仍是 2000ms（' + s.topMs + '）');
+
+  // ⑤ 中间插入
+  s = play(4, 2500);
+  top4 = W.__schulteBoardTop(4);
+  ok(s.rank === 2, '★ 中间成绩插到第 2（实际 ' + s.rank + '）');
+  ok(top4.map(e => Math.round(e.ms)).join(',') === '2000,2500,3000,5000',
+     '★ 四条按顺序排好（' + top4.map(e => Math.round(e.ms)).join(',') + '）');
+
+  // ⑥ 各棋盘分开记
+  play(9, 9000);
+  ok(W.__schulteBoardTop(4).length === 4, '★ 9×9 的成绩没混进 4×4（4×4 仍 4 条）');
+  ok(W.__schulteBoardTop(9).length === 1, '★ 9×9 有自己的榜（1 条）');
+  ok(W.__schulteBoardTop(9)[0].ms > 8000, '9×9 那条是 9000ms');
+
+  // ⑦ 塞满 10 条，且按顺序
+  W.__schulteNewGame(5, 1);
+  for(let i = 0; i < 10; i++){
+    W.__schulteAddEntry(5, 1000 + i * 100, i, 1700000000000 + i * 1000);
+  }
+  let top5 = W.__schulteBoardTop(5);
+  ok(top5.length === 10, '★ 正好塞满 10 条（' + top5.length + '）');
+  ok(top5[0].ms < top5[9].ms, '榜内有序（' + top5[0].ms + ' … ' + top5[9].ms + '）');
+
+  // ⑧ 第 11 条：更快 → 进榜并把最慢的挤掉
+  W.__schulteAddEntry(5, 900, 0, 1700000009999);
+  top5 = W.__schulteBoardTop(5);
+  ok(top5.length === 10, '★ 超过 10 条仍然只留 10 条（' + top5.length + '）');
+  ok(top5[0].ms === 900, '★ 更快的成绩成为新榜首（' + top5[0].ms + '）');
+  ok(top5[9].ms === 1800, '★ 原来最慢的那条（1900）被挤出去了（末位 ' + top5[9].ms + '）');
+  ok(!top5.some(e => e.ms === 1900), '被挤掉的那条确实不在了');
+
+  // ⑨ 第 12 条：更慢 → 进不来，榜不变
+  const before = JSON.stringify(W.__schulteBoardTop(5));
+  const r = W.__schulteAddEntry(5, 99999, 0, 1700000008888);
+  ok(r === 0, '★ 慢于榜尾的成绩名次 = 0（没进榜）');
+  ok(JSON.stringify(W.__schulteBoardTop(5)) === before, '★ 榜完全没变');
+
+  // ⑩ 同分：按误点少、再按更早达成排序
+  W.__schulteNewGame(6, 1);
+  W.__schulteAddEntry(6, 5000, 3, 1700000000000);
+  W.__schulteAddEntry(6, 5000, 1, 1700000005000);
+  W.__schulteAddEntry(6, 5000, 1, 1700000001000);
+  const top6 = W.__schulteBoardTop(6);
+  ok(top6.length === 3, '同分的三条都进榜了');
+  ok(top6[0].miss === 1 && top6[0].at === 1700000001000,
+     '★ 同分时：误点少的优先，误点相同则更早达成的优先',
+     JSON.stringify(top6.map(e => [e.ms, e.miss, e.at])));
+  ok(top6[2].miss === 3, '误点最多的排最后');
+
+  // ⑪ 非法输入不写进榜
+  W.__schulteNewGame(7, 1);
+  const n0 = W.__schulteBoardTop(7).length;
+  W.__schulteAddEntry(7, NaN, 0, 1);
+  W.__schulteAddEntry(7, -5, 0, 1);
+  W.__schulteAddEntry(7, 0, 0, 1);
+  W.__schulteAddEntry(7, Infinity, 0, 1);
+  ok(W.__schulteBoardTop(7).length === n0, '★ NaN / 负数 / 0 / Infinity 都不会写进榜');
+
+  // ⑫ 落盘 + 重启后还在
+  ok(st['gschulte_v1'] && st['gschulte_v1'].indexOf('"top"') >= 0,
+     '★ 榜单写进了 localStorage（键里含 top）');
+  const v2 = makeVM(st);
+  ok(v2.window.__schulteBoardTop(5).length === 10, '★ 重启后 5×5 的 10 条都还在');
+  ok(v2.window.__schulteBoardTop(5)[0].ms === 900, '重启后榜首仍是 900ms');
+  ok(v2.window.__schulteBoardTop(4).length === 4, '重启后 4×4 的 4 条也还在');
+  ok(Math.abs(v2.window.__schulte().best['4'] - 2000) < 5,
+     '★ best 与榜首自动对齐（' + v2.window.__schulte().best['4'] + '）');
+
+  // ⑬ 旧存档（只有 best、没有 top）能平滑升级
+  const legacy = { 'gschulte_v1': '{"best":{"4":1234,"7":4321},"sound":true,"n":6}' };
+  const v3 = makeVM(legacy);
+  const b4 = v3.window.__schulteBoardTop(4);
+  ok(b4.length === 1 && Math.abs(b4[0].ms - 1234) < 5,
+     '★ 旧存档的 best 升级成榜单第一条（' + JSON.stringify(b4) + '）');
+  ok(b4[0].at === 0, '旧数据没有时间戳，记 0（不编造时间）');
+  ok(v3.window.__schulteBoardTop(7)[0].ms === 4321, '7×7 的旧成绩也升级了');
+  ok(v3.window.__schulte().n === 6, '旧存档的棋盘选择也读出来了');
+
+  // ⑭ 坏存档：非法条目被丢弃，榜单仍然可用
+  const bad = { 'gschulte_v1': JSON.stringify({
+    top: { '4': [{ ms: 'abc' }, { ms: -1 }, { ms: 2000, at: 5, miss: 2 }, null, 42] },
+    best: { '4': 'oops' }, sound: true, n: 4 }) };
+  const v4 = makeVM(bad);
+  const b4b = v4.window.__schulteBoardTop(4);
+  ok(b4b.length === 1 && b4b[0].ms === 2000,
+     '★ 坏条目被过滤，只留下合法的那条（' + JSON.stringify(b4b) + '）');
+  ok(v4.window.__schulte().n === 4, '坏存档不影响棋盘选择');
+
+  // ⑮ 榜上条目数不会超过 TOP_N（即使存档里塞了 50 条）
+  const many = [];
+  for(let i = 1; i <= 50; i++) many.push({ ms: i * 100, at: 1700000000000 + i, miss: 0 });
+  const v5 = makeVM({ 'gschulte_v1': JSON.stringify({ top: { '5': many }, sound: true, n: 5 }) });
+  ok(v5.window.__schulteBoardTop(5).length === 10,
+     '★ 存档里塞 50 条也只保留前 10（' + v5.window.__schulteBoardTop(5).length + '）');
+  ok(v5.window.__schulteBoardTop(5)[0].ms === 100, '保留的是最快的那 10 条（榜首 100ms）');
+}
+
+/* ================= 6c) ★ 排行榜面板 ================= */
+section('6c) ★ 排行榜面板（切棋盘 / 高亮本次 / 空榜文案）');
+{
+  const st = {};
+  const v = makeVM(st);
+  const W = v.window;
+  const E = v.__els;
+
+  // 先造点数据
+  W.__schulteNewGame(4, 1);
+  v.__clock.t = 1000;
+  for(let i = 1; i <= 16; i++){ if(i > 1) v.__clock.t += 200; W.__schulteTap(i); }
+  W.__schulteNewGame(6, 2);
+  v.__clock.t = 90000;
+  for(let i = 1; i <= 36; i++){ if(i > 1) v.__clock.t += 200; W.__schulteTap(i); }
+
+  // 打开
+  W.__schulteOpenTop(4);
+  ok(E.topOv.classList.contains('on'), '★ 点排行榜按钮后浮层显示');
+  ok(E.topTabs.children.length === 6, '★ 六个棋盘的 tab 都在（' + E.topTabs.children.length + '）');
+  const onTabs = E.topTabs.children.filter(b => b.classList.contains('on'));
+  ok(onTabs.length === 1, '只有一个 tab 高亮（' + onTabs.length + '）');
+  ok(onTabs[0].dataset.n === '4', '★ 打开时定位到当前棋盘 4×4（' + onTabs[0].dataset.n + '）');
+  ok(E.topList.children.length === 1, '4×4 榜里有 1 行（' + E.topList.children.length + '）');
+  const row0 = E.topList.children[0];
+  ok(row0.classList.contains('g1'), '★ 榜首那行带金色高亮（g1）');
+  ok(row0.children[0].textContent === '1', '名次用数字（' + row0.children[0].textContent + '）');
+  ok(/\d+\.\d\d/.test(row0.children[1].textContent), '显示了用时（' + row0.children[1].textContent + '）');
+
+  // 切到 6×6
+  E.topTabs.children[2].fire('click');
+  ok(S_() === 6, '★ 点 tab 切到 6×6');
+  ok(E.topList.children.length === 1, '6×6 榜里也有 1 行');
+  ok(E.topTabs.children[2].classList.contains('on'), '6×6 的 tab 高亮');
+  ok(!E.topTabs.children[0].classList.contains('on'), '4×4 的 tab 取消高亮');
+
+  // 切到空榜
+  E.topTabs.children[5].fire('click');    // 9×9
+  ok(S_() === 9, '切到 9×9');
+  ok(E.topList.children.length === 1, '空榜显示一条占位文案');
+  ok(E.topList.children[0].className.indexOf('topEmpty') >= 0, '占位用的是 topEmpty 样式');
+  ok(E.topList.children[0].textContent.indexOf('还没有成绩') >= 0,
+     '★ 空榜文案明确告诉玩家「还没有成绩」（' + E.topList.children[0].textContent.slice(0, 12) + '…）');
+
+  // 刚打完的那一局在榜里被高亮（故意打一个**较慢**的，这样它不可能是榜首）
+  W.__schulteNewGame(4, 3);
+  v.__clock.t = 200000;
+  for(let i = 1; i <= 16; i++){ if(i > 1) v.__clock.t += 900; W.__schulteTap(i); }
+  const last = W.__schulte().lastEntry;
+  ok(last && last.ms > 0, '刚打完的一局记进了 lastEntry（' + (last && last.ms) + '）');
+  W.__schulteOpenTop(4);
+  const rows = E.topList.children;
+  ok(rows.length === 2, '4×4 现在有 2 条（' + rows.length + '）');
+  const meRows = rows.filter(r => r.classList.contains('me'));
+  ok(meRows.length === 1, '★ 恰好一行被标为「本次」（' + meRows.length + '）');
+  ok(Math.abs(parseFloat(meRows[0].children[1].textContent) - last.ms / 1000) < 0.02,
+     '★ 高亮的正是刚打出的那个成绩（' + meRows[0].children[1].textContent + ' vs ' + last.ms + 'ms）');
+  ok(rows[0].classList.contains('g1') && !rows[0].classList.contains('me'),
+     '★ 本次不是榜首时：金牌给榜首、蓝框给本次');
+  ok(rows[1].classList.contains('me'), '本次那行确实在第二位');
+
+  // 「玩这个棋盘」按当前 tab 开局
+  W.__schulteRenderTop(8);
+  E.topPlay.fire('click');
+  ok(S_() === 8, '★ 点「玩这个棋盘」按当前 tab 开局（' + S_() + '）');
+  ok(!E.topOv.classList.contains('on'), '浮层收起来了');
+
+  function S_(){ return W.__schulte().topBoard; }
+}
+
+
 {
   newGame(4, 10);
   clock.t = 1000;

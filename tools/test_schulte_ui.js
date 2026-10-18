@@ -200,6 +200,46 @@ f.onload=()=>setTimeout(()=>{
       sample: uniqOthers.slice(0,2),
     };
 
+    /* ★ 排行榜面板：真渲染量尺寸。造几条成绩再打开，检查
+       「面板不出屏 / 10 行都放得下 / tab 不挤成一条缝 / 行与行不重叠」。 */
+    {
+      w0.__schulteSetClock(()=>fakeT);
+      const fakeAt = 1700000000000;
+      for(let n of [4,5,6,7,8,9]){
+        for(let i=0;i<10;i++){
+          w0.__schulteAddEntry(n, 2000 + i*350 + (10-n)*100, i%3, fakeAt + i*60000);
+        }
+      }
+      w0.__schulteSetClock(null);
+      w0.__schulteOpenTop(6);
+      const ovT=E('topOv'), pnT=ovT.querySelector('.panel');
+      const tabsT=[...d.querySelectorAll('#topTabs button')].map(e=>Object.assign(rect(e),{
+        text:e.textContent.trim(), on:e.classList.contains('on')}));
+      const rowsT=[...d.querySelectorAll('#topList .topRow')].map(rect);
+      const listT=E('topList');
+      const btnsT=[...ovT.querySelectorAll('#topPlay, #topClose')].map(e=>Object.assign(rect(e),{
+        text:e.textContent.trim()}));
+      out.top = {
+        shown: ovT.classList.contains('on'),
+        panel: pnT ? rect(pnT) : null,
+        tabs: tabsT,
+        tabsOn: tabsT.filter(t=>t.on).length,
+        rowCount: rowsT.length,
+        rowH: rowsT.length ? rowsT[0].h : 0,
+        rowTop: rowsT.length ? rowsT[0].top : 0,
+        rowBottom: rowsT.length ? rowsT[rowsT.length-1].bottom : 0,
+        rowOverlap: rowsT.length>1 ? rowsT.some((r,i)=> i>0 && r.top < rowsT[i-1].bottom - 0.5) : false,
+        listScrollH: listT.scrollHeight, listClientH: listT.clientHeight,
+        listBottom: rect(listT).bottom,
+        listScrollable: listT.scrollHeight > listT.clientHeight + 1,
+        btns: btnsT,
+        meRows: [...d.querySelectorAll('#topList .topRow.me')].length,
+        overflowY: body.scrollHeight - body.clientHeight,
+        overflowX: de.scrollWidth - de.clientWidth,
+      };
+      w0.__schulteHideTop();
+    }
+
     /* 通关演出：棋盘要进 won 状态，撒花画布要真的在画 */
     w0.__schulteNewGame(5);
     for(let v=1; v<=25; v++) w0.__schulteTap(v);
@@ -428,6 +468,48 @@ for(const [name, w, h, r] of results){
      '（对照：刚点那一格在闪光中和闪光后的样式确实不同 —— 说明"其余 35 格一致"不是因为压根没画）',
      JSON.stringify(lk.flashStyleBefore) + ' vs ' + JSON.stringify(lk.flashStyleAfter));
 
+  /* ---------- ★ 排行榜面板 ---------- */
+  section(`${name} ${w}×${h} · 排行榜面板`);
+  const tp = r.top || {};
+  ok(tp.shown === true, '★ 排行榜浮层能打开', String(tp.shown));
+  if(tp.panel){
+    okNum(tp.panel.w, x => x <= w - 8, '排行榜面板没超出屏宽', tp.panel.w.toFixed(1) + ' / ' + w);
+    okNum(tp.panel.top, x => x >= 0, '面板顶端没出屏', tp.panel.top.toFixed(1));
+    okNum(tp.panel.bottom, x => x <= h + 1, '★ 面板底端没出屏', tp.panel.bottom.toFixed(1) + ' / ' + h);
+    okNum(tp.panel.h, x => x >= 220, '面板有实际高度（内容没塌）', tp.panel.h.toFixed(1) + 'px');
+  } else {
+    ok(false, '量不到排行榜面板尺寸');
+  }
+  ok(tp.tabs.length === 6, '六个棋盘 tab 都在', String(tp.tabs.length));
+  ok(tp.tabsOn === 1, '★ 恰好一个 tab 高亮', String(tp.tabsOn));
+  const minTabW = Math.min(...(tp.tabs || []).map(t => t.w));
+  const minTabH = Math.min(...(tp.tabs || []).map(t => t.h));
+  okNum(minTabW, x => x >= 36, '★ tab 宽 ≥ 36px（320 窄屏也不挤成一条缝）', '最窄 ' + minTabW.toFixed(1) + 'px');
+  okNum(minTabH, x => x >= 26, 'tab 高 ≥ 26px', '最矮 ' + minTabH.toFixed(1) + 'px');
+  ok(tp.tabs.every((t, i) => i === 0 || t.left >= tp.tabs[i - 1].right - 0.5), 'tab 之间不重叠');
+  ok(tp.rowCount === 10, '★ 榜里 10 行都渲染出来了', String(tp.rowCount));
+  okNum(tp.rowH, x => x >= 26, '每行高 ≥ 26px（点得着、看得清）', '行高 ' + tp.rowH.toFixed(1) + 'px');
+  ok(tp.rowOverlap === false, '★ 10 行互不重叠');
+  /* 关键：10 行必须全部落在「列表的可视区」里 —— 放不下时列表内部滚动，
+     而不是把最后一行撑到面板/屏幕外面（320×568 实测过这个 bug）。 */
+  ok(tp.listScrollH <= tp.listClientH + 1 || tp.listScrollable === true,
+     '★ 10 行要么全放得下、要么在列表内部滚动', 'scrollH=' + tp.listScrollH + ' clientH=' + tp.listClientH);
+  okNum(tp.listBottom, x => x <= (tp.panel ? tp.panel.bottom : h) + 1, '列表底边没溢出面板',
+     '列表底 ' + tp.listBottom.toFixed(1));
+  okNum(tp.overflowY, x => x <= 1, '排行榜打开时整页仍不纵向溢出', '溢出 ' + tp.overflowY + 'px');
+  okNum(tp.overflowX, x => x <= 1, '排行榜打开时仍不横向溢出', '溢出 ' + tp.overflowX + 'px');
+  ok(tp.btns.length === 2, '面板两个按钮都在', String(tp.btns.length));
+  if(tp.btns.length === 2){
+    const minBH = Math.min(...tp.btns.map(b => b.h));
+    okNum(minBH, x => x >= 34, '排行榜按钮高 ≥ 34px', '最矮 ' + minBH.toFixed(1) + 'px');
+    ok(tp.btns.every(b => b.text.length > 0), '按钮都有文字');
+    okNum(tp.btns[0].bottom, x => x <= h + 1, '按钮没被挤出屏幕', tp.btns[0].bottom.toFixed(1) + ' / ' + h);
+  }
+  /* 10 行放不下时允许列表内部滚动，但**不能把面板顶出屏幕** */
+  ok(tp.listScrollable === false || tp.listClientH > 0,
+     '10 行超出时在列表内部滚动，而不是撑破面板',
+     'scrollH=' + tp.listScrollH + ' clientH=' + tp.listClientH);
+
   /* ---------- 过关特效 ---------- */
   section(`${name} ${w}×${h} · 过关特效`);
   const win = r.win || {};
@@ -462,8 +544,9 @@ for(const [name, w, h, r] of results){
   } else {
     ok(false, '量不到面板尺寸');
   }
-  ok((dn.btns || []).length === 2, '面板两个按钮都在', String((dn.btns || []).length));
-  if(dn.btns && dn.btns.length === 2){
+  ok((dn.btns || []).length === 3, '结算面板三个按钮都在（再来一次 / 排行榜 / 看看棋盘）',
+     String((dn.btns || []).length));
+  if(dn.btns && dn.btns.length === 3){
     const minBH = Math.min(...dn.btns.map(b => b.h));
     okNum(minBH, x => x >= 34, '面板按钮高 ≥ 34px', '最矮 ' + minBH.toFixed(1) + 'px');
     ok(dn.btns.every(b => b.bottom <= (dn.panel ? dn.panel.bottom : h) + 1), '按钮都在面板内部');

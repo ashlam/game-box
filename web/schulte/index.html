@@ -147,6 +147,69 @@
   #btnAgain{flex:1 1 0;font-weight:650}
   #btnAgain.pri{background:#2b4a86;border-color:#3f66b0;color:#fff}
   #btnSound{flex:0 0 auto;width:74px;font-size:13px}
+  #btnTop{flex:0 0 auto;width:74px;font-size:13px}
+
+  /* ---------------- 排行榜 ---------------- */
+  #topOv{z-index:9}
+  #topOv .panel{max-width:340px;text-align:left}
+  #topOv h2{text-align:center;margin-bottom:2px}
+  #topOv .sub{text-align:center;font-size:11.5px;color:var(--dim);margin-bottom:11px;line-height:1.4}
+  .topTabs{display:flex;gap:5px;margin-bottom:10px}
+  .topTabs button{flex:1 1 0;min-width:0;font:inherit;font-size:11.5px;line-height:1;
+                  padding:8px 0;border-radius:9px;border:1px solid var(--line);
+                  background:var(--card);color:var(--dim);font-variant-numeric:tabular-nums;
+                  white-space:nowrap}
+  .topTabs button.on{background:#22304a;border-color:#3d5a8f;color:#fff;font-weight:700}
+  /* 320 窄屏：6 个 tab 平分后每个只有 33px 左右，收窄间距 / 内边距 / 字号把宽度让回来 */
+  @media (max-width:340px){
+    #topOv .panel{padding:16px 12px 12px}
+    .topTabs{gap:2px}
+    .topTabs button{font-size:10px;padding:9px 0;border-radius:7px;letter-spacing:-.2px}
+  }
+  #topList{display:flex;flex-direction:column;gap:3px;
+           /* 高度上限按「视口比例」给，但也要给面板其余部分留够位置：
+              10 行 × 约 37px ≈ 370px，短屏上必须能在列表内部滚动，
+              否则最后一行会被撑到屏幕外（实测 320×568 就是这个毛病）。 */
+           max-height:min(46vh, 340px);overflow-y:auto;overflow-x:hidden;
+           -webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  .topRow{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:center;
+          padding:6px 9px;border-radius:9px;background:rgba(255,255,255,.028);
+          border:1px solid transparent;
+          font-variant-numeric:tabular-nums;line-height:1.2;
+          /* 行高必须稳定：右边那段「误点 · 时间」在窄屏上会换行，
+             一旦允许换行，10 行就会把面板撑到屏幕外（实测 320×568 时单行 48px）。 */
+          min-height:34px}
+  .topRow .rk{font-size:12px;font-weight:800;color:var(--dim);text-align:center;
+              white-space:nowrap;overflow:hidden}
+  .topRow .tm{font-size:15px;font-weight:750;color:var(--txt);white-space:nowrap;
+              overflow:hidden;text-overflow:ellipsis}
+  .topRow .tm small{font-size:10.5px;font-weight:600;color:var(--dim);margin-left:2px}
+  /* 右侧元信息：不换行，宽度由内容决定。
+     ⚠️ 这里**不能**写 max-width:百分比 —— 第三列是 grid 的 auto 列，
+     百分比会拿「auto 列自己的宽度」当参照，形成循环约束，
+     实测把「误点 3」压成只剩一个「误」字。让它自然宽度即可（内容都很短）。 */
+  .topRow .mt{font-size:10.5px;color:var(--dim);text-align:right;
+              white-space:nowrap;flex:0 0 auto}
+  .topRow .mt b{color:#9aa6bb;font-weight:600}
+  /* 时间戳比误点更次要：窄屏放不下时先省略时间，别把误点也吃掉 */
+  .topRow .mt .when{opacity:.75}
+  /* 前三名的底纹：必须写 .topRow.gN 才压得住上面的 .topRow 背景 */
+  .topRow.g1{background:linear-gradient(90deg,rgba(255,209,102,.17),rgba(255,209,102,.04));
+             border-color:rgba(255,209,102,.34)}
+  .topRow.g1 .rk{color:var(--gold)}
+  .topRow.g1 .tm{color:var(--gold)}
+  .topRow.g2{background:linear-gradient(90deg,rgba(207,216,232,.12),rgba(207,216,232,.03));
+             border-color:rgba(207,216,232,.22)}
+  .topRow.g2 .rk,.topRow.g2 .tm{color:#d7e0ef}
+  .topRow.g3{background:linear-gradient(90deg,rgba(208,161,132,.13),rgba(208,161,132,.03));
+             border-color:rgba(208,161,132,.24)}
+  .topRow.g3 .rk,.topRow.g3 .tm{color:#e2b394}
+  .topRow.me{outline:2px solid rgba(91,140,255,.75);outline-offset:-2px;
+             background:linear-gradient(90deg,rgba(91,140,255,.22),rgba(91,140,255,.05))}
+  .topRow.me .tm{color:#bcd0ff}
+  .topEmpty{text-align:center;font-size:12.5px;color:var(--dim);padding:22px 8px;line-height:1.7}
+  #topOv .row{margin-top:13px}
+  #topOv .row button{flex:1 1 0}
 
   /* ---------------- 特效画布 ---------------- */
   #fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:6}
@@ -224,6 +287,7 @@
 
 <div id="ctl">
   <button id="btnAgain" class="pri">⟲ 重新开始</button>
+  <button id="btnTop">🏆 排行榜</button>
   <button id="btnSound">🔊 音效</button>
 </div>
 
@@ -237,7 +301,24 @@
     <div class="rec" id="doneRec"></div>
     <div class="row">
       <button id="doneAgain" class="pri">再来一次</button>
+      <button id="doneTop">🏆 排行榜</button>
+    </div>
+    <div class="row" style="margin-top:8px">
       <button id="doneClose">看看棋盘</button>
+    </div>
+  </div>
+</div>
+
+<!-- 排行榜 -->
+<div class="ov" id="topOv">
+  <div class="panel">
+    <h2>🏆 排行榜</h2>
+    <div class="sub" id="topSub">每块棋盘各记前 10 名</div>
+    <div class="topTabs" id="topTabs"></div>
+    <div id="topList"></div>
+    <div class="row">
+      <button id="topPlay" class="pri">玩这个棋盘</button>
+      <button id="topClose">关闭</button>
     </div>
   </div>
 </div>
@@ -257,12 +338,16 @@
 var SIZES = [4,5,6,7,8,9];
 var LS_KEY = 'gschulte_v1';
 var PANEL_DELAY = 1.5;          // 过关特效播多久再弹结算面板（秒）
+var TOP_N = 10;                 // 每种棋盘各记前 10 名
 
 /* ---------------- 时钟（可被测试替换） ---------------- */
 var _defaultNow = (typeof performance !== 'undefined' && performance && typeof performance.now === 'function')
   ? function(){ return performance.now(); }
   : function(){ return Date.now(); };
 var _now = _defaultNow;
+/* 记录用的「墙上时间」单独一套：成绩的时间戳不该跟着游戏时钟被测试改掉 */
+var _defaultDate = function(){ return Date.now(); };
+var _dateNow = _defaultDate;
 function clock(){ return _now(); }
 
 /* ---------------- 小工具 ---------------- */
@@ -304,6 +389,10 @@ var S = {
   lastMs: 0,         // 本局最终用时
   newRecord: false,
   prevBest: null,
+  rank: 0,           // 本局在「这块棋盘」榜上的名次（0 = 没进前 TOP_N）
+  topMs: null,       // 记录后的榜首成绩
+  lastEntry: null,   // 刚记进去的那条（{ms, at, miss}），结算面板用它标「本次」
+  topBoard: 0,       // 排行榜面板当前在看哪块棋盘
   panelShown: false, // 结算面板此刻是否显示着
   panelDue: false,   // 结算面板还没弹（演出进行中 / 被跳过了）
   panelTimer: 0,     // 到点弹面板的定时器
@@ -313,7 +402,59 @@ var S = {
   side: 0, cell: 0, gap: 0, fs: 0, rad: 0
 };
 
-var prog = { best:{}, sound:true, n:5 };
+/* =========================================================================
+   排行榜（每种棋盘各存前 TOP_N 名）
+   ---------------------------------------------------------------------
+   存的是「榜」而不是「最好成绩」：`prog.top[n] = [{ms, at, miss}, …]`
+   按 ms 升序，长度不超过 TOP_N。best[n] 仍然保留（= top[n][0].ms），
+   这样旧存档能平滑升级，其它地方读「最佳」也还是同一个数。
+   ========================================================================= */
+
+var prog = { best:{}, top:{}, sound:true, n:5 };
+
+/* 一条记录是否合法：时间必须是正有限数；时间戳 / 误点容错（旧数据可能没有） */
+function cleanEntry(e){
+  if(!e || typeof e !== 'object') return null;
+  var ms = e.ms;
+  if(typeof ms !== 'number' || !isFinite(ms) || ms <= 0) return null;
+  var at = (typeof e.at === 'number' && isFinite(e.at) && e.at > 0) ? Math.round(e.at) : 0;
+  var miss = (typeof e.miss === 'number' && isFinite(e.miss) && e.miss >= 0) ? Math.floor(e.miss) : 0;
+  return { ms: Math.round(ms), at: at, miss: miss };
+}
+
+/* 排序：先按用时，再按误点少，最后按更早达成 —— 保证顺序是确定的 */
+function cmpEntry(a, b){
+  if(a.ms !== b.ms) return a.ms - b.ms;
+  if(a.miss !== b.miss) return a.miss - b.miss;
+  return a.at - b.at;
+}
+
+function boardTop(n){
+  var k = String(n);
+  if(!prog.top[k]) prog.top[k] = [];
+  return prog.top[k];
+}
+
+/* 把一条成绩塞进榜里，返回它的名次（1-based）；没进榜返回 0。
+   at 为 0 时用当前时间补上。lastEntry 会被记下，供结算面板标「本次」。 */
+function addEntry(n, ms, miss, at){
+  if(typeof ms !== 'number' || !isFinite(ms) || ms <= 0) return 0;
+  var e = cleanEntry({ ms: ms, miss: miss, at: at || _dateNow() });
+  if(!e) return 0;
+  var list = boardTop(n);
+  list.push(e);
+  list.sort(cmpEntry);
+  if(list.length > TOP_N) list.length = TOP_N;
+  var rank = 0;
+  for(var i=0;i<list.length;i++){
+    if(list[i] === e){ rank = i + 1; break; }
+  }
+  S.lastEntry = (rank > 0) ? e : null;
+  /* 同步 best，保证「最佳」和榜首永远是一个数 */
+  prog.best[String(n)] = list.length ? list[0].ms : null;
+  saveProg();
+  return rank;
+}
 
 /* ---------------- 存档 ---------------- */
 function loadProg(){
@@ -322,13 +463,50 @@ function loadProg(){
     if(!raw) return;
     var o = JSON.parse(raw);
     if(!o || typeof o !== 'object') return;
-    if(o.best && typeof o.best === 'object'){
-      for(var k in o.best){
-        if(!has(o.best,k)) continue;
-        var v = o.best[k];
-        if(typeof v === 'number' && isFinite(v) && v > 0) prog.best[k] = v;
+
+    /* ① 先读榜单。旧版本没有 top，只有 best —— 那种存档会被下面 ③ 升级成「榜里只有一条」。 */
+    if(o.top && typeof o.top === 'object'){
+      for(var k in o.top){
+        if(!has(o.top, k)) continue;
+        if(SIZES.indexOf(Number(k)) < 0) continue;         // 只认认识的棋盘尺寸
+        if(!isArray(o.top[k])) continue;
+        var list = [];
+        for(var i=0;i<o.top[k].length && list.length < TOP_N;i++){
+          var e = cleanEntry(o.top[k][i]);
+          if(e) list.push(e);
+        }
+        list.sort(cmpEntry);
+        prog.top[k] = list;
       }
     }
+
+    /* ② 旧存档里的 best 也读进来（可能是数字，也可能被写成字符串） */
+    if(o.best && typeof o.best === 'object'){
+      for(var k2 in o.best){
+        if(!has(o.best, k2)) continue;
+        var v = o.best[k2];
+        if(typeof v === 'number' && isFinite(v) && v > 0) prog.best[k2] = v;
+      }
+    }
+
+    /* ③ 升级：best 有值但 top 里没有的，补成榜单第一条（时间戳未知记 0） */
+    for(var k3 in prog.best){
+      if(!has(prog.best, k3)) continue;
+      if(SIZES.indexOf(Number(k3)) < 0) continue;
+      if(!prog.top[k3] || !prog.top[k3].length){
+        var e3 = cleanEntry({ ms: prog.best[k3], miss: 0, at: 0 });
+        if(e3) prog.top[k3] = [e3];
+      }
+    }
+
+    /* ④ 反向对齐：以榜单为准回填 best，避免两边不一致 */
+    for(var k4 in prog.top){
+      if(!has(prog.top, k4)) continue;
+      var t4 = prog.top[k4];
+      if(t4 && t4.length) prog.best[k4] = t4[0].ms;
+      else delete prog.best[k4];
+    }
+
     if(typeof o.sound === 'boolean') prog.sound = o.sound;
     if(typeof o.n === 'number' && SIZES.indexOf(o.n) >= 0) prog.n = o.n;
   }catch(e){}
@@ -336,6 +514,8 @@ function loadProg(){
 function saveProg(){
   try{ localStorage.setItem(LS_KEY, JSON.stringify(prog)); }catch(e){}
 }
+
+function isArray(x){ return Object.prototype.toString.call(x) === '[object Array]'; }
 
 /* ---------------- 音效 ---------------- */
 var ac = null;
@@ -624,11 +804,14 @@ function finish(){
   var key = String(S.n);
   var prev = has(prog.best, key) ? prog.best[key] : null;
   S.prevBest = (typeof prev === 'number' && isFinite(prev)) ? prev : null;
-  S.newRecord = (S.prevBest === null) || (S.lastMs < S.prevBest);
-  if(S.newRecord){
-    prog.best[key] = Math.round(S.lastMs);
-    saveProg();
-  }
+
+  /* 先记榜再判断「是不是新纪录」：
+     addEntry 会返回本局在这块棋盘榜上的名次（没进前 TOP_N 就是 0），
+     名次 1 = 榜首 = 新纪录。这样「最佳成绩」和「榜首」永远是同一个数。 */
+  S.rank = addEntry(S.n, S.lastMs, S.miss, _dateNow());
+  S.newRecord = (S.rank === 1);
+  S.topMs = boardTop(S.n).length ? boardTop(S.n)[0].ms : null;
+
   paint();
   celebrate();
   /* 面板的到点判定走两条路：定时器（真实浏览器，最可靠）+ step() 里的累加（可被测试驱动）。
@@ -669,18 +852,26 @@ function showDone(){
   }
   var rec = $('doneRec');
   if(rec){
-    if(S.newRecord){
+    if(S.rank === 1){
       rec.className = 'rec';
       rec.textContent = (S.prevBest === null)
-        ? '首个成绩已记录 🏆'
-        : '新纪录！比上次快 ' + fmt(S.prevBest - S.lastMs) + ' 秒 🏆';
+        ? '榜首！首个成绩已记录 🏆'
+        : '新纪录！比原榜首快 ' + fmt(S.prevBest - S.lastMs) + ' 秒 🏆';
+    } else if(S.rank > 1){
+      rec.className = 'rec';
+      rec.textContent = '本局第 ' + S.rank + ' 名 · 榜首 ' + fmt(S.topMs) + ' 秒 · 差 ' +
+                        fmt(S.lastMs - S.topMs) + ' 秒';
+    } else if(S.topMs !== null){
+      rec.className = 'rec dim';
+      rec.textContent = '没进前 ' + TOP_N + ' 名 · 榜首 ' + fmt(S.topMs) + ' 秒 · 差 ' +
+                        fmt(S.lastMs - S.topMs) + ' 秒';
     } else {
       rec.className = 'rec dim';
-      rec.textContent = '最佳 ' + fmt(S.prevBest) + ' 秒 · 差 ' + fmt(S.lastMs - S.prevBest) + ' 秒';
+      rec.textContent = '成绩未记录';
     }
   }
   var crown = $('doneCrown');
-  if(crown) crown.textContent = S.newRecord ? '🏆' : '✅';
+  if(crown) crown.textContent = (S.rank === 1) ? '🏆' : (S.rank > 0 ? '🎖️' : '✅');
   show('doneOv');
 }
 
@@ -692,6 +883,134 @@ function hideDone(){
   if(ov.classList){ ov.classList.remove('show'); ov.classList.remove('on'); }
   var board = $('board');
   if(board && board.classList) board.classList.remove('won');
+}
+
+/* ---------------- 排行榜面板 ----------------
+   六块棋盘各一张榜，顶部 tab 切换。tab 上顺带标「有几条记录」，
+   这样不用一个个点进去就知道哪块棋盘还没打过。
+   当前这块棋盘用蓝色 tab 区分，刚打完的那一局在榜里高亮（.me）。 */
+function fmtAt(at){
+  if(!at) return '';
+  try{
+    var d = new Date(at);
+    if(!d || isNaN(d.getTime())) return '';
+    return (d.getMonth()+1) + '/' + d.getDate() + ' ' +
+           (d.getHours()<10?'0':'') + d.getHours() + ':' +
+           (d.getMinutes()<10?'0':'') + d.getMinutes();
+  }catch(e){ return ''; }
+}
+
+/* 从「全部榜单」里算出一条记录最靠前的那块棋盘/名次 ——
+   用于告诉玩家「你这条成绩在 6 块棋盘里最靠前是第几」。这里只服务结算文案，不进存档。 */
+function topCount(n){
+  var list = boardTop(n);
+  return list.length;
+}
+
+/* 往元素里追加一段纯文字。
+   优先用 createTextNode；个别精简环境（老 WebView / 测试桩）没有它，
+   就退化成「新建一个 span 设 textContent」——效果一样，也不引入 innerHTML。 */
+function appendText(parent, txt){
+  if(!parent || !txt) return;
+  if(typeof document.createTextNode === 'function'){
+    parent.appendChild(document.createTextNode(txt));
+    return;
+  }
+  var sp = document.createElement('span');
+  sp.textContent = txt;
+  parent.appendChild(sp);
+}
+
+function renderTopBoard(n){
+  S.topBoard = n;
+  var tabs = $('topTabs'), list = $('topList');
+  if(tabs){
+    for(var k=tabs.children.length-1;k>=0;k--) tabs.removeChild(tabs.children[k]);
+    for(var i=0;i<SIZES.length;i++){
+      (function(nn){
+        var b = document.createElement('button');
+        var cnt = topCount(nn);
+        b.textContent = nn + '×' + nn;
+        b.dataset.n = String(nn);
+        if(nn === n) b.className = 'on';
+        b.title = cnt ? ('已记 ' + cnt + ' 条') : '还没有记录';
+        /* 有记录的在 tab 上加一个小圆点，一眼看出哪块打过 */
+        if(cnt) b.classList.add('has');
+        if(b.addEventListener){
+          b.addEventListener('click', function(){ renderTopBoard(nn); });
+        }
+        tabs.appendChild(b);
+      })(SIZES[i]);
+    }
+  }
+  if(!list) return;
+  for(var j=list.children.length-1;j>=0;j--) list.removeChild(list.children[j]);
+
+  var arr = boardTop(n);
+  if(!arr.length){
+    var em = document.createElement('div');
+    em.className = 'topEmpty';
+    em.textContent = '这块棋盘还没有成绩。\n点「玩这个棋盘」打一局，第一名就是你了。';
+    list.appendChild(em);
+    return;
+  }
+  for(var r=0;r<arr.length;r++){
+    var e = arr[r];
+    var row = document.createElement('div');
+    row.className = 'topRow' + (r === 0 ? ' g1' : (r === 1 ? ' g2' : (r === 2 ? ' g3' : '')));
+    /* 刚打完的那一条高亮：同一个对象引用就说明是本次 */
+    if(S.lastEntry && e.ms === S.lastEntry.ms && e.at === S.lastEntry.at &&
+       e.miss === S.lastEntry.miss && n === S.n) row.classList.add('me');
+
+    var rk = document.createElement('div');
+    rk.className = 'rk';
+    /* 用「1 / 2 / 3」而不是奖牌 emoji：🥇🥈🥉 在不同字体环境下字形差异极大
+       （无头 Chrome 里直接渲染成一个不认识的字），而且宽度不统一。
+       名次本身就是信息，配上 g1/g2/g3 的颜色已经够醒目。 */
+    rk.textContent = String(r + 1);
+
+    var tm = document.createElement('div');
+    tm.className = 'tm';
+    tm.textContent = fmt(e.ms);
+    var sm = document.createElement('small');
+    sm.textContent = '秒';
+    tm.appendChild(sm);
+
+    var mt = document.createElement('div');
+    mt.className = 'mt';
+    /* 窄屏放不下「误点 · 时间」两段，所以优先保留误点：
+       它是这一局的表现，时间戳只是流水账。没有误点时才显示达成时间。 */
+    if(e.miss > 0){
+      appendText(mt, '误点 ');
+      var mb = document.createElement('b');
+      mb.textContent = String(e.miss);
+      mt.appendChild(mb);
+    } else {
+      var when = fmtAt(e.at);
+      if(when){
+        var wn = document.createElement('span');
+        wn.className = 'when';
+        wn.textContent = when;
+        mt.appendChild(wn);
+      }
+    }
+
+    row.appendChild(rk); row.appendChild(tm); row.appendChild(mt);
+    list.appendChild(row);
+  }
+}
+
+function openTop(n){
+  renderTopBoard((typeof n === 'number') ? n : S.n);
+  var sub = $('topSub');
+  if(sub) sub.textContent = '每块棋盘各记前 ' + TOP_N + ' 名 · 按用时从快到慢';
+  show('topOv');
+}
+function hideTop(){
+  var ov = $('topOv');
+  if(!ov || !ov.classList) return;
+  ov.classList.remove('show');
+  ov.classList.remove('on');
 }
 
 /* ---------------- 撒花（canvas） ---------------- */
@@ -904,9 +1223,10 @@ function syncPrev(){
 function updateBest(){
   var chip = $('chipBest');
   if(!chip) return;
-  var b = has(prog.best, String(S.n)) ? prog.best[String(S.n)] : null;
+  var list = boardTop(S.n);
+  var b = list.length ? list[0].ms : null;
   chip.textContent = '最佳 ' + fmt(b);
-  chip.title = S.n + '×' + S.n + ' 最佳成绩';
+  chip.title = S.n + '×' + S.n + ' 榜首 · 已记 ' + list.length + ' / ' + TOP_N + ' 条';
 }
 
 function renderModes(){
@@ -1013,6 +1333,24 @@ function bind(){
     if(e && e.target === ov){ hideDone(); render(); }
   });
 
+  /* 排行榜入口：控制条上一个，结算面板上一个（刚打完最想看的正是名次） */
+  var bt = $('btnTop');
+  if(bt) bt.addEventListener('click', function(){ openTop(S.n); snd('start'); });
+  var dt = $('doneTop');
+  if(dt) dt.addEventListener('click', function(){ openTop(S.n); });
+  var tc = $('topClose');
+  if(tc) tc.addEventListener('click', hideTop);
+  var tp = $('topPlay');
+  if(tp) tp.addEventListener('click', function(){
+    var n = S.topBoard;
+    hideTop(); hideDone();
+    newGame(n);
+  });
+  var tov = $('topOv');
+  if(tov) tov.addEventListener('click', function(e){
+    if(e && e.target === tov) hideTop();
+  });
+
   if(typeof window !== 'undefined' && window.addEventListener){
     window.addEventListener('resize', function(){ layout(); });
     window.addEventListener('orientationchange', function(){ setTimeout(layout, 120); });
@@ -1050,9 +1388,13 @@ window.__schulte = function(){
     n: S.n, next: S.next, state: S.state, miss: S.miss,
     elapsed: S.elapsed, lastMs: S.lastMs, newRecord: S.newRecord,
     prevBest: S.prevBest, panelShown: S.panelShown,
+    rank: S.rank, topMs: S.topMs, lastEntry: S.lastEntry ? JSON.parse(JSON.stringify(S.lastEntry)) : null,
+    topBoard: S.topBoard,
     nums: S.nums.slice(), pos: JSON.parse(JSON.stringify(S.pos)),
     side: S.side, cell: S.cell, gap: S.gap, fs: S.fs, rad: S.rad,
-    best: JSON.parse(JSON.stringify(prog.best)), sound: prog.sound
+    best: JSON.parse(JSON.stringify(prog.best)),
+    top: JSON.parse(JSON.stringify(prog.top)),
+    sound: prog.sound
   };
 };
 window.__schulteNewGame = function(n, seed){ newGame(n, seed); };
@@ -1066,6 +1408,14 @@ window.__schulteFx = function(){
 };
 window.__schulteProg = function(){ return JSON.parse(JSON.stringify(prog)); };
 window.__schulteSetClock = function(fn){ _now = (typeof fn === 'function') ? fn : _defaultNow; };
+/* 记录时间戳用的时钟单独一套：测「榜单时间」时不该连带改掉秒表 */
+window.__schulteSetDate = function(fn){ _dateNow = (typeof fn === 'function') ? fn : _defaultDate; };
+window.__schulteOpenTop = openTop;
+window.__schulteHideTop = hideTop;
+window.__schulteRenderTop = renderTopBoard;
+window.__schulteAddEntry = addEntry;
+window.__schulteTopN = function(){ return TOP_N; };
+window.__schulteBoardTop = function(n){ return JSON.parse(JSON.stringify(boardTop(n))); };
 window.__schulteSizes = function(){ return SIZES.slice(); };
 window.__schultePanelDelay = function(){ return PANEL_DELAY; };
 window.__schulteFmt = fmt;
