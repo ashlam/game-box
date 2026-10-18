@@ -88,6 +88,29 @@ f.onload=()=>setTimeout(()=>{
       tipH:g('tip').height,
     };
 
+    /* ★ 选中两张牌（待算式出来）时的布局：这一行不能把整页顶出屏幕，
+       也不能压到下面的运算符键。 */
+    {
+      const w0=f.contentWindow, cc=w0.__g24().cards;
+      w0.__g24Pick(cc[0].id); w0.__g24Pick(cc[1].id);
+      const pd=E('pending'), rp=pd.getBoundingClientRect();
+      const pendingText=pd.textContent;
+      const cardB=Math.max(...[...d.querySelectorAll('#cards .card')].map(e=>e.getBoundingClientRect().bottom));
+      const opsT=g('ops').top;
+      base.pending={
+        shown: rp.height>0,
+        text: pendingText,
+        top:rp.top, bottom:rp.bottom, h:rp.height,
+        cardBottom:cardB,
+        opsTop:opsT,
+        overflowY:d.body.scrollHeight-d.body.clientHeight,
+        overflowX:d.documentElement.scrollWidth-d.documentElement.clientWidth,
+        opsWant: E('ops').classList.contains('want'),
+        tip: E('tip').textContent,
+      };
+      w0.__g24Reset();     // 量完恢复，别影响后面的结算探针
+    }
+
     /* ★ 结算演出也要量。做法：直接把这局推到通关，再等到「大字 + 两行说明」都出来那一拍，
        量演出区的位置与整页溢出 —— 演出要是把牌盖住或者把按钮顶出屏幕，这里必须红。 */
     const w=f.contentWindow;
@@ -223,6 +246,24 @@ for(const [name, w, h, r] of results){
   // 最后一行按钮必须在屏幕内
   const lastBottom = Math.max(...r.tools.map(t => t.bottom), r.opsBottom);
   okNum(lastBottom, v => v <= h + 1, '底部按钮没被挤出屏幕', '最低点 ' + lastBottom.toFixed(1) + ' / 屏高 ' + h);
+
+  /* ---------- 待算式（选中两张牌） ---------- */
+  section(`${name} ${w}×${h} · 待算式`);
+  if(!r.pending){
+    ok(false, '待算式没量到（探针没跑完）');
+  } else {
+    const p = r.pending;
+    ok(p.shown === true, '选满两张后待算式出现', JSON.stringify(p.text));
+    ok(/\d/.test(p.text) && p.text.indexOf('?') >= 0, '待算式里有数字和待填空位', p.text);
+    ok(p.opsWant === true, '运算符键被叫醒');
+    okNum(p.h, v => v >= 20, '待算式有实际高度（真的画出来了）', p.h.toFixed(1) + 'px');
+    ok(p.top >= p.cardBottom - 1, '待算式在牌下面', `pending.top=${p.top.toFixed(1)} card.bottom=${p.cardBottom.toFixed(1)}`);
+    ok(p.bottom <= p.opsTop + 1, '★ 待算式没有压到运算符键',
+       `pending.bottom=${p.bottom.toFixed(1)} ops.top=${p.opsTop.toFixed(1)}`);
+    okNum(p.overflowY, v => v <= 1, '待算式出现时仍不纵向溢出', '溢出 ' + p.overflowY + 'px');
+    okNum(p.overflowX, v => v <= 1, '待算式出现时仍不横向溢出', '溢出 ' + p.overflowX + 'px');
+    ok(p.tip.indexOf('运算符') >= 0, '提示语指向下一步', p.tip);
+  }
 
   /* ---------- 结算演出（通关后那一拍） ---------- */
   section(`${name} ${w}×${h} · 结算演出`);

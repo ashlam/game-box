@@ -68,6 +68,17 @@
   @keyframes pop{0%{transform:scale(.86)}60%{transform:scale(1.06)}100%{transform:scale(1)}}
   #tip{font-size:12px;color:var(--dim);min-height:17px;text-align:center;padding:0 10px;line-height:1.4}
 
+  /* 选中两张牌之后，把「待算式」直接摆出来：1 ? 4 —— 空位就是运算符 */
+  #pending{display:none;align-items:center;justify-content:center;gap:9px;
+           font-size:clamp(20px,6.5vw,27px);font-weight:800;line-height:1;
+           font-variant-numeric:tabular-nums;padding:2px 0}
+  #pending.on{display:flex}
+  #pending .num{color:#bcd0ff}
+  #pending .slot{min-width:1.15em;text-align:center;color:var(--acc);
+                 border-bottom:2px dashed rgba(91,140,255,.55);
+                 animation:slotBlink 1.05s ease-in-out infinite}
+  @keyframes slotBlink{0%,100%{opacity:.35}50%{opacity:1}}
+
   /* ---------------- 运算符 ---------------- */
   #ops{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;flex:0 0 auto;
        width:100%;max-width:356px;margin:0 auto 10px}
@@ -80,6 +91,13 @@
   #ops button.on{background:linear-gradient(180deg,#2f4d8f,#26406f);border-color:#4a72c8;color:#fff;
                  box-shadow:0 0 0 2px rgba(91,140,255,.3),0 8px 20px rgba(91,140,255,.3)}
   #ops button:disabled{opacity:.35}
+  /* 两张牌都选好、正等运算符时，四个键一起轻轻呼吸 —— 把手指引到下一步 */
+  #ops.want button{animation:opWant 1.15s ease-in-out infinite;border-color:#3d5a8f}
+  #ops.want button:nth-child(2){animation-delay:.08s}
+  #ops.want button:nth-child(3){animation-delay:.16s}
+  #ops.want button:nth-child(4){animation-delay:.24s}
+  @keyframes opWant{0%,100%{box-shadow:0 0 0 0 rgba(91,140,255,0)}
+                    50%{box-shadow:0 0 0 3px rgba(91,140,255,.26)}}
 
   /* ---------------- 工具条 ---------------- */
   #tools{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;flex:0 0 auto;
@@ -199,6 +217,7 @@
 <div id="stage">
   <div class="goal">目标 <b>24</b></div>
   <div id="cards"></div>
+  <div id="pending"></div>
   <div id="tip"></div>
   <!-- 结算演出：排在牌下面，不遮挡那张 24 -->
   <div id="banner">
@@ -826,6 +845,7 @@ function render(){
     if(!keep[String(kids[k].dataset.id)]) box.removeChild(kids[k]);
   }
 
+  renderPending();
   renderTip();
   updateButtons();
 }
@@ -847,7 +867,35 @@ function renderTip(){
   if(n === 0 && !S.op) tip.textContent = '点两张牌，再点运算符';
   else if(n === 0) tip.textContent = '已选 ' + SYM[S.op] + ' —— 再点两张牌';
   else if(n === 1) tip.textContent = '再点一张牌' + (S.op ? '' : '，然后选运算符');
-  else tip.textContent = '选一个运算符';
+  else tip.textContent = '两张牌都亮了：现在点下面的运算符';
+}
+
+/* 「待算式」：选中两张牌时把 a ? b 直接画在牌下面。
+   光让两张牌亮着，玩家看不出「然后呢」—— 空位就是缺的那个运算符。 */
+function renderPending(){
+  var el = $('pending');
+  if(!el) return;
+  if(S.state !== 'play' || S.sel.length !== 2){
+    if(el.classList.contains('on')){
+      el.classList.remove('on');
+      while(el.firstChild) el.removeChild(el.firstChild);
+    }
+    return;
+  }
+  var a = cardById(S.sel[0]), b = cardById(S.sel[1]);
+  if(!a || !b){ el.classList.remove('on'); return; }
+
+  // 显式清空：只写 textContent='' 在某些环境里不会摘掉子节点（测试桩就是这样），
+  // 结果待算式会一层层堆起来。
+  while(el.firstChild) el.removeChild(el.firstChild);
+  el.classList.add('on');
+  var n1 = document.createElement('span'); n1.className = 'num'; n1.textContent = fStr(a.v);
+  var slot = document.createElement('span');
+  slot.className = 'slot';
+  slot.textContent = S.op ? SYM[S.op] : '?';
+  if(S.op) slot.style.animation = 'none';
+  var n2 = document.createElement('span'); n2.className = 'num'; n2.textContent = fStr(b.v);
+  el.appendChild(n1); el.appendChild(slot); el.appendChild(n2);
 }
 
 function updateButtons(){
@@ -857,6 +905,9 @@ function updateButtons(){
     if(b.dataset.op === S.op) b.classList.add('on'); else b.classList.remove('on');
     b.disabled = (S.state !== 'play');
   }
+  // 两张牌选好、运算符还没定时，把运算符键整体「叫醒」
+  var ops = $('ops');
+  if(ops) ops.classList.toggle('want', S.state === 'play' && S.sel.length === 2 && !S.op);
   var u = $('btnUndo'); if(u) u.disabled = (S.state !== 'play' || !S.hist.length);
   var h = $('btnHint'); if(h) h.disabled = (S.state !== 'play');
   var r = $('btnRetry'); if(r) r.disabled = (S.state === 'play' && !S.hist.length && S.sel.length === 0);
@@ -1037,6 +1088,17 @@ window.__g24Banner = function(){
            kind: ($('banner') || {}).className || '',
            big: BANNER.big, lineAt: BANNER.line, gap: BANNER.gap,
            total: bannerTotal(2), skip: bannerFinish };
+};
+/* 「待算式」与提示：选中两张牌时界面到底告诉玩家什么 */
+window.__g24Pending = function(){
+  var el = $('pending'), ops = $('ops');
+  return {
+    on: !!(el && el.classList.contains('on')),
+    text: el ? el.textContent : '',
+    parts: el ? Array.prototype.map.call(el.children, function(c){ return c.textContent; }) : [],
+    tip: ($('tip') || {}).textContent || '',
+    opsWant: !!(ops && ops.classList.contains('want'))
+  };
 };
 window.__g24Now = function(){ return { exprStr: exprStr, fr: fr, fStr: fStr, canon: canon }; };
 

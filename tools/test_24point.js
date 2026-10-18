@@ -691,6 +691,77 @@ section('14) 结算演出（成功/失败都要慢下来）');
      JSON.stringify(B()));
 }
 
+/* ================= 15) 「选中两张」到底在说什么 ================= */
+section('15) 待算式（选中两张时的界面反馈）');
+{
+  const P = () => win.__g24Pending();
+
+  load(0, 0);
+  let p = P();
+  ok(p.on === false, '什么都没选时不显示待算式');
+  ok(p.tip.indexOf('点两张牌') >= 0, '提示语：点两张牌', p.tip);
+
+  let c = R().cards;
+  pick(c[0].id);
+  p = P();
+  ok(p.on === false, '只选一张时不显示待算式（还没到那一步）');
+  ok(p.tip.indexOf('再点一张') >= 0, '提示语：再点一张', p.tip);
+  ok(p.opsWant === false, '只选一张时运算符键不呼吸');
+
+  pick(c[1].id);
+  p = P();
+  ok(p.on === true, '★ 选满两张后出现待算式', JSON.stringify(p));
+  ok(p.parts.length === 3, '待算式由「数字 空位 数字」三段组成', JSON.stringify(p.parts));
+  ok(p.parts[0] === String(Number(c[0].v)) && p.parts[2] === String(Number(c[1].v)),
+     '★ 两端就是选中的那两个数', JSON.stringify(p.parts));
+  ok(p.parts[1] === '?', '★ 中间是待填空位（这就是「然后呢」）', p.parts[1]);
+  ok(p.tip.indexOf('运算符') >= 0, '提示语把下一步说清楚', p.tip);
+  ok(p.opsWant === true, '★ 运算符键同时被叫醒（指向下一步）');
+
+  // 选好运算符后空位填上，呼吸停掉
+  setOp('+');
+  const after = R();
+  ok(after.cards.length === 3, '选运算符后正常合并');
+  p = P();
+  ok(p.on === false, '合并后待算式消失');
+  ok(p.opsWant === false, '合并后运算符键停止呼吸');
+
+  // 取消选中也要收回去
+  load(0, 0);
+  c = R().cards;
+  pick(c[0].id); pick(c[1].id);
+  ok(P().on === true, '再次选满两张');
+  pick(c[1].id);
+  ok(P().on === false, '取消选中一张后待算式收回');
+
+  // 先点运算符、再点两张牌：空位一开始就填好了
+  load(0, 0);
+  c = R().cards;
+  setOp('*');
+  ok(P().on === false, '只点了运算符，还没有待算式');
+  pick(c[0].id);
+  ok(P().on === false, '此时只选一张');
+  pick(c[1].id);
+  const merged = R();
+  ok(merged.cards.length === 3, '两张凑齐就直接合并了（不用再点一次运算符）');
+
+  // 结算时待算式不该残留
+  load(0, 1);
+  let guard = 0;
+  while(R().state === 'play' && guard++ < 8){ if(!win.__g24DemoStep(false)) break; }
+  ok(R().state === 'win', '走完一关');
+  ok(P().on === false, '结算状态下不显示待算式');
+
+  // 死局同理
+  resetTimers();
+  setCards([1, 1, 1, 1]);
+  const z = R().cards.map(x => x.id);
+  pick(z[0]); pick(z[1]); setOp('+');
+  ok(R().state === 'dead', '造一个死局');
+  ok(P().on === false, '死局状态下不显示待算式');
+  ok(P().opsWant === false, '死局状态下运算符键不呼吸');
+}
+
 /* ---------------- 汇总 ---------------- */
 console.log('\n' + '='.repeat(52));
 if(fail === 0) console.log(`全部通过：${pass} 项`);
