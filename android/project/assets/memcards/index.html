@@ -1,0 +1,1840 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>记忆扑克 · 小游戏盒子</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161a22; --card:#191d26; --card2:#232a37; --line:#2b3242;
+    --txt:#e8ecf3; --dim:#8b95a7; --acc:#5b8cff; --ok:#38d39f; --gold:#ffd166; --bad:#ff7b72;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{
+    background:radial-gradient(1100px 560px at 50% -12%,#1b2233 0%,var(--bg) 62%);
+    color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;overflow:hidden;
+    user-select:none;-webkit-user-select:none;
+    padding:calc(env(safe-area-inset-top) + 6px) 12px calc(env(safe-area-inset-bottom) + 10px);
+  }
+
+  /* ---------------- 顶栏 ---------------- */
+  .top{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+  .top .back{color:var(--dim);text-decoration:none;font-size:19px;line-height:1;padding:7px 10px;
+             border-radius:10px;background:var(--card);border:1px solid var(--line)}
+  .top .ttl{font-size:15px;font-weight:700;letter-spacing:1px;white-space:nowrap}
+  .top .sp{flex:1}
+  .top .chip{font-size:11.5px;color:var(--gold);border:1px solid rgba(255,209,102,.32);
+             background:rgba(255,209,102,.08);padding:5px 10px;border-radius:99px;
+             white-space:nowrap;font-variant-numeric:tabular-nums}
+
+  /* ---------------- 难度 ---------------- */
+  #modes{display:flex;gap:6px;flex:0 0 auto;margin:8px 0 0}
+  #modes button{
+    flex:1 1 0;min-width:0;font:inherit;line-height:1.15;padding:6px 0 5px;
+    border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--dim);
+    font-variant-numeric:tabular-nums;white-space:nowrap;
+    transition:background .14s,border-color .14s,color .14s,transform .1s;
+  }
+  #modes button b{display:block;font-size:12px;font-weight:650}
+  #modes button i{display:block;font-style:normal;font-size:9.5px;opacity:.72;margin-top:1px}
+  #modes button:active{transform:scale(.95)}
+  #modes button.on{background:#22304a;border-color:#3d5a8f;color:#fff}
+  #modes button.on b{font-weight:800}
+
+  /* ---------------- 仪表 ---------------- */
+  #hud{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;flex:0 0 auto;margin:9px 0 0}
+  .st{background:var(--card);border:1px solid var(--line);border-radius:12px;
+      padding:6px 9px;min-width:0;overflow:hidden}
+  .st .lb{display:block;font-size:10px;color:var(--dim);letter-spacing:1px;line-height:1.3;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .st b{display:block;font-size:clamp(15px,4.6vw,21px);font-weight:800;line-height:1.2;
+        font-variant-numeric:tabular-nums;letter-spacing:-.3px;white-space:nowrap;
+        overflow:hidden;text-overflow:ellipsis}
+  #vRound{color:#bcd0ff}
+  #vScore{color:var(--gold)}
+  #vCombo{color:var(--txt)}
+  #vCombo.hot{color:var(--ok)}
+  .st.hot{border-color:rgba(56,211,159,.4);box-shadow:0 0 0 1px rgba(56,211,159,.14)}
+
+  .bar{flex:0 0 auto;height:5px;border-radius:99px;background:#0b0e14;margin:8px 0 0;
+       border:1px solid var(--line);overflow:hidden}
+  .bar i{display:block;height:100%;width:0;border-radius:99px;
+         background:linear-gradient(90deg,#5b8cff,#38d39f);
+         transition:width .3s ease}
+
+  /* ---------------- 牌桌 ---------------- */
+  #stage{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;
+         position:relative;padding:6px 0;margin-top:6px;
+         border-radius:16px;border:1px solid rgba(63,102,176,.18);
+         background:radial-gradient(120% 90% at 50% 0%,#182129 0%,#12171d 62%,#0e1216 100%);
+         box-shadow:inset 0 0 34px rgba(0,0,0,.55)}
+  #board{display:flex;flex-wrap:wrap;justify-content:center;align-content:center;
+         gap:var(--gap,10px);touch-action:manipulation}
+
+  /* 一张牌：3D 翻面。正反两层都 backface-visibility:hidden，
+     翻的是 .inner —— 这样「收牌」是一张张真的翻过去，而不是透明度渐隐。 */
+  .card{
+    position:relative;width:var(--cw,72px);height:var(--ch,103px);flex:0 0 auto;
+    perspective:760px;
+    /* 入场动画用 transform + 一点压暗来做「落下」感，全程不碰 opacity ——
+       一旦动画因为任何原因停在第一帧（无头截图 / 省电模式 / 动画被禁用），
+       opacity:0 会让整手牌**彻底看不见**，那不是「动画没播」而是「游戏坏了」。
+       ⚠️ 而且**不能写 animation-fill-mode:both**：`both` 会把 0% 关键帧
+       一直套在「延迟还没开始」的牌上，动画时钟不前进时（无头截图实测就是）
+       后半手牌会永久停在压暗的 0% 状态。不带 fill-mode 时，延迟期间用的是
+       元素自己的常态样式 —— 动画没播最多是「少了点入场效果」，绝不会变形。 */
+    animation:dealIn .34s cubic-bezier(.2,.9,.3,1.18);
+    animation-delay:calc(var(--i,0) * 55ms);
+  }
+  @keyframes dealIn{
+    0%{transform:translateY(-18px) scale(.82) rotate(-5deg);
+       filter:brightness(.55)}
+    100%{transform:none;filter:none}
+  }
+  .card .inner{position:absolute;inset:0;transform-style:preserve-3d;
+               transition:transform .46s cubic-bezier(.3,.75,.35,1)}
+  .card.down .inner{transform:rotateY(180deg)}
+  .card .face,.card .back{
+    position:absolute;inset:0;border-radius:calc(var(--cw,72px) * .13);
+    backface-visibility:hidden;-webkit-backface-visibility:hidden;
+    display:flex;align-items:center;justify-content:center;
+    transition:box-shadow .18s,border-color .18s;
+  }
+  .card .face{
+    background:linear-gradient(158deg,#fbfcff 0%,#eef1f8 55%,#dfe4ef 100%);
+    border:1px solid #b9c2d4;color:#1b2030;
+    box-shadow:0 3px 10px rgba(0,0,0,.42),inset 0 1px 0 #fff;
+  }
+  .card .face.red{color:#d0342c}
+  .card .face .pip{font-size:calc(var(--cw,72px) * .60);line-height:1;
+                   opacity:.94;transform:translateY(2%)}
+  .card .face .cr{position:absolute;display:flex;flex-direction:column;align-items:center;
+                  line-height:1;font-weight:800;font-size:calc(var(--cw,72px) * .26);
+                  letter-spacing:-.4px}
+  .card .face .cr b{display:block;font-weight:800}
+  .card .face .cr i{display:block;font-style:normal;font-size:.82em;margin-top:1px}
+  .card .face .cr.tl{left:calc(var(--cw,72px) * .075);top:calc(var(--cw,72px) * .055)}
+  .card .face .cr.br{right:calc(var(--cw,72px) * .075);bottom:calc(var(--cw,72px) * .055);
+                     transform:rotate(180deg)}
+  .card .back{
+    transform:rotateY(180deg);
+    background:
+      repeating-linear-gradient(45deg,rgba(255,255,255,.055) 0 5px,rgba(255,255,255,0) 5px 10px),
+      linear-gradient(160deg,#2b4a86 0%,#213a6b 60%,#1a2e55 100%);
+    border:1px solid #3f66b0;color:rgba(214,228,255,.55);
+    box-shadow:0 3px 10px rgba(0,0,0,.45),inset 0 0 0 2px rgba(255,255,255,.06);
+    font-size:calc(var(--cw,72px) * .38);
+  }
+  /* 牌面状态：答对 / 答错 / 顺序任务里已选 */
+  .card.ok .face{box-shadow:0 0 0 3px var(--ok),0 0 22px rgba(56,211,159,.55)}
+  .card.bad .face{box-shadow:0 0 0 3px var(--bad),0 0 22px rgba(255,123,114,.5)}
+  .card.pick .face{box-shadow:0 0 0 3px var(--acc),0 0 20px rgba(91,140,255,.5)}
+  .card.bad{animation:shake .34s cubic-bezier(.36,.07,.19,.97) 1}
+  @keyframes shake{
+    0%,100%{transform:translateX(0)}
+    20%{transform:translateX(-4px) rotate(-1.5deg)}
+    45%{transform:translateX(4px) rotate(1.5deg)}
+    70%{transform:translateX(-2px)}
+  }
+  /* 提问指向的那张牌（揭晓时才亮，提问时绝不能提前标出来） */
+  .card.target .face{box-shadow:0 0 0 3px var(--gold),0 0 24px rgba(255,209,102,.55)}
+  /* 顺序任务里点在牌角上的序号 */
+  .card .ord{
+    position:absolute;top:calc(var(--cw,72px) * -.09);right:calc(var(--cw,72px) * -.09);
+    min-width:calc(var(--cw,72px) * .34);height:calc(var(--cw,72px) * .34);
+    border-radius:99px;background:var(--acc);color:#fff;font-weight:800;
+    font-size:calc(var(--cw,72px) * .21);line-height:1;
+    display:flex;align-items:center;justify-content:center;z-index:3;
+    border:2px solid #0f1115;box-shadow:0 2px 8px rgba(0,0,0,.5);
+  }
+
+  /* 舞台中央的「对 / 错」大字：只演 0.9 秒，pointer-events:none 不吃点击 */
+  #stamp{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.6);
+    font-size:clamp(26px,9vw,40px);font-weight:900;letter-spacing:3px;
+    padding:10px 22px;border-radius:16px;pointer-events:none;opacity:0;z-index:4;
+    background:rgba(10,13,18,.82);border:2px solid var(--ok);color:var(--ok);
+    text-shadow:0 2px 14px rgba(56,211,159,.5);
+    transition:opacity .16s,transform .22s cubic-bezier(.2,.9,.3,1.3);
+  }
+  #stamp.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  #stamp.bad{border-color:var(--bad);color:var(--bad);text-shadow:0 2px 14px rgba(255,123,114,.45)}
+
+  /* ---------------- 提问区 ---------------- */
+  #askWrap{flex:0 0 auto;margin-top:8px;min-height:86px;display:flex;flex-direction:column;
+           justify-content:center}
+  #askQ{font-size:13px;line-height:1.45;color:var(--txt);text-align:center;min-height:19px;
+        white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #askQ b{color:var(--gold);font-variant-numeric:tabular-nums}
+  #askQ.dim{color:var(--dim)}
+  #cd{height:4px;border-radius:99px;background:#0b0e14;border:1px solid var(--line);
+      overflow:hidden;margin:6px auto 0;width:100%;max-width:280px;opacity:0;
+      transition:opacity .18s}
+  #cd.on{opacity:1}
+  #cd i{display:block;height:100%;width:0;background:linear-gradient(90deg,#38d39f,#ffd166);
+        border-radius:99px}
+  #ask{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-top:8px}
+  #ask button{
+    font:inherit;font-size:15px;font-weight:650;line-height:1;
+    padding:13px 12px;border-radius:13px;border:1px solid var(--line);
+    background:var(--card2);color:var(--txt);min-width:64px;flex:0 1 auto;
+    font-variant-numeric:tabular-nums;transition:background .13s,border-color .13s,transform .1s;
+  }
+  #ask button:active{transform:scale(.95)}
+  #ask button.on{background:#22304a;border-color:#3d5a8f;color:#fff}
+  #ask button.ok{background:#1b4436;border-color:#3d8f6c;color:#5ff0b4}
+  #ask button.bad{background:#3a1f1f;border-color:rgba(255,123,114,.85);color:#ff9a92}
+  #ask button.ghost{background:transparent;color:var(--dim);font-size:13px;min-width:56px}
+  #ask .tip{font-size:12.5px;color:var(--dim);text-align:center;line-height:1.5;padding:6px 4px}
+
+  /* ---------------- 控制条 ---------------- */
+  #ctl{display:flex;gap:8px;flex:0 0 auto;margin:8px 0 0}
+  #ctl button{font:inherit;font-size:14px;padding:14px 0;border-radius:14px;
+              border:1px solid var(--line);background:var(--card);color:var(--txt)}
+  #ctl button:active{background:var(--card2);transform:scale(.98)}
+  #btnMain{flex:1 1 0;font-weight:650}
+  #btnMain.pri{background:#2b4a86;border-color:#3f66b0;color:#fff}
+  #btnSound{flex:0 0 auto;width:74px;font-size:13px}
+  #btnTop{flex:0 0 auto;width:74px;font-size:13px}
+
+  /* ---------------- 浮层 ---------------- */
+  .ov{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:20px;
+      background:rgba(8,10,14,0);backdrop-filter:blur(0px);z-index:8;
+      transition:background .42s ease, backdrop-filter .42s ease}
+  .ov.on{display:flex}
+  .ov.show{background:rgba(8,10,14,.8);backdrop-filter:blur(3px)}
+  .panel{width:100%;max-width:330px;background:var(--panel);border:1px solid var(--line);
+         border-radius:20px;padding:20px 18px 16px;text-align:center;
+         box-shadow:0 20px 50px rgba(0,0,0,.55);
+         opacity:0;transform:translateY(16px) scale(.93);
+         transition:opacity .38s cubic-bezier(.2,.9,.3,1.1), transform .38s cubic-bezier(.2,.9,.3,1.1)}
+  .ov.show .panel{opacity:1;transform:none}
+  .panel .crown{font-size:32px;line-height:1;margin-bottom:4px}
+  .panel h2{margin:0 0 8px;font-size:19px;letter-spacing:2px}
+  .panel .big{font-size:40px;font-weight:900;color:var(--ok);line-height:1.05;
+              letter-spacing:1px;font-variant-numeric:tabular-nums}
+  .panel .big small{font-size:14px;font-weight:700;color:var(--dim);margin-left:3px;letter-spacing:0}
+  .panel .sub{font-size:12.5px;color:var(--dim);margin-top:7px;line-height:1.55}
+  .panel .rec{color:var(--gold);font-size:12.5px;font-weight:650;margin:10px 0 14px;min-height:17px;
+              line-height:1.4}
+  .panel .rec.dim{color:var(--dim);font-weight:400}
+  .panel .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+  .panel button{font:inherit;font-size:13.5px;padding:11px 16px;border-radius:12px;
+                border:1px solid var(--line);background:var(--card2);color:var(--txt)}
+  .panel button.pri{background:#2b4a86;border-color:#3f66b0;color:#fff;font-weight:650}
+  .panel button:active{transform:scale(.97)}
+
+  /* 排行榜：每个难度一条最好成绩 */
+  #topOv .panel{max-width:340px;text-align:left}
+  #topOv h2,#topOv .sub{text-align:center}
+  #topList{display:flex;flex-direction:column;gap:5px;max-height:min(46vh,300px);
+           overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;
+           overscroll-behavior:contain}
+  .topRow{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;
+          padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.028);
+          border:1px solid transparent;min-height:40px;
+          font-variant-numeric:tabular-nums;line-height:1.25}
+  .topRow .nm{font-size:13.5px;font-weight:650;white-space:nowrap;overflow:hidden;
+              text-overflow:ellipsis}
+  .topRow .nm small{font-size:10.5px;font-weight:500;color:var(--dim);margin-left:5px}
+  .topRow .sc{font-size:16px;font-weight:800;color:var(--txt);white-space:nowrap;text-align:right}
+  .topRow .sc small{font-size:10.5px;font-weight:600;color:var(--dim);margin-left:2px}
+  .topRow.has{background:linear-gradient(90deg,rgba(255,209,102,.13),rgba(255,209,102,.03));
+              border-color:rgba(255,209,102,.3)}
+  .topRow.has .sc{color:var(--gold)}
+  .topRow.me{outline:2px solid rgba(91,140,255,.75);outline-offset:-2px;
+             background:linear-gradient(90deg,rgba(91,140,255,.22),rgba(91,140,255,.05))}
+  .topRow.me .nm{color:#bcd0ff}
+  .topEmpty{text-align:center;font-size:12.5px;color:var(--dim);padding:20px 8px;line-height:1.7}
+
+  #toast{position:fixed;left:50%;top:15%;transform:translateX(-50%);z-index:20;
+         background:rgba(22,26,34,.96);border:1px solid var(--line);color:var(--txt);
+         padding:10px 15px;border-radius:12px;font-size:13.5px;max-width:86%;text-align:center;
+         opacity:0;transition:opacity .2s;pointer-events:none;line-height:1.45}
+  #toast.on{opacity:1}
+
+  /* ---------------- 特效画布 ---------------- */
+  #fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:6}
+
+  /* 矮屏：把竖向空间尽量留给牌桌 */
+  @media (max-height:640px){
+    #modes{margin-top:6px}
+    #hud{margin-top:7px}
+    .st{padding:5px 8px}
+    #askWrap{min-height:74px;margin-top:6px}
+    #ask button{padding:11px 10px;font-size:14px}
+    #ctl button{padding:11px 0}
+    #stage{margin-top:4px;padding:4px 0}
+  }
+  @media (max-width:330px){
+    .top .ttl{font-size:13.5px}
+    #modes{gap:4px}
+    #modes button b{font-size:11px}
+    #modes button i{font-size:9px}
+    #ask button{font-size:14px;min-width:58px}
+  }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a class="back" href="../index.html">‹</a>
+  <div class="ttl">记忆扑克</div>
+  <div class="sp"></div>
+  <div class="chip" id="chipBest">最佳 --</div>
+</div>
+
+<div id="modes"></div>
+
+<div id="hud">
+  <div class="st"><span class="lb">轮次</span><b id="vRound">0/5</b></div>
+  <div class="st"><span class="lb">得分</span><b id="vScore">0</b></div>
+  <div class="st"><span class="lb">连击</span><b id="vCombo">×1</b></div>
+</div>
+
+<div class="bar"><i id="barFill"></i></div>
+
+<div id="stage">
+  <div id="board"></div>
+  <div id="stamp"></div>
+</div>
+
+<div id="askWrap">
+  <div id="askQ" class="dim">点「开始」抽牌，看清后作答</div>
+  <div id="cd"><i></i></div>
+  <div id="ask"></div>
+</div>
+
+<div id="ctl">
+  <button id="btnMain" class="pri">开始</button>
+  <button id="btnSound">🔊 音效</button>
+  <button id="btnTop">🏆 排行</button>
+</div>
+
+<canvas id="fx"></canvas>
+
+<!-- 结算 -->
+<div class="ov" id="doneOv">
+  <div class="panel">
+    <div class="crown" id="doneCrown">✅</div>
+    <h2 id="doneTitle">本局结束</h2>
+    <div class="big" id="doneScore">0<small>分</small></div>
+    <div class="sub" id="doneSub"></div>
+    <div class="rec" id="doneRec"></div>
+    <div class="row">
+      <button id="doneAgain" class="pri">再来一局</button>
+      <button id="doneTop">🏆 排行榜</button>
+    </div>
+    <div class="row">
+      <button id="doneClose">看看牌桌</button>
+    </div>
+  </div>
+</div>
+
+<!-- 排行榜 -->
+<div class="ov" id="topOv">
+  <div class="panel">
+    <h2>🏆 排行榜</h2>
+    <div class="sub" id="topSub">每个难度记一条最好成绩</div>
+    <div id="topList"></div>
+    <div class="row">
+      <button id="topPlay" class="pri">玩这个难度</button>
+      <button id="topClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function(){
+'use strict';
+
+/* =========================================================================
+   记忆扑克（Memory Poker）
+   -------------------------------------------------------------------------
+   牌在桌上一张张发出来，看清几秒 → 翻面（收牌）→ 回答一个问题。
+   练的是「工作记忆」：容量、对细节（花色/点数）的编码、以及顺序保持。
+
+   四个问题类型（task）：
+     red   —— 这几张里有几张是红色（红桃/方块）
+     suit  —— 从左到右第 N 张是什么花色
+     point —— 从左到右第 N 张是什么点数
+     order —— 按刚才从左到右的顺序，把它们依次点出来（牌会重新洗位，所以位置不是答案）
+
+   ⚠️ 三条设计约束（都是为了让「难」来自记忆，而不是来自看不清或来不及）：
+   1) 提问区高度固定、牌桌尺寸只跟牌数走 —— 阶段切换时牌**不会跳动**。
+      牌一挪，玩家眼睛刚锁定的位置就失效了，那考的是追视不是记忆。
+   2) 所有计时（看牌倒计时 / 收牌动画 / 揭晓）都由 rAF 的 step(dt) 驱动，
+      不用 setTimeout。切到后台标签页时定时器会被节流到几乎停摆，
+      而 step 会随 rAF 一起停 —— 于是「切出去接个电话」不会白白烧掉看牌时间。
+   3) 提问时绝不提前在盘面上标出「问的是哪张」。目标牌只在揭晓那一刻亮金框。
+   4) 提问阶段牌是**扣着的**（顺序题除外，它要的就是把牌点出来）。
+      所以问题必须是「扣着也能判」的 —— 早先有一版问「一共几张牌」，
+      牌明明摆在桌上、数一眼就知道，那考的是视力不是记忆，已经删掉了。
+   ========================================================================= */
+
+var LS_KEY = 'gmem_v1';
+
+/* 四个花色 / 十三个点数 */
+var SUITS = [
+  { sym:'\u2660', name:'黑桃', red:false },
+  { sym:'\u2665', name:'红桃', red:true  },
+  { sym:'\u2666', name:'方块', red:true  },
+  { sym:'\u2663', name:'梅花', red:false }
+];
+var RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+
+/* 难度档。
+   `show` 不给死数，按「每张牌 0.34 秒 + 起手 1.3 秒」推出来 —— 牌越多给的时间越长，
+   否则 9 张牌只给 2 秒，那不是考记忆，是考运气。 */
+var LEVELS = [
+  { id:0, name:'热身', cards:3, rounds:5, tasks:['red','suit','point','order'] },
+  { id:1, name:'进阶', cards:5, rounds:5, tasks:['red','suit','point','order'] },
+  { id:2, name:'高手', cards:7, rounds:5, tasks:['red','suit','point'] },
+  { id:3, name:'大师', cards:9, rounds:6, tasks:['red','suit','point'] }
+];
+function showTime(n){ return 1.3 + 0.34 * n; }
+
+var HIDE_T   = 0.52;   // 收牌动画时长（翻面 + 顺序任务还要洗位）
+var REVEAL_T = 1.9;    // 揭晓停留时长：要够玩家把「刚才那是什么」对上号
+var STAMP_T  = 0.9;    // 「对 / 错」大字停留
+var PANEL_T  = 1.3;    // 本局打完先庆祝一会儿再弹结算
+/* 提问阶段不设硬时限，但也不能永远卡着 —— 25 秒还没答就按「没想起来」处理并揭晓。
+   这不是惩罚设计，是防止一局死在原地（主按钮那时写着「⟲ 重来」，但玩家未必想按）。 */
+var ASK_LIMIT = 25;
+/* 「神速」判定阈值（秒）。判的是**提问阶段已经过去多久**（S.t），不是墙上时钟 ——
+   所以它由 step(dt) 驱动，切到后台标签页时不会白白流失。 */
+var FAST_T = 3.0;
+var CARD_RATIO = 0.7;  // 宽 / 高（扑克牌约 2:3）
+var COLS = { 1:1, 2:2, 3:3, 4:2, 5:3, 6:3, 7:3, 8:3, 9:3 };
+
+/* ---------------- 时钟（可被测试替换） ---------------- */
+var _defaultNow = (typeof performance !== 'undefined' && performance && typeof performance.now === 'function')
+  ? function(){ return performance.now(); }
+  : function(){ return Date.now(); };
+var _now = _defaultNow;
+var _defaultDate = function(){ return Date.now(); };
+var _dateNow = _defaultDate;
+function clock(){ return _now(); }
+
+/* ---------------- 小工具 ---------------- */
+function $(id){ return document.getElementById(id); }
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+function has(o,k){ return Object.prototype.hasOwnProperty.call(o,k); }
+function isArray(x){ return Object.prototype.toString.call(x) === '[object Array]'; }
+
+/* 可复现随机（测试 / 调试用）：同一个种子 → 同一副牌、同一个提问顺序 */
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------------- 状态 ---------------- */
+var S = {
+  level: 1,
+  phase: 'idle',     // idle | show | hide | ask | reveal | done
+  t: 0,              // 当前阶段已经过去多少秒
+  cards: [],         // [{id, rank, suit}]，数组顺序 = 桌上的显示顺序
+  els: [],           // 与 cards 同序的 DOM 元素（洗位后要跟着重排）
+  elById: {},        // card.id -> DOM 元素
+  task: 'count',
+  target: 0,         // suit / point 问的是第几张（显示顺序下标）
+  options: [],       // [{v, label}]
+  answer: null,      // 正确答案（count 是数字，suit 是花色符号，point 是点数）
+  picked: [],        // order 任务：已经点过的牌 id
+  order: [],         // order 任务：正确顺序（= 发牌时的 id 序列）
+
+  round: 0,
+  score: 0,
+  combo: 0,
+  maxCombo: 0,
+  right: 0,
+  wrong: 0,
+  perfect: true,
+
+  showT: 0,          // 本轮看牌时间
+  askAt: 0,          // 进入提问的相位时间（用来算「神速」加成）
+  reorderAt: -1,     // 收牌阶段何时洗位（-1 = 不洗）
+  reordered: false,
+  answered: false,
+  lastGain: 0,
+  lastOk: false,
+  lastPick: null,    // 玩家刚才选的选项（揭晓时标红/绿用）
+  fast: false,
+  bonus: 0,
+  newRecord: false,
+  stamp: null,       // {text, bad, until}
+  doneT: 0,
+  panelShown: false,
+  panelDue: false,
+  panelTimer: 0,
+  prevBest: null,
+  rank: 0,
+  topLevel: 0,
+
+  /* 布局算出来的数字，测试会读 */
+  cw: 0, ch: 0, gap: 0, cols: 3, rows: 1
+};
+
+var prog = { best:{}, sound:true, level:1 };
+
+function rnd(){ return S._rnd ? S._rnd() : Math.random(); }
+function rndInt(n){ return Math.floor(rnd() * n) % n; }
+function pick(arr){ return arr[rndInt(arr.length)]; }
+
+/* =========================================================================
+   存档：每个难度只记一条最好成绩
+   `prog.best[levelId] = {score, acc, at}` —— 结构简单到可以逐字段校验。
+   ========================================================================= */
+function cleanBest(e){
+  if(!e || typeof e !== 'object') return null;
+  var sc = e.score;
+  if(typeof sc !== 'number' || !isFinite(sc) || sc <= 0) return null;
+  var acc = (typeof e.acc === 'number' && isFinite(e.acc) && e.acc >= 0 && e.acc <= 1) ? e.acc : 0;
+  var at = (typeof e.at === 'number' && isFinite(e.at) && e.at > 0) ? Math.round(e.at) : 0;
+  return { score: Math.round(sc), acc: acc, at: at };
+}
+
+function loadProg(){
+  try{
+    var raw = localStorage.getItem(LS_KEY);
+    if(!raw) return;
+    var o = JSON.parse(raw);
+    if(!o || typeof o !== 'object') return;
+    if(o.best && typeof o.best === 'object'){
+      for(var k in o.best){
+        if(!has(o.best, k)) continue;
+        if(!(Number(k) >= 0 && Number(k) < LEVELS.length)) continue;   // 只认认识的难度
+        var e = cleanBest(o.best[k]);
+        if(e) prog.best[k] = e;
+      }
+    }
+    if(typeof o.sound === 'boolean') prog.sound = o.sound;
+    if(typeof o.level === 'number' && o.level >= 0 && o.level < LEVELS.length) prog.level = o.level;
+  }catch(e){}
+}
+function saveProg(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(prog)); }catch(e){}
+}
+function bestOf(lv){
+  var e = prog.best[String(lv)];
+  return (e && typeof e.score === 'number') ? e : null;
+}
+
+/* =========================================================================
+   音效
+   ========================================================================= */
+var ac = null;
+function actx(){
+  try{
+    if(!ac){
+      var C = window.AudioContext || window.webkitAudioContext;
+      if(!C) return null;
+      ac = new C();
+    }
+    if(ac.state === 'suspended' && ac.resume) ac.resume();
+    return ac;
+  }catch(e){ return null; }
+}
+function tone(freq, dur, type, vol, delay, slideTo){
+  var a = actx(); if(!a) return;
+  try{
+    var t0 = a.currentTime + (delay || 0);
+    var osc = a.createOscillator(), g = a.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    if(slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol || 0.08, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g); g.connect(a.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+  }catch(e){}
+}
+function noise(dur, vol, delay, hz){
+  var a = actx(); if(!a) return;
+  try{
+    var t0 = a.currentTime + (delay || 0);
+    var len = Math.max(1, Math.floor(a.sampleRate * dur));
+    var buf = a.createBuffer(1, len, a.sampleRate);
+    var d = buf.getChannelData(0);
+    for(var i=0;i<len;i++) d[i] = (Math.random()*2-1) * (1 - i/len);
+    var src = a.createBufferSource(); src.buffer = buf;
+    var f = a.createBiquadFilter(); f.type = 'bandpass';
+    f.frequency.setValueAtTime(hz || 2600, t0);
+    var g = a.createGain();
+    g.gain.setValueAtTime(vol || 0.05, t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(f); f.connect(g); g.connect(a.destination);
+    src.start(t0); src.stop(t0 + dur + 0.02);
+  }catch(e){}
+}
+function buzz(ms){ try{ if(prog.sound && navigator && navigator.vibrate) navigator.vibrate(ms||18); }catch(e){} }
+
+function snd(kind, arg){
+  if(!prog.sound) return;
+  if(kind === 'deal'){
+    /* 发牌：每张一个小木鱼声，音高随位置微微上扬 */
+    var k = arg || 0;
+    tone(760 + k*42, 0.045, 'triangle', 0.028, k*0.055);
+  } else if(kind === 'flip'){
+    noise(0.17, 0.045, 0, 1700);
+    tone(320, 0.16, 'sine', 0.03, 0, 170);
+  } else if(kind === 'tap'){
+    var s = Math.min(12, Math.max(0, (arg||1) - 1));
+    tone(523.25 * Math.pow(2, s/12), 0.07, 'sine', 0.06, 0);
+  } else if(kind === 'ok'){
+    /* 答对：连击越高，音越高 —— 连续答对时听觉上一直在往上爬 */
+    var c = Math.min(5, Math.max(1, arg || 1));
+    var base = 523.25 * Math.pow(2, (c-1)/12);
+    tone(base, 0.12, 'sine', 0.075, 0);
+    tone(base*1.5, 0.16, 'sine', 0.05, 0.05);
+    noise(0.09, 0.02, 0.02, 4200);
+  } else if(kind === 'bad'){
+    tone(190, 0.16, 'sawtooth', 0.055, 0, 96);
+    tone(96, 0.2, 'square', 0.03, 0.02);
+    noise(0.11, 0.022, 0, 900);
+  } else if(kind === 'round'){
+    var ns = [659.25, 783.99, 987.77];
+    for(var i=0;i<ns.length;i++) tone(ns[i], 0.14, 'sine', 0.06, i*0.06);
+  } else if(kind === 'win'){
+    var w = [523.25, 659.25, 783.99, 1046.5, 1318.5];
+    for(var j=0;j<w.length;j++) tone(w[j], 0.2, 'sine', 0.085, j*0.085);
+    tone(261.63, 0.55, 'triangle', 0.05, 0.02);
+    noise(0.5, 0.045, 0.34, 5200);
+  } else if(kind === 'rec'){
+    for(var m=0;m<5;m++) tone(1568 * Math.pow(2, m/12), 0.12, 'sine', 0.045, 0.36 + m*0.05);
+    noise(0.3, 0.032, 0.36, 6800);
+  } else if(kind === 'start'){
+    tone(784, 0.07, 'sine', 0.05, 0);
+    tone(1046, 0.09, 'sine', 0.04, 0.06);
+  }
+}
+
+/* =========================================================================
+   发牌
+   ========================================================================= */
+function buildDeck(){
+  var d = [];
+  for(var s=0;s<SUITS.length;s++)
+    for(var r=0;r<RANKS.length;r++)
+      d.push({ suit:s, rank:RANKS[r], rk:r });
+  return d;
+}
+
+/* 从 52 张里抽 n 张**互不相同**的牌，并按发牌顺序编号 id（0..n-1）。
+   id 就是「第几张发出来的」，顺序任务靠它判分。 */
+function deal(n){
+  var deck = buildDeck(), out = [];
+  for(var i=0;i<n;i++){
+    var j = i + rndInt(deck.length - i);
+    var t = deck[i]; deck[i] = deck[j]; deck[j] = t;
+    var c = deck[i];
+    out.push({ id:i, suit:c.suit, rank:c.rank, rk:c.rk });
+  }
+  return out;
+}
+
+/* 洗位：顺序任务用。必须保证「至少有一张换了位置」，
+   否则洗完还是原序，答案就等于「从左到右点一遍」，白送分。 */
+function reshuffle(arr){
+  if(arr.length < 2) return arr;
+  var a = arr.slice(), i, j, t, tries = 0;
+  do{
+    for(i=a.length-1;i>0;i--){
+      j = rndInt(i+1);
+      t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    tries++;
+    var same = true;
+    for(i=0;i<a.length;i++){ if(a[i].id !== arr[i].id){ same = false; break; } }
+    if(!same) return a;
+  }while(tries < 40);
+  /* 极端兜底：怎么洗都还是原序（几乎不可能），就手工换前两张 */
+  t = a[0]; a[0] = a[1]; a[1] = t;
+  return a;
+}
+
+/* =========================================================================
+   布局
+   -------------------------------------------------------------------------
+   牌宽 = min(按宽度排得下的宽, 按高度排得下的高 × 宽高比)。
+   牌数决定列数（COLS），行数 = ceil(n/cols)。牌桌尺寸只跟**本轮牌数**有关，
+   跟阶段无关 —— 阶段切换时牌不能跳，否则玩家刚锁定的位置就失效了。
+   ========================================================================= */
+function layout(){
+  var stage = $('stage'), board = $('board');
+  if(!stage || !board) return;
+  var L = LEVELS[S.level];
+  var n = S.cards.length || L.cards;
+  var cols = COLS[n] || 3;
+  var rows = Math.ceil(n / cols);
+
+  var aw = stage.clientWidth || 0, ah = stage.clientHeight || 0;
+  if(!(aw > 0)) aw = 320;
+  if(!(ah > 0)) ah = 220;
+  aw -= 16; ah -= 16;                    // 给牌桌内边距留一点，别让牌贴着边框
+  if(aw < 40) aw = 40;
+  if(ah < 40) ah = 40;
+
+  var gap = clamp(Math.round(Math.min(aw, ah) * 0.032), 6, 14);
+  var wByW = (aw - gap * (cols - 1)) / cols;
+  var hByH = (ah - gap * (rows - 1)) / rows;
+  var cw = Math.min(wByW, hByH * CARD_RATIO);
+  cw = Math.max(28, Math.floor(cw));
+  var ch = Math.floor(cw / CARD_RATIO);
+
+  S.cw = cw; S.ch = ch; S.gap = gap; S.cols = cols; S.rows = rows;
+
+  var bw = cols * cw + gap * (cols - 1);
+  var bh = rows * ch + gap * (rows - 1);
+  board.style.width = bw + 'px';
+  board.style.height = bh + 'px';
+  if(board.style.setProperty){
+    board.style.setProperty('--cw', cw + 'px');
+    board.style.setProperty('--ch', ch + 'px');
+    board.style.setProperty('--gap', gap + 'px');
+  } else {
+    board.style.gap = gap + 'px';
+  }
+}
+
+/* =========================================================================
+   渲染
+   ========================================================================= */
+var TAP_EVT = (typeof window !== 'undefined' && window && ('PointerEvent' in window)) ? 'pointerdown' : 'click';
+
+function mk(tag, cls, txt){
+  var el = document.createElement(tag);
+  if(cls) el.className = cls;
+  if(txt !== undefined && txt !== null) el.textContent = String(txt);
+  return el;
+}
+
+function buildCards(){
+  var board = $('board');
+  if(!board) return;
+  for(var k=board.children.length-1;k>=0;k--) board.removeChild(board.children[k]);
+  S.els = [];
+  S.elById = {};
+  for(var i=0;i<S.cards.length;i++){
+    var el = buildCard(S.cards[i], i);
+    S.els.push(el);
+    S.elById[S.cards[i].id] = el;
+    board.appendChild(el);
+  }
+}
+
+/* 洗位后把 DOM 重排成新的 cards 顺序。
+   用「已造好的元素重排」而不是重建：重建会重放 dealIn 入场动画，
+   洗位看起来就像「又发了一次牌」，而且旧元素上的 ok/bad/序号角标会丢。 */
+function reorderCards(){
+  var board = $('board');
+  if(!board) return;
+  for(var k=board.children.length-1;k>=0;k--) board.removeChild(board.children[k]);
+  S.els = [];
+  for(var i=0;i<S.cards.length;i++){
+    var el = S.elById[S.cards[i].id];
+    if(!el) continue;
+    el.dataset.idx = String(i);
+    if(el.style && el.style.setProperty) el.style.setProperty('--i', String(i));
+    S.els.push(el);
+    board.appendChild(el);
+  }
+}
+
+function buildCard(card, i){
+  var s = SUITS[card.suit];
+  var el = mk('div', 'card');
+  el.dataset.idx = String(i);
+  el.dataset.id = String(card.id);
+  el.dataset.rank = card.rank;
+  el.dataset.suit = s.sym;
+  if(el.style && el.style.setProperty) el.style.setProperty('--i', String(i));
+
+  var inner = mk('div', 'inner');
+
+  var face = mk('div', 'face' + (s.red ? ' red' : ''));
+  var pip = mk('span', 'pip', s.sym);
+  var tl = mk('span', 'cr tl');
+  tl.appendChild(mk('b', null, card.rank));
+  tl.appendChild(mk('i', null, s.sym));
+  var br = mk('span', 'cr br');
+  br.appendChild(mk('b', null, card.rank));
+  br.appendChild(mk('i', null, s.sym));
+  face.appendChild(pip); face.appendChild(tl); face.appendChild(br);
+
+  var back = mk('div', 'back');
+  back.appendChild(mk('span', null, '\u2756'));
+
+  inner.appendChild(face); inner.appendChild(back);
+  el.appendChild(inner);
+
+  if(el.addEventListener){
+    el.addEventListener(TAP_EVT, function(e){
+      if(e && e.preventDefault) e.preventDefault();
+      tapCard(i);
+    });
+  }
+  return el;
+}
+
+/* 牌桌上第 i 张牌的 DOM（顺序任务里 i 是**洗位后**的下标） */
+function cardEl(i){
+  return S.els[i] || null;
+}
+
+function setDown(el, down){
+  if(!el || !el.classList) return;
+  if(down) el.classList.add('down'); else el.classList.remove('down');
+}
+
+/* 把所有牌翻到某一面 */
+function flipAll(down){
+  for(var i=0;i<S.els.length;i++) setDown(S.els[i], down);
+}
+
+/* 只刷「状态类」，不动 DOM 结构（结构只在发牌 / 洗位时重建） */
+function paintCards(){
+  for(var i=0;i<S.els.length;i++){
+    var el = S.els[i];
+    if(!el || !el.classList) continue;
+    var id = S.cards[i] ? S.cards[i].id : -1;
+    el.classList.toggle('pick', S.picked.indexOf(id) >= 0);
+    /* 顺序任务里的序号角标：显示「这是第几个点的」 */
+    var wantOrd = 0;
+    for(var p=0;p<S.picked.length;p++) if(S.picked[p] === id) wantOrd = p + 1;
+    var badge = el.__ord || null;
+    if(wantOrd){
+      if(!badge){
+        badge = mk('div', 'ord', String(wantOrd));
+        el.appendChild(badge);
+        el.__ord = badge;
+      } else {
+        badge.textContent = String(wantOrd);
+      }
+    } else if(badge && badge.parentNode){
+      badge.parentNode.removeChild(badge);
+      el.__ord = null;
+    }
+  }
+}
+
+function paintHud(){
+  var L = LEVELS[S.level];
+  var r = $('vRound');
+  if(r) r.textContent = Math.min(S.round, L.rounds) + '/' + L.rounds;
+  var sc = $('vScore');
+  if(sc) sc.textContent = String(S.score);
+  var cb = $('vCombo');
+  if(cb){
+    var mult = Math.min(5, Math.max(1, S.combo));
+    cb.textContent = '×' + mult;
+    if(cb.classList) cb.classList.toggle('hot', S.combo >= 2);
+  }
+  var st = $('hud');
+  if(st && st.children && st.children[2] && st.children[2].classList)
+    st.children[2].classList.toggle('hot', S.combo >= 2);
+
+  var fill = $('barFill');
+  if(fill){
+    var pct = clamp(S.round / L.rounds, 0, 1) * 100;
+    fill.style.width = pct.toFixed(1) + '%';
+  }
+  var chip = $('chipBest');
+  if(chip){
+    var b = bestOf(S.level);
+    chip.textContent = '最佳 ' + (b ? b.score : '--');
+    chip.title = L.name + ' · ' + L.cards + ' 张牌';
+  }
+}
+
+function paintAsk(){
+  var q = $('askQ'), box = $('ask'), cd = $('cd');
+  var L = LEVELS[S.level];
+
+  /* 倒计时条只在看牌阶段出现 */
+  if(cd && cd.classList) cd.classList.toggle('on', S.phase === 'show');
+  if(cd && cd.children && cd.children[0]){
+    var left = (S.phase === 'show') ? clamp(1 - S.t / Math.max(0.01, S.showT), 0, 1) : 0;
+    cd.children[0].style.width = (left * 100).toFixed(1) + '%';
+  }
+
+  if(!q || !box) return;
+
+  if(S.phase === 'show'){
+    /* 每帧只改秒数，不重建节点（重建会让文字闪，也很浪费） */
+    var leftS = Math.max(0, S.showT - S.t);
+    if(!S.__cdEl){
+      q.className = '';
+      q.textContent = '记住这 ' + S.cards.length + ' 张牌 · ';
+      S.__cdEl = mk('b', null, leftS.toFixed(1) + 's');
+      q.appendChild(S.__cdEl);
+    }
+    if(S.__cdEl) S.__cdEl.textContent = leftS.toFixed(1) + 's';
+    return;
+  }
+  S.__cdEl = null;
+
+  for(var k=box.children.length-1;k>=0;k--) box.removeChild(box.children[k]);
+
+  if(S.phase === 'idle'){
+    q.className = 'dim';
+    q.textContent = '点「开始」抽 ' + L.cards + ' 张牌，看清后作答';
+    return;
+  }
+  if(S.phase === 'hide'){
+    q.className = 'dim';
+    q.textContent = (S.task === 'order') ? '收牌、洗位…' : '收牌…';
+    return;
+  }
+  if(S.phase === 'ask'){
+    q.className = '';
+    q.textContent = questionText();
+    if(S.task === 'order'){
+      var tip = mk('div', 'tip', '已点 ' + S.picked.length + ' / ' + S.cards.length + ' 张');
+      box.appendChild(tip);
+      if(S.picked.length){
+        var undo = mk('button', 'ghost', '清空重来');
+        undo.dataset.opt = 'clear';
+        if(undo.addEventListener) undo.addEventListener('click', function(){ clearPicks(); });
+        box.appendChild(undo);
+      }
+      return;
+    }
+    for(var i=0;i<S.options.length;i++){
+      (function(op){
+        var btn = mk('button', null, op.label);
+        btn.dataset.opt = String(op.v);
+        if(btn.addEventListener) btn.addEventListener('click', function(){ answer(op.v); });
+        box.appendChild(btn);
+      })(S.options[i]);
+    }
+    return;
+  }
+  if(S.phase === 'reveal'){
+    q.className = S.lastOk ? '' : 'dim';
+    q.textContent = revealText();
+    /* 把玩家刚才选的那一项标出来：对了标绿、错了标红，同时正确答案永远标绿。
+       只靠揭晓牌面不够 —— 「我选的是哪个」和「正确的是哪个」要能一眼对上。 */
+    if(S.task !== 'order' && S.lastPick !== undefined && S.lastPick !== null){
+      for(var r=0;r<S.options.length;r++){
+        var op2 = S.options[r];
+        var btn2 = mk('button', null, op2.label);
+        var isAns = (typeof S.answer === 'number') ? (op2.v === S.answer) : (String(op2.v) === String(S.answer));
+        var isPick = (typeof S.lastPick === 'number') ? (op2.v === S.lastPick) : (String(op2.v) === String(S.lastPick));
+        if(isAns) btn2.className = 'ok';
+        else if(isPick) btn2.className = 'bad';
+        box.appendChild(btn2);
+      }
+    }
+    return;
+  }
+  if(S.phase === 'done'){
+    q.className = 'dim';
+    q.textContent = '本局结束 · 共 ' + S.right + ' 对 ' + S.wrong + ' 错';
+    return;
+  }
+}
+
+function questionText(){
+  var n = S.cards.length;
+  if(S.task === 'red') return '这几张里有几张是红色（红桃 / 方块）？';
+  if(S.task === 'order') return '按刚才从左到右的顺序，依次点出这 ' + n + ' 张';
+  var pos = S.target + 1;
+  if(S.task === 'suit')  return '从左到右第 ' + pos + ' 张是什么花色？';
+  return '从左到右第 ' + pos + ' 张是什么点数？';
+}
+
+function revealText(){
+  var gain = S.lastGain;
+  if(S.lastOk){
+    return (gain > 0 ? '+' + gain + ' 分' : '答对了') + (S.fast ? ' · 神速' : '') +
+           '（连击 ' + Math.min(5, Math.max(1, S.combo)) + '）';
+  }
+  var truth = '';
+  if(S.task === 'red') truth = '是 ' + redCount() + ' 张红色';
+  else if(S.task === 'order') truth = '顺序是 ' + S.order.map(function(id){
+      var c = cardById(id);
+      return c ? SUITS[c.suit].sym + c.rank : '?';
+    }).join(' ');
+  else {
+    var c = S.cards[S.target];
+    if(c) truth = '是 ' + SUITS[c.suit].sym + ' ' + SUITS[c.suit].name + ' ' + c.rank;
+  }
+  return '答错了 · ' + truth;
+}
+
+function paint(){
+  paintHud();
+  paintAsk();
+  paintCards();
+  paintStamp();
+  paintMainBtn();
+}
+
+function paintMainBtn(){
+  var b = $('btnMain');
+  if(!b) return;
+  if(S.phase === 'idle'){ b.textContent = '开始'; }
+  else if(S.phase === 'done'){ b.textContent = '再来一局'; }
+  else { b.textContent = '⟲ 重来'; }
+  if(b.classList) b.classList.toggle('pri', S.phase === 'idle' || S.phase === 'done');
+}
+
+/* 「对 / 错」大字。⚠️ 它和别的演出一样是**带截止时间的状态**，
+   过期由 step() 摘掉；setTimeout 只是让它在空闲时也及时消失。 */
+function showStamp(text, bad){
+  S.stamp = { text: text, bad: !!bad, until: clock() + STAMP_T * 1000 };
+  paintStamp();
+  if(S.__stampT) clearTimeout(S.__stampT);
+  S.__stampT = setTimeout(function(){ if(S.stamp) paintStamp(); }, STAMP_T * 1000 + 40);
+}
+function paintStamp(){
+  var el = $('stamp');
+  if(!el || !el.classList) return;
+  var live = !!(S.stamp && clock() < S.stamp.until);
+  if(!live){ S.stamp = null; el.classList.remove('on'); return; }
+  el.textContent = S.stamp.text;
+  el.classList.add('on');
+  if(S.stamp.bad) el.classList.add('bad'); else el.classList.remove('bad');
+}
+
+/* =========================================================================
+   玩法
+   ========================================================================= */
+function newGame(level, seed){
+  if(typeof level === 'number' && level >= 0 && level < LEVELS.length) S.level = level;
+  prog.level = S.level;
+  saveProg();
+  S._rnd = (seed === null || seed === undefined) ? null : mulberry32(seed);
+  S.phase = 'idle';
+  S.t = 0;
+  /* idle 也先摆一手扣着的牌：空牌桌看着像「还没加载出来」，
+     摆上牌之后「点开始」这件事才有具体的指向（而且能看到这一档有多少张）。 */
+  S.cards = deal(LEVELS[S.level].cards);
+  S.order = S.cards.map(function(c){ return c.id; });
+  S.round = 0;
+  S.score = 0;
+  S.combo = 0;
+  S.maxCombo = 0;
+  S.right = 0;
+  S.wrong = 0;
+  S.perfect = true;
+  S.picked = [];
+  S.options = [];
+  S.stamp = null;
+  S.lastPick = null;
+  S.doneT = 0;
+  S.panelShown = false;
+  S.panelDue = false;
+  S.answered = false;
+  S.newRecord = false;
+  S.bonus = 0;
+  S.__cdEl = null;
+  S.els = [];
+  S.elById = {};
+  if(S.panelTimer){ clearTimeout(S.panelTimer); S.panelTimer = 0; }
+  hideDone();
+  clearFx();
+  buildCards();
+  flipAll(true);          // idle 的牌是扣着的
+  layout();
+  renderModes();
+  paint();
+}
+
+/* 开一局（从 idle / done 进入第一轮） */
+function startGame(){
+  S.round = 0;
+  S.score = 0;
+  S.combo = 0;
+  S.maxCombo = 0;
+  S.right = 0;
+  S.wrong = 0;
+  S.perfect = true;
+  S.panelShown = false;
+  S.panelDue = false;
+  hideDone();
+  snd('start');
+  newRound();
+}
+
+function newRound(){
+  var L = LEVELS[S.level];
+  S.round++;
+  S.cards = deal(L.cards);
+  S.order = S.cards.map(function(c){ return c.id; });   // 发牌顺序 = 正确答案
+  S.task = pick(L.tasks);
+  S.target = rndInt(S.cards.length);
+  S.picked = [];
+  S.options = [];
+  S.answered = false;
+  S.fast = false;
+  S.lastGain = 0;
+  S.lastOk = false;
+  S.lastPick = null;
+  S.stamp = null;
+  S.__cdEl = null;
+  S.reorderAt = -1;
+  S.reordered = false;
+  S.showT = showTime(S.cards.length);
+  S.t = 0;
+  S.phase = 'show';
+
+  buildCards();
+  layout();
+  paint();
+  for(var i=0;i<S.cards.length;i++) snd('deal', i);
+}
+
+function enterHide(){
+  S.phase = 'hide';
+  S.t = 0;
+  S.reorderAt = (S.task === 'order') ? 0.34 : -1;   // 翻面过半后再洗位，玩家看不到牌在动
+  S.reordered = false;
+  flipAll(true);
+  snd('flip');
+  paint();
+}
+
+/* 顺序任务的洗位：必须在牌**已经翻过去之后**才做，
+   否则玩家眼睛跟着牌走，位置记忆被换掉的那一刻就作废了（那反而更难猜、更不像记忆游戏）。
+   走 step() 而不是 setTimeout：无头测试里能确定性地推进到这一步。 */
+function doReorder(){
+  if(S.reordered) return;
+  S.reordered = true;
+  S.cards = reshuffle(S.cards);
+  reorderCards();
+  layout();
+}
+
+function enterAsk(){
+  S.phase = 'ask';
+  S.t = 0;
+  S.askAt = 0;
+  S.answered = false;
+  S.picked = [];
+  if(S.task === 'order') flipAll(false);
+  else flipAll(true);
+  buildOptions();
+  paint();
+}
+
+/* 牌 id → 牌对象（顺序任务的答案存的是 id，因为洗位会改数组顺序） */
+function cardById(id){
+  for(var i=0;i<S.cards.length;i++) if(S.cards[i].id === id) return S.cards[i];
+  return null;
+}
+
+function redCount(){
+  var n = 0;
+  for(var i=0;i<S.cards.length;i++) if(SUITS[S.cards[i].suit].red) n++;
+  return n;
+}
+
+function buildOptions(){
+  var n = S.cards.length, i, opts = [];
+  if(S.task === 'red'){
+    S.answer = redCount();
+    /* 干扰项从「0 ~ 牌数」里挑，且不能和正确答案重复。
+       ⚠️ 不用「答案 ±1 ±2」硬套：3 张牌里红牌 3 张时，答案 +1 就是 4（超过牌数），
+       那选项本身就把答案的范围泄露了。 */
+    var pool = [S.answer], cand = [];
+    for(i=0;i<=n;i++) if(i !== S.answer) cand.push(i);
+    shuffleInPlace(cand);
+    for(i=0;i<cand.length && pool.length<4;i++) pool.push(cand[i]);
+    while(pool.length < 4){
+      var extra = rndInt(n + 1);
+      if(pool.indexOf(extra) < 0) pool.push(extra);
+    }
+    shuffleInPlace(pool);
+    for(i=0;i<pool.length;i++) opts.push({ v: pool[i], label: pool[i] + ' 张' });
+  } else if(S.task === 'suit'){
+    var c = S.cards[S.target];
+    S.answer = SUITS[c.suit].sym;
+    var all = [];
+    for(i=0;i<SUITS.length;i++) all.push({ v: SUITS[i].sym, label: SUITS[i].sym + ' ' + SUITS[i].name });
+    shuffleInPlace(all);
+    opts = all;
+  } else {
+    var t = S.cards[S.target];
+    S.answer = t.rank;
+    var have = [], used = [t.rank];
+    for(i=0;i<S.cards.length;i++){
+      var rk = S.cards[i].rank;
+      if(used.indexOf(rk) < 0){ used.push(rk); have.push(rk); }
+    }
+    shuffleInPlace(have);
+    var out = [t.rank];
+    for(i=0;i<have.length && out.length<4;i++) out.push(have[i]);
+    while(out.length < 4){
+      var rr = RANKS[rndInt(RANKS.length)];
+      if(out.indexOf(rr) < 0) out.push(rr);
+    }
+    shuffleInPlace(out);
+    for(i=0;i<out.length;i++) opts.push({ v: out[i], label: out[i] });
+  }
+  S.options = opts;
+}
+
+function shuffleInPlace(a){
+  for(var i=a.length-1;i>0;i--){
+    var j = rndInt(i+1), t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+/* 点一张牌（顺序任务用；别的阶段一律忽略 —— 防止看牌时误点） */
+function tapCard(i){
+  if(S.phase !== 'ask') return 'ignore';
+  if(S.task !== 'order') return 'ignore';
+  var card = S.cards[i];
+  if(!card) return 'ignore';
+  if(S.picked.indexOf(card.id) >= 0) return 'ignore';
+  S.picked.push(card.id);
+  snd('tap', S.picked.length);
+  paint();
+  if(S.picked.length >= S.cards.length) return judgeOrder();
+  return 'pick';
+}
+
+function clearPicks(){
+  if(S.phase !== 'ask' || S.task !== 'order') return;
+  S.picked = [];
+  paint();
+}
+
+/* 选项作答（red / suit / point） */
+function answer(v){
+  if(S.phase !== 'ask' || S.answered) return 'ignore';
+  if(S.task === 'order') return 'ignore';
+  S.answered = true;
+  S.lastPick = v;
+  var ok = (typeof v === 'number') ? (v === S.answer) : (String(v) === String(S.answer));
+  return judge(ok);
+}
+
+function judgeOrder(){
+  if(S.phase !== 'ask' || S.answered) return 'ignore';
+  S.answered = true;
+  var ok = S.picked.length === S.order.length;
+  for(var i=0;ok && i<S.order.length;i++) if(S.picked[i] !== S.order[i]) ok = false;
+  return judge(ok);
+}
+
+function judge(ok){
+  var n = S.cards.length;
+  var base = 60 + 30 * (n - 3);                 // 3 张 60 → 9 张 240
+  S.fast = (S.t <= FAST_T);                     // 提问阶段 3 秒内作答算「神速」
+  if(ok){
+    S.combo++;
+    if(S.combo > S.maxCombo) S.maxCombo = S.combo;
+    S.right++;
+    var mult = Math.min(5, Math.max(1, S.combo));
+    S.lastGain = Math.round(base * mult * (S.fast ? 1.4 : 1));
+    S.score += S.lastGain;
+    S.lastOk = true;
+    showStamp('✓ 正确', false);
+    snd('ok', S.combo);
+    buzz(14);
+  } else {
+    S.combo = 0;
+    S.wrong++;
+    S.perfect = false;
+    S.lastGain = 0;
+    S.lastOk = false;
+    showStamp('✗ 错了', true);
+    snd('bad');
+    buzz([12, 40, 22]);
+  }
+  S.phase = 'reveal';
+  S.t = 0;
+  S.answered = true;
+  S.__cdEl = null;
+  revealAnswer();
+  paint();
+  return ok ? 'ok' : 'bad';
+}
+/* 揭晓：全部翻开、目标牌亮金框、答错的那一下抖一抖。
+   ⚠️ 目标牌的标记**只能在这里加**。提问阶段就把它标出来，等于直接把答案递过去。 */
+function revealAnswer(){
+  flipAll(false);
+  var i, el;
+  for(i=0;i<S.els.length;i++){
+    el = S.els[i];
+    if(!el || !el.classList) continue;
+    el.classList.remove('ok'); el.classList.remove('bad'); el.classList.remove('target');
+  }
+  if(S.task === 'order'){
+    /* 顺序：按正确顺序在牌角标出 1,2,3…，玩家能直接对照自己点错在哪一步 */
+    for(var p=0;p<S.order.length;p++){
+      el = S.elById[S.order[p]];
+      if(el && el.classList) el.classList.add('ok');
+      setOrd(el, p + 1);
+    }
+  } else if(S.task === 'red'){
+    /* 红色题：把红的几张亮出来，玩家一眼就能数 —— 不然「我到底数错了还是记错了」分不清 */
+    for(i=0;i<S.cards.length;i++){
+      if(SUITS[S.cards[i].suit].red && S.els[i] && S.els[i].classList)
+        S.els[i].classList.add('target');
+    }
+  } else {
+    el = S.els[S.target];
+    if(el && el.classList) el.classList.add('target');
+    /* 答错时让目标牌抖一下：视线立刻被引到「你问的是这一张」 */
+    if(!S.lastOk && el && el.classList) el.classList.add('bad');
+  }
+}
+
+/* 角标只在「顺序任务的揭晓」用，和玩家点选时的蓝色序号是同一个视觉元素 */
+function setOrd(el, n){
+  if(!el) return;
+  if(!n){
+    if(el.__ord && el.__ord.parentNode) el.__ord.parentNode.removeChild(el.__ord);
+    el.__ord = null;
+    return;
+  }
+  if(!el.__ord){
+    el.__ord = mk('div', 'ord', String(n));
+    el.appendChild(el.__ord);
+  } else {
+    el.__ord.textContent = String(n);
+  }
+}
+
+function nextRound(){
+  var L = LEVELS[S.level];
+  if(S.round >= L.rounds) return endGame();
+  if(S.wrong === 0) snd('round');
+  newRound();
+}
+
+function endGame(){
+  S.phase = 'done';
+  S.t = 0;
+  S.doneT = 0;
+  var bonus = 0;
+  if(S.perfect){ bonus = 150 * (S.level + 1); S.score += bonus; }
+  S.bonus = bonus;
+
+  var key = String(S.level);
+  var prev = bestOf(S.level);
+  S.prevBest = prev ? prev.score : null;
+  var acc = (S.right + S.wrong) ? S.right / (S.right + S.wrong) : 0;
+  if(!prev || S.score > prev.score){
+    prog.best[key] = { score: S.score, acc: acc, at: _dateNow() };
+    S.rank = 1;
+    S.newRecord = true;
+    saveProg();
+  } else {
+    S.rank = 0;
+    S.newRecord = false;
+  }
+
+  paint();
+  snd('win');
+  if(S.newRecord) snd('rec');
+  burst();
+  S.panelDue = true;
+  if(S.panelTimer) clearTimeout(S.panelTimer);
+  S.panelTimer = setTimeout(showDone, Math.round(PANEL_T * 1000));
+  return 'done';
+}
+
+/* =========================================================================
+   结算 / 排行榜
+   ========================================================================= */
+function showDone(){
+  if(S.panelShown) return;
+  S.panelShown = true;
+  S.panelDue = false;
+  if(S.panelTimer){ clearTimeout(S.panelTimer); S.panelTimer = 0; }
+  var L = LEVELS[S.level];
+  var sc = $('doneScore');
+  if(sc){
+    sc.textContent = String(S.score);
+    sc.appendChild(mk('small', null, '分'));
+  }
+  var t = $('doneTitle');
+  if(t) t.textContent = L.name + ' · ' + L.cards + ' 张牌';
+  var sub = $('doneSub');
+  if(sub){
+    var total = S.right + S.wrong;
+    var txt = '答对 ' + S.right + ' / ' + total + ' · 最高连击 ' + S.maxCombo;
+    if(S.bonus) txt += ' · 全对奖励 +' + S.bonus;
+    sub.textContent = txt;
+  }
+  var rec = $('doneRec');
+  if(rec){
+    if(S.newRecord){
+      rec.className = 'rec';
+      rec.textContent = (S.prevBest === null)
+        ? '首个成绩已记录 🏆'
+        : '新纪录！比原来高 ' + (S.score - S.prevBest) + ' 分 🏆';
+    } else {
+      rec.className = 'rec dim';
+      rec.textContent = '最佳 ' + (S.prevBest || 0) + ' 分 · 差 ' + (S.score - (S.prevBest || 0)) + ' 分';
+    }
+  }
+  var crown = $('doneCrown');
+  if(crown) crown.textContent = S.newRecord ? '🏆' : '✅';
+  show('doneOv');
+}
+
+function hideDone(){
+  S.panelShown = false;
+  if(S.panelTimer){ clearTimeout(S.panelTimer); S.panelTimer = 0; }
+  var ov = $('doneOv');
+  if(ov && ov.classList){ ov.classList.remove('show'); ov.classList.remove('on'); }
+}
+
+function openTop(lv){
+  S.topLevel = (typeof lv === 'number') ? lv : S.level;
+  var list = $('topList');
+  var any = false;
+  if(list){
+    for(var k=list.children.length-1;k>=0;k--) list.removeChild(list.children[k]);
+    for(var i=0;i<LEVELS.length;i++){
+      var L = LEVELS[i], b = bestOf(i);
+      if(b) any = true;
+      var row = mk('div', 'topRow');
+      if(b) row.classList.add('has');
+      if(i === S.topLevel) row.classList.add('me');
+      var nm = mk('div', 'nm', L.name);
+      nm.appendChild(mk('small', null, L.cards + ' 张 · ' + L.rounds + ' 轮'));
+      var sc = mk('div', 'sc');
+      if(b){
+        sc.appendChild(document.createTextNode(String(b.score)));
+        sc.appendChild(mk('small', null, '分'));
+      } else {
+        sc.appendChild(document.createTextNode('--'));
+      }
+      row.appendChild(nm); row.appendChild(sc);
+      list.appendChild(row);
+    }
+  }
+  var sub = $('topSub');
+  if(sub){
+    /* 一条成绩都没有时，提示写在标题下面，**不要**再往列表里塞一行 ——
+       列表高度是按「4 行」配的，多塞一行就会撑出滚动条，
+       而这里本来一屏放得下 4 行（320×568 实测过）。 */
+    sub.textContent = any
+      ? '每个难度记一条最好成绩 · 全对还有额外奖励'
+      : '还没有任何成绩 —— 点下面的按钮打一局，成绩就会记在这里';
+  }
+  var tp = $('topPlay');
+  if(tp) tp.textContent = '玩「' + LEVELS[S.topLevel].name + '」';
+  show('topOv');
+}
+function hideTop(){
+  var ov = $('topOv');
+  if(ov && ov.classList){ ov.classList.remove('show'); ov.classList.remove('on'); }
+}
+
+/* =========================================================================
+   浮层小工具
+   ⚠️ 和舒尔特方格同一处坑：加 .show 不能等 rAF —— 本作的演出本来就是 rAF 驱动的，
+   一旦 rAF 被节流（后台标签页 / 省电模式 / 无头截图），就会「状态到了、面板却一直透明」。
+   所以用 setTimeout(20) 让样式先落地一帧。
+   ========================================================================= */
+function show(id){
+  var e = $(id);
+  if(!e || !e.classList) return;
+  e.classList.add('on');
+  if(typeof setTimeout === 'function'){
+    setTimeout(function(){ if(e.classList) e.classList.add('show'); }, 20);
+  } else {
+    e.classList.add('show');
+  }
+}
+function hide(id){
+  var e = $(id);
+  if(!e || !e.classList) return;
+  e.classList.remove('show');
+  e.classList.remove('on');
+}
+
+var toastTimer = null;
+function toast(msg){
+  var el = $('toast');
+  if(!el) return;
+  el.textContent = msg;
+  el.classList.add('on');
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ el.classList.remove('on'); }, 1600);
+}
+
+/* =========================================================================
+   撒花（canvas）
+   ========================================================================= */
+var FX = { parts:[], rings:[], active:false, w:0, h:0, dpr:1 };
+var FX_COLORS = ['#ffd166','#4ee2ad','#5b8cff','#ff8f86','#c9a0ff','#ffffff'];
+
+function fxCanvas(){ return $('fx'); }
+function fxSize(){
+  var cv = fxCanvas();
+  if(!cv) return false;
+  var w = (typeof window !== 'undefined' && window.innerWidth) || 360;
+  var h = (typeof window !== 'undefined' && window.innerHeight) || 640;
+  var dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+  FX.w = w; FX.h = h; FX.dpr = dpr;
+  cv.width = Math.round(w*dpr);
+  cv.height = Math.round(h*dpr);
+  if(cv.style){ cv.style.width = w + 'px'; cv.style.height = h + 'px'; }
+  return true;
+}
+
+function burst(){
+  var cv = fxCanvas();
+  if(!cv) return 0;
+  fxSize();
+  var cx = FX.w/2, cy = FX.h/2;
+  var board = $('board');
+  if(board && board.getBoundingClientRect){
+    var r = board.getBoundingClientRect();
+    if(r && r.width > 0 && isFinite(r.left) && isFinite(r.top)){
+      cx = r.left + r.width/2;
+      cy = r.top + r.height/2;
+    }
+  }
+  var n = 0;
+  for(var i=0;i<120;i++){
+    var a = Math.random()*Math.PI*2;
+    var sp = 90 + Math.random()*400;
+    FX.parts.push({
+      x: cx, y: cy,
+      vx: Math.cos(a)*sp,
+      vy: Math.sin(a)*sp - 120,
+      g: 520 + Math.random()*280,
+      w: 4 + Math.random()*6,
+      h: 6 + Math.random()*9,
+      rot: Math.random()*6.283,
+      vr: (Math.random()-0.5)*15,
+      c: FX_COLORS[(Math.random()*FX_COLORS.length)|0],
+      life: 1.1 + Math.random()*1.1,
+      drag: 0.982
+    });
+    n++;
+  }
+  for(var k=0;k<3;k++){
+    FX.rings.push({ x:cx, y:cy, r: 8 + k*10, vr: 420 - k*70, life: 0.75, max: 0.75,
+                    c: k===0 ? '#ffffff' : (k===1 ? '#ffd166' : '#4ee2ad') });
+  }
+  FX.active = true;
+  drawFx();
+  return n;
+}
+
+function clearFx(){
+  FX.parts.length = 0;
+  FX.rings.length = 0;
+  FX.active = false;
+  var cv = fxCanvas();
+  if(!cv) return;
+  var ctx = cv.getContext && cv.getContext('2d');
+  if(ctx && FX.w > 0) ctx.clearRect(0, 0, FX.w, FX.h);
+}
+
+function stepFx(dt){
+  var i, p;
+  for(i=FX.parts.length-1;i>=0;i--){
+    p = FX.parts[i];
+    var k = Math.pow(p.drag, dt*60);
+    p.vx *= k;
+    p.vy = p.vy*k + p.g*dt;
+    p.x += p.vx*dt;
+    p.y += p.vy*dt;
+    p.rot += p.vr*dt;
+    p.life -= dt;
+    if(p.life <= 0 || p.y > FX.h + 80) FX.parts.splice(i, 1);
+  }
+  for(i=FX.rings.length-1;i>=0;i--){
+    var g = FX.rings[i];
+    g.r += g.vr*dt;
+    g.life -= dt;
+    if(g.life <= 0) FX.rings.splice(i, 1);
+  }
+  FX.active = FX.parts.length > 0 || FX.rings.length > 0;
+}
+
+function drawFx(){
+  var cv = fxCanvas();
+  if(!cv) return;
+  var ctx = cv.__ctx || (cv.__ctx = (cv.getContext ? cv.getContext('2d') : null));
+  if(!ctx) return;
+  if(!FX.active){
+    if(ctx.setTransform) ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0, 0, cv.width || FX.w, cv.height || FX.h);
+    return;
+  }
+  if(ctx.setTransform) ctx.setTransform(FX.dpr, 0, 0, FX.dpr, 0, 0);
+  ctx.clearRect(0, 0, FX.w, FX.h);
+  for(var i=0;i<FX.rings.length;i++){
+    var g = FX.rings[i];
+    var a = Math.max(0, g.life / g.max);
+    ctx.globalAlpha = a * 0.7;
+    ctx.strokeStyle = g.c;
+    ctx.lineWidth = 2 + 6*a;
+    ctx.beginPath();
+    if(ctx.arc) ctx.arc(g.x, g.y, g.r, 0, Math.PI*2);
+    ctx.stroke();
+  }
+  for(var j=0;j<FX.parts.length;j++){
+    var p = FX.parts[j];
+    var al = Math.max(0, Math.min(1, p.life / 0.6));
+    ctx.globalAlpha = al;
+    ctx.fillStyle = p.c;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot);
+    ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* =========================================================================
+   主循环
+   ========================================================================= */
+function step(dt){
+  if(!(dt > 0)) dt = 0;
+  if(dt > 0.12) dt = 0.12;         // 掉帧时不要一步跨过整个阶段
+  S.t += dt;
+
+  if(S.phase === 'show'){
+    if(S.t >= S.showT) enterHide();
+    else paintAsk();               // 只有倒计时需要每帧刷
+  } else if(S.phase === 'hide'){
+    if(S.reorderAt >= 0 && !S.reordered && S.t >= S.reorderAt) doReorder();
+    if(S.t >= HIDE_T) enterAsk();
+  } else if(S.phase === 'ask'){
+    /* 提问阶段只记时间（算神速加成用），不刷 DOM。
+       25 秒还没答就当作「没想起来」—— 揭晓答案并计入一次答错。 */
+    if(S.t >= ASK_LIMIT && !S.answered){
+      S.answered = true;
+      judge(false);
+    }
+  } else if(S.phase === 'reveal'){
+    if(S.t >= REVEAL_T) nextRound();
+  } else if(S.phase === 'done'){
+    S.doneT += dt;
+    if(S.panelDue && S.doneT >= PANEL_T) showDone();
+  }
+
+  if(S.stamp && clock() >= S.stamp.until) paintStamp();
+  if(FX.active){ stepFx(dt); drawFx(); }
+}
+
+function startLoop(){
+  if(typeof requestAnimationFrame !== 'function') return;
+  var last = 0;
+  function frame(t){
+    var dt = last ? (t - last)/1000 : 0;
+    last = t;
+    try{ step(dt); }catch(e){}
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* =========================================================================
+   DOM 绑定
+   ========================================================================= */
+function renderModes(){
+  var box = $('modes');
+  if(!box) return;
+  for(var k=box.children.length-1;k>=0;k--) box.removeChild(box.children[k]);
+  for(var i=0;i<LEVELS.length;i++){
+    (function(L){
+      var b = document.createElement('button');
+      var nm = mk('b', null, L.name);
+      var cnt = mk('i', null, L.cards + ' 张');
+      b.appendChild(nm); b.appendChild(cnt);
+      b.dataset.lv = String(L.id);
+      if(L.id === S.level) b.className = 'on';
+      if(b.addEventListener){
+        b.addEventListener('click', function(){
+          if(L.id === S.level && S.phase !== 'idle' && S.phase !== 'done') return;
+          newGame(L.id);
+          snd('start');
+        });
+      }
+      box.appendChild(b);
+    })(LEVELS[i]);
+  }
+}
+
+function bind(){
+  var main = $('btnMain');
+  if(main) main.addEventListener('click', function(){
+    if(S.phase === 'idle' || S.phase === 'done') startGame();
+    else { hideDone(); newGame(S.level); startGame(); }
+  });
+
+  var sb = $('btnSound');
+  if(sb) sb.addEventListener('click', function(){
+    prog.sound = !prog.sound;
+    saveProg();
+    sb.textContent = prog.sound ? '🔊 音效' : '🔇 静音';
+    if(prog.sound) snd('start');
+  });
+
+  var bt = $('btnTop');
+  if(bt) bt.addEventListener('click', function(){ openTop(S.level); snd('start'); });
+
+  var da = $('doneAgain');
+  if(da) da.addEventListener('click', function(){ hideDone(); newGame(S.level); startGame(); });
+
+  var dc = $('doneClose');
+  if(dc) dc.addEventListener('click', function(){ hideDone(); paint(); });
+
+  var dt = $('doneTop');
+  if(dt) dt.addEventListener('click', function(){ openTop(S.level); });
+
+  var ov = $('doneOv');
+  if(ov) ov.addEventListener('click', function(e){
+    if(e && e.target === ov){ hideDone(); paint(); }
+  });
+
+  var tc = $('topClose');
+  if(tc) tc.addEventListener('click', hideTop);
+  var tp = $('topPlay');
+  if(tp) tp.addEventListener('click', function(){
+    var lv = S.topLevel;
+    hideTop(); hideDone();
+    newGame(lv); startGame();
+  });
+  var tov = $('topOv');
+  if(tov) tov.addEventListener('click', function(e){
+    if(e && e.target === tov) hideTop();
+  });
+
+  if(typeof window !== 'undefined' && window.addEventListener){
+    window.addEventListener('resize', function(){ layout(); });
+    window.addEventListener('orientationchange', function(){ setTimeout(layout, 120); });
+  }
+}
+
+/* ---------------- 启动 ---------------- */
+function boot(){
+  loadProg();
+  S.level = (prog.level >= 0 && prog.level < LEVELS.length) ? prog.level : 1;
+  bind();
+  newGame(S.level);
+  var sb = $('btnSound');
+  if(sb) sb.textContent = prog.sound ? '🔊 音效' : '🔇 静音';
+  startLoop();
+}
+
+/* =========================================================================
+   测试钩子
+   ========================================================================= */
+window.__mem = function(){
+  return {
+    level: S.level, phase: S.phase, t: S.t, round: S.round,
+    score: S.score, combo: S.combo, maxCombo: S.maxCombo,
+    right: S.right, wrong: S.wrong, perfect: S.perfect, bonus: S.bonus || 0,
+    task: S.task, target: S.target, answer: S.answer,
+    options: S.options.map(function(o){ return { v: o.v, label: o.label }; }),
+    cards: S.cards.map(function(c){
+      return { id: c.id, suit: SUITS[c.suit].sym, suitName: SUITS[c.suit].name,
+               red: SUITS[c.suit].red, rank: c.rank };
+    }),
+    order: S.order.slice(), picked: S.picked.slice(),
+    showT: S.showT, lastGain: S.lastGain, lastOk: S.lastOk, fast: !!S.fast,
+    lastPick: S.lastPick,
+    panelShown: S.panelShown, panelDue: S.panelDue,
+    prevBest: S.prevBest, newRecord: !!S.newRecord, rank: S.rank,
+    topLevel: S.topLevel,
+    cw: S.cw, ch: S.ch, gap: S.gap, cols: S.cols, rows: S.rows,
+    best: JSON.parse(JSON.stringify(prog.best)),
+    sound: prog.sound
+  };
+};
+window.__memNewGame = function(lv, seed){ newGame(lv, seed); };
+window.__memStart = startGame;
+window.__memStep = step;
+window.__memTapCard = tapCard;
+window.__memAnswer = answer;
+window.__memClearPicks = clearPicks;
+window.__memLayout = layout;
+window.__memShowDone = showDone;
+window.__memHideDone = hideDone;
+window.__memOpenTop = openTop;
+window.__memHideTop = hideTop;
+window.__memSetClock = function(fn){ _now = (typeof fn === 'function') ? fn : _defaultNow; };
+window.__memSetDate = function(fn){ _dateNow = (typeof fn === 'function') ? fn : _defaultDate; };
+window.__memLevels = function(){
+  return LEVELS.map(function(L){
+    return { id:L.id, name:L.name, cards:L.cards, rounds:L.rounds,
+             tasks:L.tasks.slice(), show:+showTime(L.cards).toFixed(3) };
+  });
+};
+window.__memProg = function(){ return JSON.parse(JSON.stringify(prog)); };
+window.__memDeal = deal;
+window.__memReshuffle = reshuffle;
+window.__memFx = function(){ return { parts: FX.parts.length, rings: FX.rings.length, active: FX.active }; };
+window.__memBurst = burst;
+window.__memCards = function(){
+  var board = $('board');
+  if(!board || !board.children) return [];
+  var out = [];
+  for(var i=0;i<board.children.length;i++){
+    var el = board.children[i];
+    out.push({
+      idx: i,
+      id: parseInt(el.dataset && el.dataset.id, 10),
+      rank: el.dataset && el.dataset.rank,
+      suit: el.dataset && el.dataset.suit,
+      down: !!(el.classList && el.classList.contains('down')),
+      ok: !!(el.classList && el.classList.contains('ok')),
+      bad: !!(el.classList && el.classList.contains('bad')),
+      target: !!(el.classList && el.classList.contains('target')),
+      pick: !!(el.classList && el.classList.contains('pick')),
+      ord: el.__ord ? el.__ord.textContent : null,
+      cls: el.className || ''
+    });
+  }
+  return out;
+};
+window.__memAsk = function(){
+  var box = $('ask');
+  if(!box || !box.children) return [];
+  var out = [];
+  for(var i=0;i<box.children.length;i++){
+    var el = box.children[i];
+    out.push({ tag: el.tagName, text: el.textContent, opt: el.dataset ? el.dataset.opt : null,
+               cls: el.className || '' });
+  }
+  return out;
+};
+window.__memAskText = function(){ var q = $('askQ'); return q ? q.textContent : ''; };
+window.__memStamp = function(){ var e = $('stamp'); return e ? { text: e.textContent, on: !!(e.classList && e.classList.contains('on')) } : null; };
+window.__memTopRows = function(){
+  var list = $('topList');
+  if(!list || !list.children) return [];
+  var out = [];
+  for(var i=0;i<list.children.length;i++){
+    var el = list.children[i];
+    out.push({ text: el.textContent, cls: el.className || '' });
+  }
+  return out;
+};
+
+if(typeof document !== 'undefined' && document.getElementById) boot();
+
+})();
+</script>
+</body>
+</html>
