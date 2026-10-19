@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>记忆配对 · 小游戏盒子</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161a22; --card:#191d26; --card2:#232a37; --line:#2b3242;
+    --txt:#e8ecf3; --dim:#8b95a7; --acc:#5b8cff; --ok:#38d39f; --gold:#ffd166; --bad:#ff7b72;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{
+    background:radial-gradient(1100px 560px at 50% -12%,#1b2233 0%,var(--bg) 62%);
+    color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    display:flex;flex-direction:column;overflow:hidden;
+    user-select:none;-webkit-user-select:none;
+    padding:calc(env(safe-area-inset-top) + 6px) 12px calc(env(safe-area-inset-bottom) + 10px);
+  }
+
+  /* ---------------- 顶栏：只有图标 ---------------- */
+  .top{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+  .iconbtn{
+    font:inherit;font-size:18px;line-height:1;padding:8px 11px;border-radius:11px;
+    background:var(--card);border:1px solid var(--line);color:var(--txt);
+    text-decoration:none;display:inline-flex;align-items:center;justify-content:center;
+    min-width:42px;min-height:38px;
+  }
+  .iconbtn:active{background:var(--card2);transform:scale(.95)}
+  .top .sp{flex:1}
+  /* 中间那个纯装饰的牌图标：让顶栏不至于空得发慌，但不承担任何信息 */
+  .brand{font-size:20px;opacity:.55;letter-spacing:1px}
+
+  /* ---------------- 关卡：迷你网格字形 ----------------
+     不写「3×2」「简单」这类字，直接画出**你会得到的那张牌桌**长什么样。
+     点一下牌桌就变，规则靠交互自证。 */
+  #levels{display:flex;gap:6px;flex:0 0 auto;margin:8px 0 0}
+  #levels button{
+    flex:1 1 0;min-width:0;padding:7px 0;border-radius:11px;
+    border:1px solid var(--line);background:var(--card);color:var(--dim);
+    display:flex;align-items:center;justify-content:center;
+    transition:background .14s,border-color .14s,transform .1s;
+  }
+  #levels button:active{transform:scale(.95)}
+  #levels button.on{background:#22304a;border-color:#3d5a8f}
+  #levels button.on .dot{background:#9fc0ff;box-shadow:0 0 5px rgba(91,140,255,.75)}
+  .glyph{display:grid;gap:2px;justify-content:center}
+  .glyph .dot{width:4px;height:4px;border-radius:1px;background:#5c6678}
+
+  /* ---------------- 仪表：图标 + 数字 ---------------- */
+  #hud{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;flex:0 0 auto;margin:9px 0 0}
+  .st{background:var(--card);border:1px solid var(--line);border-radius:12px;
+      padding:6px 9px;min-width:0;overflow:hidden;
+      display:flex;align-items:center;gap:6px}
+  .st .ic{font-size:13px;line-height:1;flex:0 0 auto;opacity:.85}
+  .st b{display:block;font-size:clamp(14px,4.4vw,19px);font-weight:800;line-height:1.2;
+        font-variant-numeric:tabular-nums;letter-spacing:-.3px;white-space:nowrap;
+        overflow:hidden;text-overflow:ellipsis}
+  #vMoves{color:#bcd0ff}
+  #vTime{color:var(--txt)}
+  #vFound{color:var(--gold)}
+  .st.hot{border-color:rgba(255,209,102,.45);box-shadow:0 0 0 1px rgba(255,209,102,.16)}
+
+  /* ---------------- 牌桌 ---------------- */
+  #stage{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;
+         position:relative;padding:6px 0;margin-top:8px;
+         border-radius:16px;border:1px solid rgba(63,102,176,.18);
+         background:radial-gradient(120% 90% at 50% 0%,#182129 0%,#12171d 62%,#0e1216 100%);
+         box-shadow:inset 0 0 34px rgba(0,0,0,.55)}
+  /* 用 flex + 固定宽度换行，而不是 grid：
+     18 张排在 5 列里是 4 行、最后一行只有 3 张。grid 会把那 3 张顶在左边，
+     看着像「少了牌」；flex + justify-content:center 能让最后一行自动居中。
+     牌宽由 JS 算好写进 --cw，所以每行装几张是确定的，不会错位。 */
+  #board{display:flex;flex-wrap:wrap;justify-content:center;align-content:center;
+         gap:var(--gap,9px);touch-action:manipulation}
+
+  /* 一张牌：3D 翻面。正反两层都 backface-visibility:hidden，翻的是 .inner。 */
+  .card{
+    position:relative;width:var(--cw,72px);height:var(--ch,103px);
+    perspective:760px;cursor:pointer;
+    /* ⚠️ 入场动画**不碰 opacity**：一旦动画因为任何原因卡在首帧
+       （无头截图 / 省电模式 / 系统「减少动态效果」），opacity:0 会让整桌牌消失 ——
+       那不是「动画没播」，是「游戏坏了」。而且不能写 fill-mode:both：
+       那会把 0% 关键帧一直套在「延迟还没开始」的牌上。 */
+    animation:dealIn .32s cubic-bezier(.2,.9,.3,1.18);
+    animation-delay:calc(var(--i,0) * 32ms);
+  }
+  @keyframes dealIn{
+    0%{transform:translateY(-14px) scale(.86) rotate(-4deg);filter:brightness(.6)}
+    100%{transform:none;filter:none}
+  }
+  .card .inner{position:absolute;inset:0;transform-style:preserve-3d;
+               transition:transform .4s cubic-bezier(.3,.75,.35,1)}
+  .card.down .inner{transform:rotateY(180deg)}
+  .card .face,.card .back{
+    position:absolute;inset:0;border-radius:calc(var(--cw,72px) * .13);
+    backface-visibility:hidden;-webkit-backface-visibility:hidden;
+    display:flex;align-items:center;justify-content:center;
+    transition:box-shadow .16s,border-color .16s;
+  }
+  .card .face{
+    background:linear-gradient(158deg,#fbfcff 0%,#eef1f8 55%,#dfe4ef 100%);
+    border:1px solid #b9c2d4;color:#1b2030;
+    box-shadow:0 3px 10px rgba(0,0,0,.42),inset 0 1px 0 #fff;
+  }
+  .card .face.red{color:#d0342c}
+  .card .face .pip{font-size:calc(var(--cw,72px) * .60);line-height:1;opacity:.94}
+  .card .face .cr{position:absolute;display:flex;flex-direction:column;align-items:center;
+                  line-height:1;font-weight:800;font-size:calc(var(--cw,72px) * .27);
+                  letter-spacing:-.4px}
+  .card .face .cr i{display:block;font-style:normal;font-size:.8em;margin-top:1px}
+  .card .face .cr.tl{left:calc(var(--cw,72px) * .08);top:calc(var(--cw,72px) * .06)}
+  .card .face .cr.br{right:calc(var(--cw,72px) * .08);bottom:calc(var(--cw,72px) * .06);
+                     transform:rotate(180deg)}
+  .card .back{
+    transform:rotateY(180deg);
+    background:
+      repeating-linear-gradient(45deg,rgba(255,255,255,.055) 0 5px,rgba(255,255,255,0) 5px 10px),
+      linear-gradient(160deg,#2b4a86 0%,#213a6b 60%,#1a2e55 100%);
+    border:1px solid #3f66b0;color:rgba(214,228,255,.5);
+    box-shadow:0 3px 10px rgba(0,0,0,.45),inset 0 0 0 2px rgba(255,255,255,.06);
+    font-size:calc(var(--cw,72px) * .38);
+  }
+
+  /* 翻开的两张对不上：红圈提醒，随即翻回去（没有字，靠颜色说「错了」） */
+  .card.miss .face{box-shadow:0 0 0 3px var(--bad),0 0 20px rgba(255,123,114,.5)}
+  /* 配对成功：绿圈 → 然后缩掉，留下一个空槽 */
+  .card.hit .face{box-shadow:0 0 0 3px var(--ok),0 0 22px rgba(56,211,159,.55)}
+  .card.gone{pointer-events:none}
+  .card.gone .inner{transform:scale(.72);transition:transform .3s ease,opacity .3s ease}
+  .card.gone{opacity:.16}
+  /* 配对后留下的虚线空槽：牌位不动，位置记忆才不会被重排打乱 */
+  .card.gone .face,.card.gone .back{
+    background:transparent;border:1px dashed rgba(139,149,167,.32);
+    box-shadow:none;color:transparent;
+  }
+  .card.gone .face .pip,.card.gone .face .cr{visibility:hidden}
+
+  /* ---------------- 底栏 ---------------- */
+  #ctl{display:flex;gap:8px;flex:0 0 auto;margin:9px 0 0}
+  #ctl button{
+    font:inherit;font-size:19px;line-height:1;padding:13px 0;border-radius:14px;
+    border:1px solid var(--line);background:var(--card);color:var(--txt);
+    display:flex;align-items:center;justify-content:center;gap:6px;
+  }
+  #ctl button:active{background:var(--card2);transform:scale(.98)}
+  #btnAgain{flex:1 1 0}
+  #btnTop{flex:0 0 auto;width:84px}
+
+  /* ---------------- 浮层 ---------------- */
+  .ov{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:20px;
+      background:rgba(8,10,14,0);backdrop-filter:blur(0px);z-index:8;
+      transition:background .4s ease, backdrop-filter .4s ease}
+  .ov.on{display:flex}
+  .ov.show{background:rgba(8,10,14,.8);backdrop-filter:blur(3px)}
+  .panel{width:100%;max-width:320px;background:var(--panel);border:1px solid var(--line);
+         border-radius:20px;padding:22px 18px 16px;text-align:center;
+         box-shadow:0 20px 50px rgba(0,0,0,.55);
+         opacity:0;transform:translateY(16px) scale(.93);
+         transition:opacity .36s cubic-bezier(.2,.9,.3,1.1), transform .36s cubic-bezier(.2,.9,.3,1.1)}
+  .ov.show .panel{opacity:1;transform:none}
+
+  /* 三颗星：全部用图形说「这局打得怎么样」，一个字都不用 */
+  .stars{display:flex;gap:10px;justify-content:center;font-size:38px;line-height:1;margin:4px 0 14px}
+  .stars span{color:#39404f;transition:color .3s,transform .3s}
+  .stars span.on{color:var(--gold);text-shadow:0 0 22px rgba(255,209,102,.6)}
+  .stars span.on:nth-child(2){transition-delay:.12s}
+  .stars span.on:nth-child(3){transition-delay:.24s}
+  .ov.show .stars span.on{transform:scale(1.06)}
+
+  /* 成绩：图标 + 数字（数字保留） */
+  .stats{display:flex;gap:10px;justify-content:center;margin-bottom:16px}
+  .stats .s{display:flex;align-items:center;gap:6px;background:var(--card);
+            border:1px solid var(--line);border-radius:12px;padding:9px 14px;
+            font-variant-numeric:tabular-nums}
+  .stats .s .ic{font-size:14px;opacity:.8}
+  .stats .s b{font-size:19px;font-weight:800;letter-spacing:-.3px}
+
+  .row{display:flex;gap:9px;justify-content:center;flex-wrap:wrap}
+  .row button{
+    font:inherit;font-size:19px;line-height:1;min-width:58px;padding:13px 18px;
+    border-radius:13px;border:1px solid var(--line);background:var(--card2);color:var(--txt);
+    display:inline-flex;align-items:center;justify-content:center;
+  }
+  .row button.pri{background:#2b4a86;border-color:#3f66b0;color:#fff}
+  .row button:active{transform:scale(.96)}
+
+  /* 排行榜：每行 = 迷你网格字形 + 步数 + 用时，没有一处文字 */
+  #topOv .panel{max-width:340px}
+  #topList{display:flex;flex-direction:column;gap:6px;
+           max-height:min(46vh,300px);overflow-y:auto;overflow-x:hidden;
+           -webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  /* 记录面板每一行：左边迷你网格，右边两段数字**上下叠**
+     ⚠️ 一开始写的是「网格 | 步数 | 用时」三列并排，在 320 窄屏上实测：
+     三列抢宽度，右边的数字被压成 0，只剩一个图标 —— 那正是这个游戏
+     唯一的信息，压没了等于这行啥也没说。改上下叠之后宽度只要一半。 */
+  #topList{display:flex;flex-direction:column;gap:6px;
+           max-height:min(46vh,300px);overflow-y:auto;overflow-x:hidden;
+           -webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  .topRow{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;
+          padding:8px 11px;border-radius:11px;background:rgba(255,255,255,.028);
+          border:1px solid transparent;min-height:46px;
+          font-variant-numeric:tabular-nums;line-height:1.25}
+  .topRow .glyph .dot{background:#6b7688}
+  .topRow .nums{display:flex;flex-direction:column;gap:2px;min-width:0;justify-self:end}
+  .topRow .m,.topRow .t{display:flex;align-items:center;gap:5px;min-width:0;
+                        white-space:nowrap;justify-content:flex-end;
+                        font-variant-numeric:tabular-nums}
+  .topRow .m{font-size:16px;font-weight:800}
+  .topRow .t{font-size:12px;color:var(--dim)}
+  .topRow .m .ic,.topRow .t .ic{font-size:11px;opacity:.7;flex:0 0 auto}
+  .topRow.has{background:linear-gradient(90deg,rgba(255,209,102,.13),rgba(255,209,102,.03));
+              border-color:rgba(255,209,102,.3)}
+  .topRow.has .m{color:var(--gold)}
+  .topRow.has .glyph .dot{background:rgba(255,209,102,.75)}
+  .topRow.me{outline:2px solid rgba(91,140,255,.75);outline-offset:-2px;
+             background:linear-gradient(90deg,rgba(91,140,255,.22),rgba(91,140,255,.05))}
+  .topRow.empty .m,.topRow.empty .t{color:#4a5262}
+
+  /* ---------------- 特效画布 ---------------- */
+  #fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:6}
+
+  @media (max-height:640px){
+    #levels{margin-top:6px}
+    #levels button{padding:5px 0}
+    #hud{margin-top:7px}
+    .st{padding:5px 8px}
+    #stage{margin-top:6px;padding:4px 0}
+    #ctl button{padding:11px 0}
+  }
+  @media (max-width:330px){
+    #levels{gap:4px}
+    #ctl button{font-size:17px}
+    #btnTop{width:74px}
+  }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a class="iconbtn" href="/" aria-label="返回">&#8249;</a>
+  <div class="sp"></div>
+  <div class="brand" aria-hidden="true">&#127183;</div>
+  <div class="sp"></div>
+  <button class="iconbtn" id="btnSound" aria-label="声音">&#128266;</button>
+</div>
+
+<div id="levels"></div>
+
+<div id="hud">
+  <div class="st"><span class="ic">&#128070;</span><b id="vMoves">0</b></div>
+  <div class="st"><span class="ic">&#9201;</span><b id="vTime">0:00</b></div>
+  <div class="st"><span class="ic">&#10003;</span><b id="vFound">0/0</b></div>
+</div>
+
+<div id="stage">
+  <div id="board"></div>
+</div>
+
+<div id="ctl">
+  <button id="btnAgain" aria-label="重新开始">&#10226;</button>
+  <button id="btnTop" aria-label="记录">&#127942;</button>
+</div>
+
+<canvas id="fx"></canvas>
+
+<!-- 过关：星星 + 两个图标按钮 -->
+<div class="ov" id="doneOv">
+  <div class="panel">
+    <div class="stars" id="doneStars">
+      <span>&#9733;</span><span>&#9733;</span><span>&#9733;</span>
+    </div>
+    <div class="stats">
+      <div class="s"><span class="ic">&#128070;</span><b id="doneMoves">0</b></div>
+      <div class="s"><span class="ic">&#9201;</span><b id="doneTime">0:00</b></div>
+    </div>
+    <div class="row">
+      <button id="doneAgain" aria-label="再来一次">&#10226;</button>
+      <button id="doneNext" class="pri" aria-label="下一关">&#9654;</button>
+    </div>
+    <div class="row" style="margin-top:9px">
+      <button id="doneClose" aria-label="关闭">&#10005;</button>
+    </div>
+  </div>
+</div>
+
+<!-- 记录：四行，每行一个迷你网格 + 步数 + 用时 -->
+<div class="ov" id="topOv">
+  <div class="panel">
+    <div id="topList"></div>
+    <div class="row" style="margin-top:14px">
+      <button id="topPlay" class="pri" aria-label="玩这一关">&#9654;</button>
+      <button id="topClose" aria-label="关闭">&#10005;</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* =========================================================================
+   记忆配对（Memory Pairs）
+   -------------------------------------------------------------------------
+   ★ 本作唯一的硬约束：**界面上一个字都没有**。
+     不识字的人打开就能玩 —— 规则靠「点一下、翻两张」这个交互自证，
+     进度和成绩全部用图标 + 数字（阿拉伯数字几乎人人都认）。
+     所以这里所有可见文案都被刻意删掉了，只有 aria-label（读屏用，不显示）。
+
+   玩法：满桌扣着的扑克牌，翻两张比点数，一样就配对成功、不一样就翻回去。
+        全部配完过关，按步数给 1~3 颗星。
+
+   ⚠️ 三条设计约束：
+   1) **配对成功的牌必须原地留一个空槽**，不能把后面的牌挪过来补位。
+      牌一挪，玩家记的「第 3 张是 7」当场失效 —— 那考的是追视，不是记忆。
+   2) **计时从第一次点击才开始**。一进来就走表等于先扣掉玩家看牌桌的几秒，
+      成绩全是噪音。
+   3) **翻回去的等待期间要锁输入**，否则第三张牌会在两张还没翻完时被点开，
+      盘面上同时亮三张，玩家会以为规则坏了。
+   ========================================================================= */
+
+var LS_KEY = 'gpairs_v1';
+
+var SUITS = [
+  { sym:'\u2660', red:false },   // ♠
+  { sym:'\u2665', red:true  },   // ♥
+  { sym:'\u2666', red:true  },   // ♦
+  { sym:'\u2663', red:false }    // ♣
+];
+/* ★ 只用数字点数 2~10，**不用 A / J / Q / K** ——
+   那四个是字母，正好是「不识字」的人读不出来的东西。
+   点数只用于显示，配对判的是点数相同，所以牌面全是数字。 */
+var RANKS = ['2','3','4','5','6','7','8','9','10'];
+
+/* 四个难度：配对对数 → 网格。glyph 用来画关卡按钮上的迷你网格。
+   ⚠️ 网格是**受高度限制**的（手机竖屏，舞台矮而宽），所以列数要多给、行数要少给：
+   同一块舞台里，3 列 × 6 行只能排到 35×50，而 4 列 × 5 行能到 46×66 —— 牌大 40%。
+   最后一行允许留空（18 张排在 4×5=20 格里），空的那两格不画牌，视觉上也整齐。 */
+var LEVELS = [
+  { id:0, pairs:3, cols:3, rows:2 },
+  { id:1, pairs:6, cols:4, rows:3 },
+  { id:2, pairs:8, cols:4, rows:4 },
+  { id:3, pairs:9, cols:5, rows:4 }
+];
+
+var FLIP_BACK = 0.85;   // 两张对不上，停多久再翻回去（秒）
+var GONE_DELAY = 0.34;  // 配对成功后多久开始缩掉
+var DONE_DELAY = 1.25;  // 全部配完后先庆祝一会儿再弹星星面板
+var CARD_RATIO = 0.7;   // 宽 / 高（扑克牌约 2:3）
+
+/* ---------------- 时钟（可被测试替换） ---------------- */
+var _defaultNow = (typeof performance !== 'undefined' && performance && typeof performance.now === 'function')
+  ? function(){ return performance.now(); }
+  : function(){ return Date.now(); };
+var _now = _defaultNow;
+var _defaultDate = function(){ return Date.now(); };
+var _dateNow = _defaultDate;
+function clock(){ return _now(); }
+
+/* ---------------- 小工具 ---------------- */
+function $(id){ return document.getElementById(id); }
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+function has(o,k){ return Object.prototype.hasOwnProperty.call(o,k); }
+
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------------- 状态 ---------------- */
+var S = {
+  level: 0,
+  phase: 'play',      // play | done
+  cards: [],          // [{id, rank, suit, up, matched}]
+  els: [],
+  first: null,        // 已经翻开、等着配对的第 1 张
+  locked: false,      // 翻回去的等待期间锁输入
+  lockT: 0,
+  misses: [],         // 正在「红圈提醒」的那两张
+  moves: 0,
+  found: 0,
+  started: false,
+  t0: 0,
+  elapsed: 0,
+  stars: 0,
+  doneT: 0,
+  panelShown: false,
+  panelDue: false,
+  panelTimer: 0,
+  newBest: false,
+  prevBest: null,
+  topLevel: 0,
+  /* 布局 */
+  cw: 0, ch: 0, gap: 0, cols: 3, rows: 2
+};
+
+var prog = { best:{}, sound:true, level:0 };
+
+function rnd(){ return S._rnd ? S._rnd() : Math.random(); }
+function rndInt(n){ return Math.floor(rnd() * n) % n; }
+
+/* =========================================================================
+   存档：每关只记一条最好成绩（先比步数，步数相同再比时间）
+   ========================================================================= */
+function cleanBest(e){
+  if(!e || typeof e !== 'object') return null;
+  var mv = e.moves, ms = e.ms;
+  if(typeof mv !== 'number' || !isFinite(mv) || mv <= 0) return null;
+  if(typeof ms !== 'number' || !isFinite(ms) || ms < 0) return null;
+  return { moves: Math.round(mv), ms: Math.round(ms),
+           at: (typeof e.at === 'number' && isFinite(e.at) && e.at > 0) ? Math.round(e.at) : 0 };
+}
+/* a 是否比 b 更好。
+   ⚠️ 这两个「空值」分支的**顺序和返回值**是反的易错点：
+      · b 为空（还没成绩）→ a 当然更好，返回 true；
+      · a 为空（这一局没成绩）→ 没得比，返回 false。
+   第一版把这两行写反了，结果「第一局永远不算新纪录」，成绩一次都存不进去。 */
+function better(a, b){
+  if(!b) return true;
+  if(!a) return false;
+  if(a.moves !== b.moves) return a.moves < b.moves;
+  return a.ms < b.ms;
+}
+function bestOf(lv){
+  var e = prog.best[String(lv)];
+  return (e && typeof e.moves === 'number') ? e : null;
+}
+function loadProg(){
+  try{
+    var raw = localStorage.getItem(LS_KEY);
+    if(!raw) return;
+    var o = JSON.parse(raw);
+    if(!o || typeof o !== 'object') return;
+    if(o.best && typeof o.best === 'object'){
+      for(var k in o.best){
+        if(!has(o.best, k)) continue;
+        if(!(Number(k) >= 0 && Number(k) < LEVELS.length)) continue;
+        var e = cleanBest(o.best[k]);
+        if(e) prog.best[k] = e;
+      }
+    }
+    if(typeof o.sound === 'boolean') prog.sound = o.sound;
+    if(typeof o.level === 'number' && o.level >= 0 && o.level < LEVELS.length) prog.level = o.level;
+  }catch(e){}
+}
+function saveProg(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(prog)); }catch(e){}
+}
+
+/* =========================================================================
+   音效
+   ========================================================================= */
+var ac = null;
+function actx(){
+  try{
+    if(!ac){
+      var C = window.AudioContext || window.webkitAudioContext;
+      if(!C) return null;
+      ac = new C();
+    }
+    if(ac.state === 'suspended' && ac.resume) ac.resume();
+    return ac;
+  }catch(e){ return null; }
+}
+function tone(freq, dur, type, vol, delay, slideTo){
+  var a = actx(); if(!a) return;
+  try{
+    var t0 = a.currentTime + (delay || 0);
+    var osc = a.createOscillator(), g = a.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    if(slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol || 0.08, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g); g.connect(a.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.03);
+  }catch(e){}
+}
+function noise(dur, vol, delay, hz){
+  var a = actx(); if(!a) return;
+  try{
+    var t0 = a.currentTime + (delay || 0);
+    var len = Math.max(1, Math.floor(a.sampleRate * dur));
+    var buf = a.createBuffer(1, len, a.sampleRate);
+    var d = buf.getChannelData(0);
+    for(var i=0;i<len;i++) d[i] = (Math.random()*2-1) * (1 - i/len);
+    var src = a.createBufferSource(); src.buffer = buf;
+    var f = a.createBiquadFilter(); f.type = 'bandpass';
+    f.frequency.setValueAtTime(hz || 2600, t0);
+    var g = a.createGain();
+    g.gain.setValueAtTime(vol || 0.05, t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(f); f.connect(g); g.connect(a.destination);
+    src.start(t0); src.stop(t0 + dur + 0.02);
+  }catch(e){}
+}
+function buzz(ms){ try{ if(prog.sound && navigator && navigator.vibrate) navigator.vibrate(ms||14); }catch(e){} }
+
+/* 全部是「听起来就知道发生了什么」的声音，不依赖任何提示文字 */
+function snd(kind, arg){
+  if(!prog.sound) return;
+  if(kind === 'flip'){
+    tone(560 + (arg||0)*40, 0.055, 'triangle', 0.045, 0);
+    noise(0.05, 0.02, 0, 2400);
+  } else if(kind === 'match'){
+    /* 配对成功：上行三度，越配越高 —— 一局里听着像在往上爬 */
+    var s = Math.min(8, Math.max(0, arg||0));
+    var base = 523.25 * Math.pow(2, s/12);
+    tone(base, 0.13, 'sine', 0.075, 0);
+    tone(base*1.26, 0.16, 'sine', 0.055, 0.06);
+    noise(0.09, 0.018, 0.02, 4600);
+  } else if(kind === 'miss'){
+    tone(210, 0.13, 'sawtooth', 0.045, 0, 120);
+    tone(120, 0.15, 'square', 0.025, 0.03);
+  } else if(kind === 'win'){
+    var w = [523.25, 659.25, 783.99, 1046.5, 1318.5];
+    for(var i=0;i<w.length;i++) tone(w[i], 0.2, 'sine', 0.08, i*0.085);
+    tone(261.63, 0.55, 'triangle', 0.05, 0.02);
+    noise(0.5, 0.042, 0.34, 5200);
+  } else if(kind === 'star'){
+    tone(1568, 0.11, 'sine', 0.04, 0);
+    tone(2093, 0.13, 'sine', 0.032, 0.09);
+  } else if(kind === 'tap'){
+    tone(392, 0.05, 'sine', 0.04, 0);
+  }
+}
+
+/* =========================================================================
+   发牌
+   ========================================================================= */
+/* 抽 n 个**互不相同**的点数，每个点数配两张不同花色的牌。
+   这样「点数相同」就一定是一对，不会出现同一点数 4 张导致配对歧义。 */
+function deal(n){
+  var ranks = RANKS.slice(), out = [], i;
+  for(i=ranks.length-1;i>0;i--){
+    var j = rndInt(i+1), t = ranks[i]; ranks[i] = ranks[j]; ranks[j] = t;
+  }
+  for(i=0;i<n;i++){
+    var suitPool = [0,1,2,3];
+    for(var k=suitPool.length-1;k>0;k--){
+      var m = rndInt(k+1), tt = suitPool[k]; suitPool[k] = suitPool[m]; suitPool[m] = tt;
+    }
+    out.push({ id: out.length, rank: ranks[i], suit: suitPool[0], up:false, matched:false });
+    out.push({ id: out.length, rank: ranks[i], suit: suitPool[1], up:false, matched:false });
+  }
+  /* 洗牌：位置必须是随机的，否则「一对总是挨着」就没得玩了 */
+  for(i=out.length-1;i>0;i--){
+    var p = rndInt(i+1), c = out[i]; out[i] = out[p]; out[p] = c;
+  }
+  for(i=0;i<out.length;i++) out[i].id = i;
+  return out;
+}
+
+/* =========================================================================
+   布局
+   -------------------------------------------------------------------------
+   牌宽 = min(按宽度排得下的宽, 按高度排得下的高 × 宽高比)。
+   网格由关卡固定，**配对成功后也不重排**（见文件头的约束 ①）。
+   ========================================================================= */
+function layout(){
+  var stage = $('stage'), board = $('board');
+  if(!stage || !board) return;
+  var L = LEVELS[S.level];
+  var cols = L.cols;
+  /* 行数按**实际牌数**算，不是按 cols*rows 的容量算 ——
+     18 张排在 5 列里只需要 4 行（最后一行 3 张），按容量算会多留一行空白，
+     牌就白小了。 */
+  var n = S.cards.length || L.pairs * 2;
+  var rows = Math.ceil(n / cols);
+
+  var aw = stage.clientWidth || 0, ah = stage.clientHeight || 0;
+  if(!(aw > 0)) aw = 320;
+  if(!(ah > 0)) ah = 240;
+  aw -= 16; ah -= 16;
+  if(aw < 40) aw = 40;
+  if(ah < 40) ah = 40;
+
+  var gap = clamp(Math.round(Math.min(aw, ah) * 0.035), 6, 14);
+  var wByW = (aw - gap * (cols - 1)) / cols;
+  var hByH = (ah - gap * (rows - 1)) / rows;
+  var cw = Math.min(wByW, hByH * CARD_RATIO);
+  cw = Math.max(26, Math.floor(cw));
+  var ch = Math.floor(cw / CARD_RATIO);
+
+  S.cw = cw; S.ch = ch; S.gap = gap; S.cols = cols; S.rows = rows;
+
+  /* flex 换行：每行装几张由「牌宽 + 间距」和容器宽度决定，
+     JS 已经按 cols 算好了 cw，所以换行位置是确定的。 */
+  var bw = cols * cw + gap * (cols - 1);
+  board.style.width = bw + 'px';
+  if(board.style.setProperty){
+    board.style.setProperty('--cw', cw + 'px');
+    board.style.setProperty('--ch', ch + 'px');
+    board.style.setProperty('--gap', gap + 'px');
+  }
+  board.style.gap = gap + 'px';
+}
+
+/* =========================================================================
+   渲染
+   ========================================================================= */
+var TAP_EVT = (typeof window !== 'undefined' && window && ('PointerEvent' in window)) ? 'pointerdown' : 'click';
+
+function mk(tag, cls, txt){
+  var el = document.createElement(tag);
+  if(cls) el.className = cls;
+  if(txt !== undefined && txt !== null) el.textContent = String(txt);
+  return el;
+}
+
+function buildCards(){
+  var board = $('board');
+  if(!board) return;
+  for(var k=board.children.length-1;k>=0;k--) board.removeChild(board.children[k]);
+  S.els = [];
+  for(var i=0;i<S.cards.length;i++){
+    var el = buildCard(S.cards[i], i);
+    S.els.push(el);
+    board.appendChild(el);
+  }
+}
+
+function buildCard(card, i){
+  var s = SUITS[card.suit];
+  var el = mk('div', 'card down');
+  el.dataset.idx = String(i);
+  el.dataset.rank = card.rank;
+  el.dataset.suit = s.sym;
+  if(el.style && el.style.setProperty) el.style.setProperty('--i', String(i));
+
+  var inner = mk('div', 'inner');
+
+  var face = mk('div', 'face' + (s.red ? ' red' : ''));
+  face.appendChild(mk('span', 'pip', s.sym));
+  var tl = mk('span', 'cr tl');
+  tl.appendChild(mk('b', null, card.rank));
+  tl.appendChild(mk('i', null, s.sym));
+  var br = mk('span', 'cr br');
+  br.appendChild(mk('b', null, card.rank));
+  br.appendChild(mk('i', null, s.sym));
+  face.appendChild(tl); face.appendChild(br);
+
+  var back = mk('div', 'back');
+  back.appendChild(mk('span', null, '\u2756'));
+
+  inner.appendChild(face); inner.appendChild(back);
+  el.appendChild(inner);
+
+  if(el.addEventListener){
+    el.addEventListener(TAP_EVT, function(e){
+      if(e && e.preventDefault) e.preventDefault();
+      tapCard(i);
+    });
+  }
+  return el;
+}
+
+/* 把牌翻到某一面。down = true 表示背面朝上 */
+function setDown(el, down){
+  if(!el || !el.classList) return;
+  if(down) el.classList.add('down'); else el.classList.remove('down');
+}
+
+function paintCards(){
+  for(var i=0;i<S.els.length;i++){
+    var el = S.els[i], c = S.cards[i];
+    if(!el || !el.classList || !c) continue;
+    setDown(el, !c.up);
+    el.classList.toggle('gone', !!c.matched);
+    el.classList.toggle('hit', !!c.matched);
+    el.classList.toggle('miss', S.misses.indexOf(c.id) >= 0);
+  }
+}
+
+/* 时间格式 m:ss —— 只有数字和冒号，没有字 */
+function fmtTime(ms){
+  if(!isFinite(ms) || ms < 0) ms = 0;
+  var total = Math.floor(ms / 1000);
+  var m = Math.floor(total / 60), s = total % 60;
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+function paintHud(){
+  var L = LEVELS[S.level];
+  var mv = $('vMoves');
+  if(mv) mv.textContent = String(S.moves);
+  var tm = $('vTime');
+  if(tm) tm.textContent = fmtTime(S.elapsed);
+  var fd = $('vFound');
+  if(fd) fd.textContent = S.found + '/' + L.pairs;
+  var st = $('hud');
+  if(st && st.children && st.children[2] && st.children[2].classList)
+    st.children[2].classList.toggle('hot', S.found > 0);
+}
+
+/* 关卡按钮上的迷你网格：直接把「你会得到的那张牌桌」画出来。
+   点数 = 实际牌数（不是 cols×rows），所以最后一行的空位不会画成点 ——
+   按钮上看到的形状和真正摆出来的牌桌一模一样。 */
+function glyphFor(L){
+  var g = mk('div', 'glyph');
+  g.style.gridTemplateColumns = 'repeat(' + L.cols + ', 4px)';
+  var n = L.pairs * 2;
+  for(var i=0;i<n;i++) g.appendChild(mk('span', 'dot'));
+  return g;
+}
+
+function renderLevels(){
+  var box = $('levels');
+  if(!box) return;
+  for(var k=box.children.length-1;k>=0;k--) box.removeChild(box.children[k]);
+  for(var i=0;i<LEVELS.length;i++){
+    (function(L){
+      var b = document.createElement('button');
+      b.dataset.lv = String(L.id);
+      b.setAttribute('aria-label', '关卡 ' + (L.id + 1));
+      b.appendChild(glyphFor(L));
+      if(L.id === S.level) b.className = 'on';
+      if(b.addEventListener){
+        b.addEventListener('click', function(){
+          if(L.id === S.level && S.phase === 'play' && S.started) return;  // 玩到一半别打断
+          newGame(L.id);
+          snd('tap');
+        });
+      }
+      box.appendChild(b);
+    })(LEVELS[i]);
+  }
+}
+
+function paint(){
+  paintHud();
+  paintCards();
+}
+
+/* =========================================================================
+   玩法
+   ========================================================================= */
+function newGame(level, seed){
+  if(typeof level === 'number' && level >= 0 && level < LEVELS.length) S.level = level;
+  prog.level = S.level;
+  saveProg();
+  S._rnd = (seed === null || seed === undefined) ? null : mulberry32(seed);
+  var L = LEVELS[S.level];
+  S.cards = deal(L.pairs);
+  S.phase = 'play';
+  S.first = null;
+  S.locked = false;
+  S.lockT = 0;
+  S.misses = [];
+  S.moves = 0;
+  S.found = 0;
+  S.started = false;
+  S.t0 = 0;
+  S.elapsed = 0;
+  S.stars = 0;
+  S.doneT = 0;
+  S.panelShown = false;
+  S.panelDue = false;
+  S.newBest = false;
+  S.prevBest = null;
+  S.els = [];
+  if(S.panelTimer){ clearTimeout(S.panelTimer); S.panelTimer = 0; }
+  hideDone();
+  clearFx();
+  buildCards();
+  layout();
+  renderLevels();
+  paint();
+}
+
+/* 点一张牌 */
+function tapCard(i){
+  if(S.phase !== 'play') return 'ignore';
+  if(S.locked) return 'locked';
+  var c = S.cards[i];
+  if(!c || c.matched || c.up) return 'ignore';
+
+  /* 计时从**第一次点击**才开始：一进来就走表等于先扣掉玩家看牌桌的几秒 */
+  if(!S.started){ S.started = true; S.t0 = clock(); S.elapsed = 0; }
+
+  c.up = true;
+  snd('flip', i);
+
+  if(!S.first){
+    S.first = c;
+    paint();
+    return 'first';
+  }
+
+  /* 第二张：这次算一步 */
+  S.moves++;
+  var a = S.first, b = c;
+  S.first = null;
+
+  if(a.rank === b.rank){
+    a.matched = true; b.matched = true;
+    S.found++;
+    S.misses = [];
+    snd('match', S.found);
+    buzz(12);
+    paint();
+    if(S.found >= LEVELS[S.level].pairs) finish();
+    return 'match';
+  }
+
+  /* 对不上：亮红圈，锁输入，到点再一起翻回去 */
+  S.misses = [a.id, b.id];
+  S.locked = true;
+  S.lockT = FLIP_BACK;
+  snd('miss');
+  paint();
+  return 'miss';
+}
+
+/* 翻回去（由 step 驱动，不用 setTimeout —— 测试能确定性推进） */
+function resolveMiss(){
+  var a = null, b = null;
+  for(var i=0;i<S.cards.length;i++){
+    var c = S.cards[i];
+    if(S.misses.indexOf(c.id) >= 0){
+      c.up = false;
+      if(!a) a = c; else b = c;
+    }
+  }
+  S.misses = [];
+  S.locked = false;
+  S.lockT = 0;
+  paint();
+  return !!(a && b);
+}
+
+/* 星级：按「步数 / 对数」的比值算 —— 全凭记忆的话，最少步数就是对数本身 */
+function starsFor(moves, pairs){
+  var r = moves / Math.max(1, pairs);
+  if(r <= 1.45) return 3;
+  if(r <= 2.05) return 2;
+  return 1;
+}
+
+function finish(){
+  S.phase = 'done';
+  S.doneT = 0;
+  S.elapsed = Math.max(0, clock() - S.t0);
+  S.stars = starsFor(S.moves, LEVELS[S.level].pairs);
+
+  var key = String(S.level);
+  var prev = bestOf(S.level);
+  S.prevBest = prev ? { moves: prev.moves, ms: prev.ms } : null;
+  var cur = { moves: S.moves, ms: Math.round(S.elapsed), at: _dateNow() };
+  if(better(cur, prev)){
+    prog.best[key] = cur;
+    S.newBest = true;
+    saveProg();
+  } else {
+    S.newBest = false;
+  }
+
+  paint();
+  snd('win');
+  burst();
+  S.panelDue = true;
+  if(S.panelTimer) clearTimeout(S.panelTimer);
+  S.panelTimer = setTimeout(showDone, Math.round(DONE_DELAY * 1000));
+  return 'done';
+}
+
+/* =========================================================================
+   过关面板 / 记录面板
+   ========================================================================= */
+function showDone(){
+  if(S.panelShown) return;
+  S.panelShown = true;
+  S.panelDue = false;
+  if(S.panelTimer){ clearTimeout(S.panelTimer); S.panelTimer = 0; }
+
+  var stars = $('doneStars');
+  if(stars && stars.children){
+    for(var i=0;i<stars.children.length;i++){
+      stars.children[i].classList.toggle('on', i < S.stars);
+    }
+  }
+  var mv = $('doneMoves');
+  if(mv) mv.textContent = String(S.moves);
+  var tm = $('doneTime');
+  if(tm) tm.textContent = fmtTime(S.elapsed);
+
+  /* 最后一关不显示「下一关」—— 点了没反应比没按钮更让人困惑 */
+  var nx = $('doneNext');
+  if(nx && nx.style) nx.style.display = (S.level < LEVELS.length - 1) ? '' : 'none';
+
+  snd('star');
+  show('doneOv');
+}
+
+function hideDone(){
+  S.panelShown = false;
+  if(S.panelTimer){ clearTimeout(S.panelTimer); S.panelTimer = 0; }
+  var ov = $('doneOv');
+  if(ov && ov.classList){ ov.classList.remove('show'); ov.classList.remove('on'); }
+}
+
+function openTop(lv){
+  S.topLevel = (typeof lv === 'number') ? lv : S.level;
+  var list = $('topList');
+  if(list){
+    for(var k=list.children.length-1;k>=0;k--) list.removeChild(list.children[k]);
+    for(var i=0;i<LEVELS.length;i++){
+      var L = LEVELS[i], b = bestOf(i);
+      var row = mk('div', 'topRow');
+      if(b) row.classList.add('has'); else row.classList.add('empty');
+      if(i === S.topLevel) row.classList.add('me');
+      row.appendChild(glyphFor(L));
+
+      var nums = mk('div', 'nums');
+      var m = mk('div', 'm');
+      m.appendChild(mk('span', 'ic', '\uD83D\uDC46'));
+      m.appendChild(mk('b', null, b ? String(b.moves) : '\u2014'));
+      var t = mk('div', 't');
+      t.appendChild(mk('span', 'ic', '\u23F1'));
+      t.appendChild(mk('span', null, b ? fmtTime(b.ms) : '\u2014'));
+      nums.appendChild(m);
+      nums.appendChild(t);
+      row.appendChild(nums);
+      list.appendChild(row);
+    }
+  }
+  show('topOv');
+}
+function hideTop(){
+  var ov = $('topOv');
+  if(ov && ov.classList){ ov.classList.remove('show'); ov.classList.remove('on'); }
+}
+
+/* 浮层：加 .show 不能等 rAF（无头 / 后台会被节流），用 setTimeout 让样式先落地一帧 */
+function show(id){
+  var e = $(id);
+  if(!e || !e.classList) return;
+  e.classList.add('on');
+  if(typeof setTimeout === 'function'){
+    setTimeout(function(){ if(e.classList) e.classList.add('show'); }, 20);
+  } else {
+    e.classList.add('show');
+  }
+}
+function hide(id){
+  var e = $(id);
+  if(!e || !e.classList) return;
+  e.classList.remove('show');
+  e.classList.remove('on');
+}
+
+/* =========================================================================
+   撒花（canvas）
+   ========================================================================= */
+var FX = { parts:[], rings:[], active:false, w:0, h:0, dpr:1 };
+var FX_COLORS = ['#ffd166','#4ee2ad','#5b8cff','#ff8f86','#c9a0ff','#ffffff'];
+
+function fxCanvas(){ return $('fx'); }
+function fxSize(){
+  var cv = fxCanvas();
+  if(!cv) return false;
+  var w = (typeof window !== 'undefined' && window.innerWidth) || 360;
+  var h = (typeof window !== 'undefined' && window.innerHeight) || 640;
+  var dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+  FX.w = w; FX.h = h; FX.dpr = dpr;
+  cv.width = Math.round(w*dpr);
+  cv.height = Math.round(h*dpr);
+  if(cv.style){ cv.style.width = w + 'px'; cv.style.height = h + 'px'; }
+  return true;
+}
+
+function burst(){
+  var cv = fxCanvas();
+  if(!cv) return 0;
+  fxSize();
+  var cx = FX.w/2, cy = FX.h/2;
+  var board = $('board');
+  if(board && board.getBoundingClientRect){
+    var r = board.getBoundingClientRect();
+    if(r && r.width > 0 && isFinite(r.left) && isFinite(r.top)){
+      cx = r.left + r.width/2;
+      cy = r.top + r.height/2;
+    }
+  }
+  var n = 0;
+  for(var i=0;i<110;i++){
+    var a = Math.random()*Math.PI*2;
+    var sp = 90 + Math.random()*380;
+    FX.parts.push({
+      x: cx, y: cy,
+      vx: Math.cos(a)*sp,
+      vy: Math.sin(a)*sp - 120,
+      g: 520 + Math.random()*280,
+      w: 4 + Math.random()*6,
+      h: 6 + Math.random()*9,
+      rot: Math.random()*6.283,
+      vr: (Math.random()-0.5)*15,
+      c: FX_COLORS[(Math.random()*FX_COLORS.length)|0],
+      life: 1.1 + Math.random()*1.0,
+      drag: 0.982
+    });
+    n++;
+  }
+  for(var k=0;k<3;k++){
+    FX.rings.push({ x:cx, y:cy, r: 8 + k*10, vr: 420 - k*70, life: 0.75, max: 0.75,
+                    c: k===0 ? '#ffffff' : (k===1 ? '#ffd166' : '#4ee2ad') });
+  }
+  FX.active = true;
+  drawFx();
+  return n;
+}
+
+function clearFx(){
+  FX.parts.length = 0;
+  FX.rings.length = 0;
+  FX.active = false;
+  var cv = fxCanvas();
+  if(!cv) return;
+  var ctx = cv.getContext && cv.getContext('2d');
+  if(ctx && FX.w > 0) ctx.clearRect(0, 0, FX.w, FX.h);
+}
+
+function stepFx(dt){
+  var i, p;
+  for(i=FX.parts.length-1;i>=0;i--){
+    p = FX.parts[i];
+    var k = Math.pow(p.drag, dt*60);
+    p.vx *= k;
+    p.vy = p.vy*k + p.g*dt;
+    p.x += p.vx*dt;
+    p.y += p.vy*dt;
+    p.rot += p.vr*dt;
+    p.life -= dt;
+    if(p.life <= 0 || p.y > FX.h + 80) FX.parts.splice(i, 1);
+  }
+  for(i=FX.rings.length-1;i>=0;i--){
+    var g = FX.rings[i];
+    g.r += g.vr*dt;
+    g.life -= dt;
+    if(g.life <= 0) FX.rings.splice(i, 1);
+  }
+  FX.active = FX.parts.length > 0 || FX.rings.length > 0;
+}
+
+function drawFx(){
+  var cv = fxCanvas();
+  if(!cv) return;
+  var ctx = cv.__ctx || (cv.__ctx = (cv.getContext ? cv.getContext('2d') : null));
+  if(!ctx) return;
+  if(!FX.active){
+    if(ctx.setTransform) ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0, 0, cv.width || FX.w, cv.height || FX.h);
+    return;
+  }
+  if(ctx.setTransform) ctx.setTransform(FX.dpr, 0, 0, FX.dpr, 0, 0);
+  ctx.clearRect(0, 0, FX.w, FX.h);
+  for(var i=0;i<FX.rings.length;i++){
+    var g = FX.rings[i];
+    var a = Math.max(0, g.life / g.max);
+    ctx.globalAlpha = a * 0.7;
+    ctx.strokeStyle = g.c;
+    ctx.lineWidth = 2 + 6*a;
+    ctx.beginPath();
+    if(ctx.arc) ctx.arc(g.x, g.y, g.r, 0, Math.PI*2);
+    ctx.stroke();
+  }
+  for(var j=0;j<FX.parts.length;j++){
+    var p = FX.parts[j];
+    var al = Math.max(0, Math.min(1, p.life / 0.6));
+    ctx.globalAlpha = al;
+    ctx.fillStyle = p.c;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot);
+    ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* =========================================================================
+   主循环
+   ========================================================================= */
+function step(dt){
+  if(!(dt > 0)) dt = 0;
+  if(dt > 0.12) dt = 0.12;        // 掉帧时不要一步跨过整个等待
+
+  if(S.phase === 'play'){
+    if(S.started) S.elapsed = Math.max(0, clock() - S.t0);
+    if(S.locked){
+      S.lockT -= dt;
+      if(S.lockT <= 0) resolveMiss();
+    }
+    if(S.started) paintHud();
+  } else if(S.phase === 'done'){
+    S.doneT += dt;
+    if(S.panelDue && S.doneT >= DONE_DELAY) showDone();
+  }
+  if(FX.active){ stepFx(dt); drawFx(); }
+}
+
+function startLoop(){
+  if(typeof requestAnimationFrame !== 'function') return;
+  var last = 0;
+  function frame(t){
+    var dt = last ? (t - last)/1000 : 0;
+    last = t;
+    try{ step(dt); }catch(e){}
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* =========================================================================
+   DOM 绑定
+   ========================================================================= */
+function bind(){
+  var again = $('btnAgain');
+  if(again) again.addEventListener('click', function(){ newGame(S.level); snd('tap'); });
+
+  var sb = $('btnSound');
+  if(sb) sb.addEventListener('click', function(){
+    prog.sound = !prog.sound;
+    saveProg();
+    sb.innerHTML = prog.sound ? '&#128266;' : '&#128263;';
+    if(prog.sound) snd('tap');
+  });
+
+  var bt = $('btnTop');
+  if(bt) bt.addEventListener('click', function(){ openTop(S.level); snd('tap'); });
+
+  var da = $('doneAgain');
+  if(da) da.addEventListener('click', function(){ hideDone(); newGame(S.level); });
+
+  var dn = $('doneNext');
+  if(dn) dn.addEventListener('click', function(){
+    if(S.level < LEVELS.length - 1){ hideDone(); newGame(S.level + 1); }
+  });
+
+  var dc = $('doneClose');
+  if(dc) dc.addEventListener('click', function(){ hideDone(); });
+
+  var dov = $('doneOv');
+  if(dov) dov.addEventListener('click', function(e){
+    if(e && e.target === dov) hideDone();
+  });
+
+  var tc = $('topClose');
+  if(tc) tc.addEventListener('click', hideTop);
+  var tp = $('topPlay');
+  if(tp) tp.addEventListener('click', function(){
+    var lv = S.topLevel;
+    hideTop(); hideDone();
+    newGame(lv);
+  });
+  var tov = $('topOv');
+  if(tov) tov.addEventListener('click', function(e){
+    if(e && e.target === tov) hideTop();
+  });
+
+  if(typeof window !== 'undefined' && window.addEventListener){
+    window.addEventListener('resize', function(){ layout(); });
+    window.addEventListener('orientationchange', function(){ setTimeout(layout, 120); });
+  }
+}
+
+function boot(){
+  loadProg();
+  S.level = (prog.level >= 0 && prog.level < LEVELS.length) ? prog.level : 0;
+  bind();
+  newGame(S.level);
+  var sb = $('btnSound');
+  if(sb) sb.innerHTML = prog.sound ? '&#128266;' : '&#128263;';
+  startLoop();
+}
+
+/* =========================================================================
+   测试钩子
+   ========================================================================= */
+window.__pairs = function(){
+  return {
+    level: S.level, phase: S.phase, cols: S.cols, rows: S.rows,
+    moves: S.moves, found: S.found, started: S.started,
+    elapsed: S.elapsed, stars: S.stars, locked: S.locked, lockT: S.lockT,
+    first: S.first ? S.first.id : null,
+    misses: S.misses.slice(),
+    panelShown: S.panelShown, panelDue: S.panelDue,
+    newBest: !!S.newBest, prevBest: S.prevBest,
+    topLevel: S.topLevel,
+    cw: S.cw, ch: S.ch, gap: S.gap,
+    cards: S.cards.map(function(c){
+      return { id:c.id, rank:c.rank, suit:SUITS[c.suit].sym, red:SUITS[c.suit].red,
+               up:!!c.up, matched:!!c.matched };
+    }),
+    best: JSON.parse(JSON.stringify(prog.best)),
+    sound: prog.sound
+  };
+};
+window.__pairsNewGame = function(lv, seed){ newGame(lv, seed); };
+window.__pairsTap = tapCard;
+window.__pairsStep = step;
+window.__pairsLayout = layout;
+window.__pairsShowDone = showDone;
+window.__pairsHideDone = hideDone;
+window.__pairsOpenTop = openTop;
+window.__pairsHideTop = hideTop;
+window.__pairsSetClock = function(fn){ _now = (typeof fn === 'function') ? fn : _defaultNow; };
+window.__pairsSetDate = function(fn){ _dateNow = (typeof fn === 'function') ? fn : _defaultDate; };
+window.__pairsLevels = function(){
+  return LEVELS.map(function(L){
+    return { id:L.id, pairs:L.pairs, cards:L.pairs*2, cols:L.cols, rows:L.rows };
+  });
+};
+window.__pairsProg = function(){ return JSON.parse(JSON.stringify(prog)); };
+window.__pairsDeal = deal;
+window.__pairsStars = starsFor;
+window.__pairsFmtTime = fmtTime;
+window.__pairsResolveMiss = resolveMiss;
+window.__pairsFx = function(){ return { parts: FX.parts.length, rings: FX.rings.length, active: FX.active }; };
+window.__pairsCards = function(){
+  if(!S.els) return [];
+  var out = [];
+  for(var i=0;i<S.els.length;i++){
+    var el = S.els[i], c = S.cards[i];
+    out.push({
+      idx: i, id: c ? c.id : -1,
+      rank: el.dataset && el.dataset.rank,
+      suit: el.dataset && el.dataset.suit,
+      down: !!(el.classList && el.classList.contains('down')),
+      hit: !!(el.classList && el.classList.contains('hit')),
+      miss: !!(el.classList && el.classList.contains('miss')),
+      gone: !!(el.classList && el.classList.contains('gone')),
+      cls: el.className || ''
+    });
+  }
+  return out;
+};
+/* 把界面上**所有可见文字**收集起来 —— 这是本作最重要的那条断言的抓手 */
+window.__pairsVisibleText = function(){
+  var out = [];
+  function walk(node){
+    if(!node) return;
+    if(node.children && node.children.length){
+      for(var i=0;i<node.children.length;i++) walk(node.children[i]);
+      return;
+    }
+    var t = node.textContent;
+    if(t && String(t).trim()) out.push(String(t).trim());
+  }
+  var body = document.body;
+  if(body) walk(body);
+  return out;
+};
+window.__pairsTopRows = function(){
+  var list = $('topList');
+  if(!list || !list.children) return [];
+  var out = [];
+  for(var i=0;i<list.children.length;i++){
+    out.push({ text: list.children[i].textContent, cls: list.children[i].className || '' });
+  }
+  return out;
+};
+window.__pairsStars_ = function(){
+  var s = $('doneStars');
+  if(!s || !s.children) return { on:0, total:0 };
+  var on = 0;
+  for(var i=0;i<s.children.length;i++) if(s.children[i].classList.contains('on')) on++;
+  return { on: on, total: s.children.length };
+};
+window.__pairsNextVisible = function(){
+  var n = $('doneNext');
+  if(!n || !n.style) return null;
+  return n.style.display !== 'none';
+};
+
+if(typeof document !== 'undefined' && document.getElementById) boot();
+
+})();
+</script>
+</body>
+</html>
