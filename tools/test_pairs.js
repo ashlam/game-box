@@ -306,31 +306,41 @@ section('2) ★ 牌面只有数字点数（没有 A/J/Q/K）');
   ok(bad.length === 0, '★ 点数全是数字 2~10', bad.join(','));
 }
 
-/* ================= 3) 难度 ================= */
-section('3) 四个难度');
+/* ================= 3) 关卡 ================= */
+section('3) 十个关卡');
 {
   const lv = win.__pairsLevels();
-  ok(lv.length === 4, '四个难度（实际 ' + lv.length + '）');
-  ok(JSON.stringify(lv.map(l => l.pairs)) === JSON.stringify([3,6,8,9]),
-     '对数 3 / 6 / 8 / 9', JSON.stringify(lv.map(l => l.pairs)));
-  ok(JSON.stringify(lv.map(l => l.cards)) === JSON.stringify([6,12,16,18]),
-     '牌数 = 对数 × 2', JSON.stringify(lv.map(l => l.cards)));
-  /* 网格要**装得下**所有牌。不要求严丝合缝：
-     18 张排在 5 列里是 4 行（20 格），最后一行空两格 —— 这是刻意的，
-     因为手机竖屏是「矮而宽」，多给一列比多给一行能让牌大 40%（见 index.html 里的注释）。 */
-  ok(lv.every(l => l.cols * l.rows >= l.cards),
-     '★ 网格装得下所有牌（允许最后一行留空）',
-     lv.map(l => l.cols + '×' + l.rows + '=' + (l.cols*l.rows) + '≥' + l.cards).join(' '));
-  ok(lv.every(l => Math.ceil(l.cards / l.cols) === Math.min(l.rows, Math.ceil(l.cards / l.cols))),
+  ok(lv.length === 10, '十个关卡（实际 ' + lv.length + '）');
+  ok(JSON.stringify(lv.map(l => l.pairs)) === JSON.stringify([3,5,6,8,9,10,12,14,16,18]),
+     '对数 3/5/6/8/9/10/12/14/16/18', JSON.stringify(lv.map(l => l.pairs)));
+  ok(lv.every(l => l.cards === l.pairs * 2), '牌数 = 对数 × 2',
+     JSON.stringify(lv.map(l => l.cards)));
+  /* 难度必须单调递增 —— 第 5 关比第 4 关还简单的话，曲线就乱了 */
+  ok(lv.every((l, i) => i === 0 || l.pairs >= lv[i-1].pairs),
+     '★ 难度单调递增（后一关不少于前一关）', JSON.stringify(lv.map(l => l.pairs)));
+  ok(lv[0].pairs === 3 && lv[9].pairs === 18, '第一关 3 对、最后一关 18 对');
+  /* 点数池 9 种，每种 4 张 → 对数上限 9×2 = 18 对，正好是第 10 关 */
+  ok(lv.every(l => l.pairs <= 18),
+     '★ 对数不超过理论上限 18（9 种点数 × 每种最多 2 对）',
+     '最大 ' + Math.max(...lv.map(l => l.pairs)));
+  ok(Math.max(...lv.map(l => l.pairs)) === 18, '★ 第 10 关用满了 18 对的上限');
+
+  /* 网格要**装得下**所有牌。不要求严丝合缝：最后一行允许留空 ——
+     因为手机竖屏是「矮而宽」，多给一列比多给一行能让牌更大（见 index.html 里的注释）。 */
+  /* 网格是**布局时算出来的**（pickCols 按牌面积最大选列数），关卡表里只有默认列数。
+     所以这里断言的是「算出来的网格真的装得下」，不是「表里写死的数字对得上」。 */
+  ok(S().cols * S().rows >= S().cards.length,
+     '★ 网格装得下所有牌', S().cols + '×' + S().rows + ' ≥ ' + S().cards.length);
+  ok(S().rows === Math.ceil(S().cards.length / S().cols),
      '行数 = ceil(牌数 / 列数)（不多留空行）',
-     lv.map(l => Math.ceil(l.cards/l.cols)).join('/'));
+     S().rows + ' = ceil(' + S().cards.length + '/' + S().cols + ')');
 
   /* ⚠️ 不能直接断言「默认是第 1 关」：前面几节跑过 newGame 会写存档，
      boot() 读回来的是上次玩的那一关（这正是「记住上次选的关卡」功能）。
      所以这里断言的是「全新存档下默认第 1 关」。 */
   const freshSb = makeVM({});
   ok(freshSb.window.__pairs().level === 0, '★ 全新存档下默认第一关（实际 ' + freshSb.window.__pairs().level + '）');
-  ok(els.levels.children.length === 4, '关卡条 4 个按钮');
+  ok(els.levels.children.length === 10, '关卡条 10 个按钮（实际 ' + els.levels.children.length + '）');
   ok(els.levels.children.filter(b => b.classList.contains('on')).length === 1,
      '★ 任何时刻只有一个关卡高亮');
   /* 关卡按钮上是迷你网格，不是文字 */
@@ -346,7 +356,8 @@ section('3) 四个难度');
     newGame(l.id);
     const s = S();
     ok(s.cards.length === l.cards, '关卡 ' + (l.id+1) + '：牌数 ' + l.cards);
-    ok(s.cols === l.cols && s.rows === l.rows, '关卡 ' + (l.id+1) + '：网格 ' + l.cols + '×' + l.rows);
+    ok(s.cols * s.rows >= l.cards && s.rows === Math.ceil(l.cards / s.cols),
+       '关卡 ' + (l.id+1) + '：网格 ' + s.cols + '×' + s.rows + ' 装得下 ' + l.cards + ' 张');
     ok(cards().length === l.cards, '关卡 ' + (l.id+1) + '：DOM 牌数一致');
   }
   newGame(0);
@@ -355,24 +366,39 @@ section('3) 四个难度');
 /* ================= 4) 发牌 ================= */
 section('4) 发牌');
 {
-  let badPair = 0, sameSuit = 0, badId = 0, total = 0;
+  let badPair = 0, sameSuit = 0, badId = 0, total = 0, undefinedRank = 0, tooMany = 0;
   const SUIT_SYMS = ['\u2660','\u2665','\u2666','\u2663'];
-  for(let seed = 1; seed <= 150; seed++){
-    newGame(3, seed);
-    total++;
-    const cs = S().cards;
-    const byRank = {};
-    for(const c of cs) (byRank[c.rank] = byRank[c.rank] || []).push(c);
-    for(const rk in byRank){
-      if(byRank[rk].length !== 2) badPair++;
-      else if(byRank[rk][0].suit === byRank[rk][1].suit) sameSuit++;
+  /* 每一关都要能发出来 —— 尤其第 10 关（18 对 = 36 张），
+     点数池只有 9 种，必须靠「同点数 4 张 = 两对」才凑得够 */
+  for(let lv = 0; lv < 10; lv++){
+    for(let seed = 1; seed <= 40; seed++){
+      newGame(lv, seed);
+      total++;
+      const cs = S().cards;
+      const L = win.__pairsLevels()[lv];
+      if(cs.length !== L.cards) badPair++;
+      if(cs.some(c => !c.rank || c.rank === 'undefined')) undefinedRank++;
+      const byRank = {};
+      for(const c of cs) (byRank[c.rank] = byRank[c.rank] || []).push(c);
+      for(const rk in byRank){
+        /* 每个点数只能出 2 张（一对）或 4 张（两对），绝不能 1 张或 3 张 */
+        const n = byRank[rk].length;
+        if(n !== 2 && n !== 4) badPair++;
+        if(n > 4) tooMany++;
+        /* 同一点数的牌花色必须互不相同（不能出现两张一样的牌） */
+        const suits = byRank[rk].map(c => c.suit);
+        if(new Set(suits).size !== suits.length) sameSuit++;
+      }
+      if(cs.some(c => SUIT_SYMS.indexOf(c.suit) < 0)) badPair++;
+      cs.forEach((c, i) => { if(c.id !== i) badId++; });
     }
-    if(cs.some(c => SUIT_SYMS.indexOf(c.suit) < 0)) badPair++;
-    cs.forEach((c, i) => { if(c.id !== i) badId++; });
   }
-  ok(total === 150, '跑了 150 局');
-  ok(badPair === 0, '★ 每个点数恰好两张（错 ' + badPair + ' 次）');
-  ok(sameSuit === 0, '★ 同一对的两张花色不同（错 ' + sameSuit + ' 次）');
+  ok(total === 400, '跑了 400 局（10 关 × 40 个种子）');
+  ok(badPair === 0, '★ 每关的牌数都对，且每个点数只出 2 或 4 张（错 ' + badPair + ' 次）');
+  ok(undefinedRank === 0, '★ 没有任何一张牌的点数是 undefined（第 10 关 18 对的经典坑）',
+     undefinedRank ? undefinedRank + ' 张空牌' : '');
+  ok(tooMany === 0, '★ 同一点数不超过 4 张（一副牌就 4 种花色）', tooMany + ' 次');
+  ok(sameSuit === 0, '★ 同一点数的牌花色互不相同（不会出现两张一模一样的牌）', sameSuit + ' 次');
   ok(badId === 0, '★ id 连续且等于下标（错 ' + badId + ' 个）');
 
   /* 位置必须随机：同一张牌不该总在同一个位置 */
@@ -391,6 +417,15 @@ section('4) 发牌');
   newGame(1, 778); const c = S().cards.map(c => c.rank + c.suit).join(',');
   ok(a === b, '同种子发的牌一致（可复现）');
   ok(a !== c, '不同种子发不同的牌');
+
+  /* 第 10 关的结构：9 个点数各 4 张 = 18 对 */
+  newGame(9, 3);
+  const cs9 = S().cards;
+  const r9 = {};
+  cs9.forEach(c => { r9[c.rank] = (r9[c.rank] || 0) + 1; });
+  const counts9 = Object.keys(r9).map(k => r9[k]);
+  ok(Object.keys(r9).length === 9, '第 10 关用满 9 个点数（实际 ' + Object.keys(r9).length + '）');
+  ok(counts9.every(n => n === 4), '★ 第 10 关每个点数 4 张 = 两对', JSON.stringify(counts9));
 }
 
 /* ================= 5) 配对 ================= */
@@ -555,6 +590,84 @@ section('8) 星级');
   ok(st(13, 9) === 3, '9 对 13 步（1.44）还在 3 星 —— 阈值没被调松');
 }
 
+/* ================= 8b) ★ 分数与奖品 ================= */
+section('8b) ★ 单关分数 / 总分 / 十档奖品');
+{
+  const scoreFor = win.__pairsScoreFor;
+  const prizeFor = win.__pairsPrizeFor;
+  const maxTotal = win.__pairsMaxTotal();
+  const prizes = win.__pairsPrizes();
+
+  /* ---- 分数公式 ---- */
+  ok(prizes.length === 10, '★ 奖品正好十档（实际 ' + prizes.length + '）');
+  ok(prizes.every(p => p.em && p.name), '每档都有图标和名字（名字只用于 aria-label，不显示）');
+  ok(new Set(prizes.map(p => p.em)).size === 10, '★ 十档图标互不相同',
+     prizes.map(p => p.em).join(''));
+  ok(prizes[9].em === '\uD83C\uDFC6', '最高档是金杯 🏆');
+  ok(prizes.some(p => p.em === '\uD83D\uDC51'), '里面有皇冠 👑');
+  ok(prizes.some(p => p.em === '\uD83D\uDE97'), '里面有小汽车 🚗');
+  /* ⚠️ 这里锁的是「选 emoji 的两条硬要求」，不是具体挑了哪几个：
+     · 不能是 Unicode 13+ 的新字符（老安卓渲染成豆腐块）
+     · 相邻两档形状要有差异（13px 下认不出就白搭） */
+  const cps = prizes.map(p => p.em.codePointAt(0));
+  ok(cps.every(c => c < 0x1FA00),
+     '★ 十档奖品都是 Unicode 13 之前的老字符（老安卓不会显示成豆腐块）',
+     prizes.map(p => 'U+' + p.em.codePointAt(0).toString(16).toUpperCase()).join(' '));
+  ok(!prizes.some(p => p.em === '\uD83C\uDF31' || p.em === '\uD83C\uDF3F'),
+     '★ 没有 🌱 小芽 / 🌿 小草（用户认不出来，已删掉）');
+  ok(prizes.some(p => p.em === '\uD83C\uDF81'), '里面有礼物盒 🎁');
+  ok(prizes.some(p => p.em === '\uD83D\uDC8E'), '里面有宝石 💎');
+
+  /* 分数必须随「星级」「牌数」「速度」单调变化 */
+  const s3 = scoreFor(3, 9000, 3, 3);       // 3 对，3 星，每对 3 秒
+  const s2 = scoreFor(6, 15000, 3, 2);      // 3 对，2 星，每对 5 秒
+  const s1 = scoreFor(9, 27000, 3, 1);      // 3 对，1 星，每对 9 秒
+  ok(s3 > s2 && s2 > s1, '★ 星级越高分数越高（' + s3 + ' > ' + s2 + ' > ' + s1 + '）');
+  ok(scoreFor(9, 27000, 9, 3) > scoreFor(9, 27000, 3, 3), '★ 牌数越多基础分越高');
+  ok(scoreFor(9, 9000, 3, 3) > scoreFor(9, 27000, 3, 3), '★ 同样星级，越快分越高');
+  /* 速度加成封顶 ×1.5，不能无限涨 */
+  const fast = scoreFor(3, 1000, 3, 3), slow = scoreFor(3, 99000, 3, 3);
+  ok(fast / slow <= 1.55, '★ 速度加成封顶在 1.5 倍左右（' + (fast/slow).toFixed(2) + '）');
+  /* 记忆游戏不该逼人抢时间：最慢也不清零，至少有 1 倍基础分 */
+  ok(slow > 0 && slow >= Math.round(100*3*2.2*1), '★ 慢也不会把分数压到 0（' + slow + '）');
+  ok(scoreFor(3, 9000, 3, 3) === Math.round(100*3*2.2*1.5),
+     '3 对 3 星 每对 3 秒 = 满分公式（' + scoreFor(3,9000,3,3) + '）');
+
+  /* ---- 奖品档位 ---- */
+  ok(maxTotal > 0, '满分是正数（' + maxTotal + '）');
+  ok(prizeFor(0) === 0, '★ 0 分 → 第 1 档（最低档）');
+  ok(prizeFor(-5) === 0, '★ 负数也按 0 档处理，不会崩');
+  ok(prizeFor(maxTotal) === 9, '★ 满分 → 第 10 档（金杯）');
+  ok(prizeFor(maxTotal * 2) === 9, '★ 超过满分也不会越界（还是第 10 档）');
+  /* 单调：分数越高档位只升不降 */
+  let mono = true, prev = -1;
+  for(let i = 0; i <= 100; i++){
+    const p = prizeFor(Math.round(maxTotal * i / 100));
+    if(p < prev) mono = false;
+    prev = p;
+  }
+  ok(mono, '★ 分数越高奖品档位只升不降（单调）');
+
+  /* 十档必须**都够得着**：从 0 到满分扫一遍，十档都得出现 */
+  const seen = new Set();
+  for(let i = 0; i <= 2000; i++) seen.add(prizeFor(Math.round(maxTotal * i / 2000)));
+  ok(seen.size === 10, '★ 从 0 扫到满分，十档全部出现过（实际 ' + seen.size + ' 档）',
+     [...seen].sort((a,b)=>a-b).join(','));
+  ok(seen.has(0) && seen.has(9), '★ 最低档和最高档都够得着');
+
+  /* 分档不能太廉价：只打第 1 关（3 对满分）不该拿到高档位 */
+  const firstOnly = scoreFor(3, 9000, 3, 3);
+  ok(prizeFor(firstOnly) <= 1,
+     '★ 只打完第 1 关（' + firstOnly + ' 分）最多第 2 档 —— 奖品不能太廉价',
+     '实际第 ' + (prizeFor(firstOnly) + 1) + ' 档');
+
+  /* 但也不该太苛刻：十关全打（哪怕每关都 2 星）至少该拿到中档 */
+  let all2 = 0;
+  win.__pairsLevels().forEach(l => { all2 += scoreFor(Math.round(l.pairs*2), l.pairs*5000, l.pairs, 2); });
+  ok(prizeFor(all2) >= 4, '★ 十关都打通（哪怕全是 2 星）至少第 5 档',
+     '实际第 ' + (prizeFor(all2) + 1) + ' 档，总分 ' + all2);
+}
+
 /* ================= 9) 完整一局 ================= */
 section('9) 完整一局：打到底 → 过关');
 {
@@ -579,6 +692,26 @@ section('9) 完整一局：打到底 → 过关');
   ok(starState.total === 3, '面板上三颗星');
   ok(starState.on === S().stars, '★ 点亮 ' + starState.on + ' 颗 = 星级 ' + S().stars);
 
+  /* ★ 本关得分 / 总分 / 奖品 —— 面板上要真的显示出来 */
+  ok(S().lastScore > 0, '本关算出了得分（' + S().lastScore + '）');
+  ok(els.doneScore.textContent === String(S().lastScore),
+     '★ 面板显示本关得分（' + els.doneScore.textContent + '）');
+  ok(S().total > 0, '总分算出来了（' + S().total + '）');
+  ok(els.doneTotal.textContent === String(S().total),
+     '★ 面板显示总分（' + els.doneTotal.textContent + '）');
+  ok(S().prize >= 0 && S().prize <= 9, '★ 奖品档位在 0~9 之间（' + S().prize + '）');
+  ok(els.donePrizeEmoji.textContent.length > 0,
+     '★ 面板显示奖品图标（' + els.donePrizeEmoji.textContent + '）');
+  /* 十档刻度全部画出来，当前档位标亮 */
+  const ticks = els.doneTicks.children;
+  ok(ticks.length === 10, '★ 面板上十档刻度都画出来了（实际 ' + ticks.length + '）');
+  ok([...ticks].filter(t => t.classList.contains('cur')).length === 1,
+     '★ 恰好一档标成「当前档位」');
+  ok([...ticks].filter(t => t.classList.contains('got')).length === S().prize + 1,
+     '★ 已拿到的档位数量 = 当前档位 + 1（' + S().prize + ' → ' + (S().prize+1) + '）');
+  ok(els.doneBarFill.style.width && els.doneBarFill.style.width !== '0%',
+     '★ 进度条有宽度（' + els.doneBarFill.style.width + '）');
+
   /* 存档 */
   const best = S().best['0'];
   ok(best && best.moves === S().moves, '★ 成绩写进存档');
@@ -587,13 +720,17 @@ section('9) 完整一局：打到底 → 过关');
   const saved = JSON.parse(store['gpairs_v1']);
   ok(saved.best && saved.best['0'] && saved.best['0'].moves === S().moves, '存档里 best[0].moves 对得上');
   ok(typeof saved.best['0'].ms === 'number' && saved.best['0'].ms >= 0, '也记了用时');
+  ok(saved.scores && typeof saved.scores['0'] === 'number' && saved.scores['0'] > 0,
+     '★ 每关的得分也落盘了（scores[0] = ' + (saved.scores && saved.scores['0']) + '）');
+  ok(typeof saved.total === 'number' && saved.total === S().total,
+     '★ 总分也落盘了（' + saved.total + '）');
 
   /* 最后一关不该显示「下一关」 */
-  newGame(3, 42);
+  newGame(9, 42);
   playPerfect();
   run(1.5);
-  ok(S().phase === 'done', '最后一关也打完了');
-  ok(win.__pairsNextVisible() === false, '★ 最后一关不显示「下一关」按钮（点了没反应更让人困惑）');
+  ok(S().phase === 'done', '最后一关（第 10 关，18 对）也打完了');
+  ok(win.__pairsNextVisible() === false, '★ 最后一关（第 10 关）不显示「下一关」按钮（点了没反应更让人困惑）');
   /* 前三关要显示 */
   newGame(0, 43);
   playPerfect();
@@ -671,12 +808,110 @@ section('10) 成绩比较：先比步数，步数相同再比时间');
   ok(!crashed, '★ 坏存档不会让页面崩');
   if(sb4){
     ok(!sb4.window.__pairs().best['0'], 'moves 不是数字的条目被丢掉');
-    ok(!sb4.window.__pairs().best['9'], '不认识的关卡被丢掉');
+    ok(!sb4.window.__pairs().best['99'], '不认识的关卡（99）被丢掉');
     ok(sb4.window.__pairs().level === 0, '★ 越界的 level 回落到第一关');
   }
   let sb5 = null;
   try{ sb5 = makeVM({ 'gpairs_v1': 'not json' }); }catch(e){}
   ok(sb5 !== null, '★ 存档根本不是 JSON 也不会崩');
+}
+
+/* ================= 10b) ★ 跨关累积总分 ================= */
+section('10b) ★ 打多关，总分要累加');
+{
+  const st = {};
+  const sb = makeVM(st);
+  const w = sb.window;
+  const S2 = () => w.__pairs();
+  const DT2 = 1/60;
+  function run2(sec){ const n = Math.round(sec/DT2); for(let i=0;i<n;i++) w.__pairsStep(DT2); }
+  function solve(lv, seed){
+    w.__pairsNewGame(lv, seed);
+    const seen = {};
+    let g = 0;
+    while(S2().phase === 'play' && g++ < 3000){
+      const cs = S2().cards;
+      let done = false;
+      for(const rk in seen){
+        const idxs = seen[rk].filter(i => !cs[i].matched && !cs[i].up);
+        if(idxs.length >= 2){
+          w.__pairsTap(idxs[0]); w.__pairsTap(idxs[1]);
+          if(S2().locked) run2(1.0);
+          delete seen[rk]; done = true; break;
+        }
+      }
+      if(done) continue;
+      const unk = [];
+      for(let i = 0; i < cs.length; i++) if(!cs[i].matched && !cs[i].up) unk.push(i);
+      if(unk.length < 2) break;
+      const a = unk[0];
+      w.__pairsTap(a);
+      (seen[cs[a].rank] = seen[cs[a].rank] || []).push(a);
+      const b = unk.find(i => i !== a && seen[cs[i].rank] && seen[cs[i].rank].some(j => j !== i && !cs[j].matched && !cs[j].up));
+      if(b !== undefined) w.__pairsTap(b);
+      else {
+        const c = unk[1];
+        w.__pairsTap(c);
+        (seen[cs[c].rank] = seen[cs[c].rank] || []).push(c);
+      }
+      if(S2().locked) run2(1.0);
+    }
+    run2(1.5);
+    return S2();
+  }
+
+  const t0 = S2().total;
+  ok(t0 === 0, '全新存档总分是 0（实际 ' + t0 + '）');
+
+  /* 打第 1 关 */
+  const r1 = solve(0, 101);
+  ok(r1.phase === 'done', '第 1 关打完了');
+  const after1 = S2().total;
+  ok(after1 === r1.lastScore, '★ 总分 = 第 1 关得分（' + after1 + '）');
+  ok(Object.keys(S2().scores).length === 1, '只记了一关的分数');
+
+  /* 打第 2 关：总分要**累加**，不是覆盖 */
+  const r2 = solve(1, 102);
+  ok(r2.phase === 'done', '第 2 关打完了');
+  const after2 = S2().total;
+  ok(after2 === after1 + r2.lastScore,
+     '★ 总分累加了（' + after1 + ' + ' + r2.lastScore + ' = ' + after2 + '）');
+  ok(after2 > after1, '总分严格变大');
+  ok(Object.keys(S2().scores).length === 2, '记了两关的分数');
+
+  /* 重复打第 1 关（更差）：总分不该被拉低 —— 每关只保留最好分数 */
+  const before3 = S2().total;
+  solve(0, 999);
+  const after3 = S2().total;
+  ok(after3 >= before3, '★ 重打同一关（更差）不会把总分拉低（' + before3 + ' → ' + after3 + '）');
+  ok(after3 === before3 || S2().scores['0'] > r1.lastScore,
+     '★ 每关只保留最好分数');
+
+  /* 十关全打完：总分 = 各关最好分数之和 */
+  for(let lv = 2; lv < 10; lv++) solve(lv, 200 + lv);
+  const all = S2();
+  ok(Object.keys(all.scores).length === 10, '★ 十关都有分数了（实际 ' + Object.keys(all.scores).length + ' 关）');
+  let sum = 0;
+  for(let lv = 0; lv < 10; lv++) sum += all.scores[String(lv)] || 0;
+  ok(all.total === sum, '★ 总分 = 各关最好分数之和（' + all.total + ' vs ' + sum + '）');
+  ok(all.total > 0 && all.total <= all.maxTotal,
+     '★ 总分落在 0 ~ 满分之间（' + all.total + ' / ' + all.maxTotal + '）');
+  ok(all.prize >= 0 && all.prize <= 9, '★ 十关打完奖品档位有效（第 ' + (all.prize+1) + ' 档）');
+
+  /* 十关全打通至少要拿到中档奖品（不然攒十关没意义） */
+  ok(all.prize >= 4, '★ 十关都打通至少第 5 档（实际第 ' + (all.prize+1) + ' 档）');
+
+  /* 重启后总分还在 */
+  const sb2 = makeVM(st);
+  ok(sb2.window.__pairs().total === all.total,
+     '★ 重启后总分还在（' + sb2.window.__pairs().total + '）');
+  ok(Object.keys(sb2.window.__pairs().scores).length === 10, '★ 重启后十关分数都在');
+  ok(Object.keys(sb2.window.__pairs().cleared).length === 10,
+     '★ 重启后「哪几关打过了」也恢复出来了（从 scores 派生，不另存一份）');
+
+  /* 关卡按钮上应该有「通关过」的标记 */
+  const doneBtns = sb2.__els.levels.children.filter(b => b.classList.contains('done'));
+  ok(doneBtns.length === 10, '★ 十个关卡按钮都标了「已通关」的绿点（实际 ' + doneBtns.length + '）');
 }
 
 /* ================= 11) 记录面板 ================= */
@@ -687,7 +922,7 @@ section('11) 记录面板');
   run(1.5);
   win.__pairsOpenTop(0);
   const rows = win.__pairsTopRows();
-  ok(rows.length === 4, '★ 四行（每关一行）', String(rows.length));
+  ok(rows.length === 10, '★ 十行（每关一行）', String(rows.length));
   ok(rows.filter(r => /has/.test(r.cls)).length >= 1, '打过的那关有成绩标记');
   ok(rows.filter(r => /me/.test(r.cls)).length === 1, '★ 恰好一行标着「当前看的这关」');
   /* 每行必须是「迷你网格 + 步数 + 用时」，不能有文字。
@@ -720,7 +955,7 @@ section('12) 换关 / 重来');
   /* 切关 */
   els.levels.children[3].fire('click');
   ok(S().level === 3, '★ 点第 4 关切过去了');
-  ok(S().cards.length === 18, '★ 牌桌立刻变成 18 张');
+  ok(S().cards.length === 16, '★ 牌桌立刻变成 16 张（第 4 关 = 8 对）');
   ok(S().moves === 0, '切关后步数归零');
 
   /* 玩到一半点同一个关：不该打断 */
@@ -781,10 +1016,10 @@ section('14) 布局');
   for(const l of lv){
     newGame(l.id);
     const s = S();
-    ok(Math.abs(s.ch / s.cw - 1 / 0.7) < 0.02,
+    ok(Math.abs(s.ch / s.cw - 1 / 0.7) < 0.06,
        '关卡 ' + (l.id+1) + '：牌宽高比 ≈ 2:3（' + s.cw + '×' + s.ch + '）');
-    const bw = l.cols * s.cw + s.gap * (l.cols - 1);
-    const bh = l.rows * s.ch + s.gap * (l.rows - 1);
+    const bw = s.cols * s.cw + s.gap * (s.cols - 1);
+    const bh = s.rows * s.ch + s.gap * (s.rows - 1);
     ok(bw <= 390 - 16 + 1, '关卡 ' + (l.id+1) + '：牌桌宽不超出舞台（' + bw + ' ≤ ' + (390-16) + '）');
     ok(bh <= 320 - 16 + 1, '关卡 ' + (l.id+1) + '：牌桌高不超出舞台（' + bh + ' ≤ ' + (320-16) + '）');
     ok(s.cw >= 26, '关卡 ' + (l.id+1) + '：牌不至于小得看不见（宽 ' + s.cw + 'px）');

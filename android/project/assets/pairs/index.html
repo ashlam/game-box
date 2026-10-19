@@ -37,19 +37,25 @@
 
   /* ---------------- 关卡：迷你网格字形 ----------------
      不写「3×2」「简单」这类字，直接画出**你会得到的那张牌桌**长什么样。
-     点一下牌桌就变，规则靠交互自证。 */
-  #levels{display:flex;gap:6px;flex:0 0 auto;margin:8px 0 0}
+     十关用 flex-wrap 排成两行（5 + 5），比硬挤一行 10 个小格子清楚得多。 */
+  #levels{display:flex;flex-wrap:wrap;gap:5px;flex:0 0 auto;margin:8px 0 0}
   #levels button{
-    flex:1 1 0;min-width:0;padding:7px 0;border-radius:11px;
+    flex:1 1 calc(20% - 5px);min-width:0;padding:5px 0;border-radius:9px;
     border:1px solid var(--line);background:var(--card);color:var(--dim);
     display:flex;align-items:center;justify-content:center;
     transition:background .14s,border-color .14s,transform .1s;
+    position:relative;
   }
   #levels button:active{transform:scale(.95)}
   #levels button.on{background:#22304a;border-color:#3d5a8f}
   #levels button.on .dot{background:#9fc0ff;box-shadow:0 0 5px rgba(91,140,255,.75)}
+  /* 通关过的关卡右上角一个绿点（不写字，也不用勾 —— 勾留给结算面板） */
+  #levels button.done::after{
+    content:'';position:absolute;top:2px;right:2px;width:5px;height:5px;
+    border-radius:99px;background:var(--ok);box-shadow:0 0 4px rgba(56,211,159,.8);
+  }
   .glyph{display:grid;gap:2px;justify-content:center}
-  .glyph .dot{width:4px;height:4px;border-radius:1px;background:#5c6678}
+  .glyph .dot{width:3px;height:3px;border-radius:1px;background:#5c6678}
 
   /* ---------------- 仪表：图标 + 数字 ---------------- */
   #hud{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;flex:0 0 auto;margin:9px 0 0}
@@ -200,6 +206,44 @@
             font-variant-numeric:tabular-nums}
   .stats .s .ic{font-size:14px;opacity:.8}
   .stats .s b{font-size:19px;font-weight:800;letter-spacing:-.3px}
+  .stats .s.hi{background:linear-gradient(180deg,#2b2a1c,#22221a);border-color:rgba(255,209,102,.35)}
+  .stats .s.hi b{color:var(--gold)}
+
+  /* ---------------- 总分 / 奖品 ----------------
+     这是「攒」的反馈：大图标 + 总分 + 进度条 + 十档刻度。
+     十档刻度全部画出来（不是只画当前那一档），这样玩家能看到
+     「我离下一档还有多远」—— 只显示当前奖品的话，攒的动力就没了。 */
+  .prize{margin:4px 0 14px;padding:10px 12px;border-radius:14px;
+         background:rgba(255,255,255,.03);border:1px solid var(--line)}
+  .prow{display:flex;align-items:center;gap:11px}
+  .pEmoji{font-size:32px;line-height:1;flex:0 0 auto;
+          filter:drop-shadow(0 2px 10px rgba(255,209,102,.35));
+          transition:transform .3s cubic-bezier(.2,.9,.3,1.3)}
+  .ov.show .pEmoji{transform:scale(1.08)}
+  .pMeta{flex:1;min-width:0;text-align:left}
+  .pTotal{display:flex;align-items:baseline;gap:5px;font-variant-numeric:tabular-nums}
+  .pTotal .ic{font-size:12px;color:var(--dim);opacity:.8}
+  .pTotal b{font-size:21px;font-weight:900;color:var(--gold);letter-spacing:-.5px}
+  .pBar{height:5px;border-radius:99px;background:#0b0e14;border:1px solid var(--line);
+        overflow:hidden;margin-top:5px}
+  .pBar i{display:block;height:100%;width:0;border-radius:99px;
+          background:linear-gradient(90deg,#38d39f,#ffd166);transition:width .5s ease}
+  /* 十档刻度：当前档位那颗亮起来 */
+  .pTicks{display:flex;gap:2px;margin-top:9px}
+  .pTicks .t{flex:1 1 0;height:19px;border-radius:4px;display:flex;
+             align-items:center;justify-content:center;
+             font-size:13px;line-height:1;background:rgba(255,255,255,.045);
+             filter:grayscale(1);opacity:.42;transition:opacity .3s,filter .3s,transform .3s}
+  .pTicks .t.got{filter:none;opacity:1;background:rgba(255,209,102,.14)}
+  .pTicks .t.cur{transform:scale(1.2);background:rgba(255,209,102,.26);
+                 box-shadow:0 0 0 1px rgba(255,209,102,.5)}
+
+  /* 记录面板顶部的总分条 */
+  .topSum{display:flex;align-items:center;gap:9px;margin-bottom:8px;
+          padding:6px 10px;border-radius:11px;flex:0 0 auto;
+          background:rgba(255,209,102,.07);border:1px solid rgba(255,209,102,.22)}
+  .topSum .pEmoji{font-size:22px}
+  .topSum .pTotal b{font-size:17px}
 
   .row{display:flex;gap:9px;justify-content:center;flex-wrap:wrap}
   .row button{
@@ -215,25 +259,37 @@
   #topList{display:flex;flex-direction:column;gap:6px;
            max-height:min(46vh,300px);overflow-y:auto;overflow-x:hidden;
            -webkit-overflow-scrolling:touch;overscroll-behavior:contain}
-  /* 记录面板每一行：左边迷你网格，右边两段数字**上下叠**
+  /* 记录面板每一行：左边迷你网格，右边三段数字**上下叠**
      ⚠️ 一开始写的是「网格 | 步数 | 用时」三列并排，在 320 窄屏上实测：
      三列抢宽度，右边的数字被压成 0，只剩一个图标 —— 那正是这个游戏
-     唯一的信息，压没了等于这行啥也没说。改上下叠之后宽度只要一半。 */
-  #topList{display:flex;flex-direction:column;gap:6px;
-           max-height:min(46vh,300px);overflow-y:auto;overflow-x:hidden;
+     唯一的信息，压没了等于这行啥也没说。改上下叠之后宽度只要一半。
+
+     ⚠️ 十关之后行数从 4 变成 10，行高必须能**自适应压缩**：
+     面板可用高度 = 屏高 - 上下留白 - 总分条 - 按钮行。
+     320×568 上大约只剩 300px，10 行分下来每行 30px 左右 ——
+     所以行高用 flex 让它自己摊（flex:1 1 0 + min-height:0），
+     而不是写死一个 44px 再把面板撑出屏幕。 */
+  #topOv .panel{display:flex;flex-direction:column;
+                max-height:calc(100vh - 32px);}
+  #topList{display:flex;flex-direction:column;gap:3px;
+           flex:1 1 auto;min-height:0;
+           overflow-y:auto;overflow-x:hidden;
            -webkit-overflow-scrolling:touch;overscroll-behavior:contain}
-  .topRow{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;
-          padding:8px 11px;border-radius:11px;background:rgba(255,255,255,.028);
-          border:1px solid transparent;min-height:46px;
-          font-variant-numeric:tabular-nums;line-height:1.25}
+  .topRow{display:grid;grid-template-columns:auto 1fr;gap:9px;align-items:center;
+          padding:3px 9px;border-radius:8px;background:rgba(255,255,255,.028);
+          border:1px solid transparent;
+          flex:1 1 0;min-height:28px;max-height:44px;
+          font-variant-numeric:tabular-nums;line-height:1.1}
+  .topRow .glyph{gap:1.5px}
   .topRow .glyph .dot{background:#6b7688}
-  .topRow .nums{display:flex;flex-direction:column;gap:2px;min-width:0;justify-self:end}
-  .topRow .m,.topRow .t{display:flex;align-items:center;gap:5px;min-width:0;
+  .topRow .nums{display:flex;flex-direction:column;gap:0;min-width:0;justify-self:end}
+  .topRow .m,.topRow .t{display:flex;align-items:center;gap:4px;min-width:0;
                         white-space:nowrap;justify-content:flex-end;
                         font-variant-numeric:tabular-nums}
-  .topRow .m{font-size:16px;font-weight:800}
-  .topRow .t{font-size:12px;color:var(--dim)}
-  .topRow .m .ic,.topRow .t .ic{font-size:11px;opacity:.7;flex:0 0 auto}
+  .topRow .m{font-size:13px;font-weight:800;line-height:1.15}
+  .topRow .t{font-size:10px;color:var(--dim);line-height:1.2}
+  .topRow .t.sc{color:var(--gold);opacity:.92;font-weight:700}
+  .topRow .m .ic,.topRow .t .ic{font-size:9.5px;opacity:.7;flex:0 0 auto}
   .topRow.has{background:linear-gradient(90deg,rgba(255,209,102,.13),rgba(255,209,102,.03));
               border-color:rgba(255,209,102,.3)}
   .topRow.has .m{color:var(--gold)}
@@ -289,7 +345,7 @@
 
 <canvas id="fx"></canvas>
 
-<!-- 过关：星星 + 两个图标按钮 -->
+<!-- 过关：星星 + 本关得分 + 总分/奖品 + 图标按钮 -->
 <div class="ov" id="doneOv">
   <div class="panel">
     <div class="stars" id="doneStars">
@@ -298,7 +354,21 @@
     <div class="stats">
       <div class="s"><span class="ic">&#128070;</span><b id="doneMoves">0</b></div>
       <div class="s"><span class="ic">&#9201;</span><b id="doneTime">0:00</b></div>
+      <div class="s hi"><span class="ic">&#11088;</span><b id="doneScore">0</b></div>
     </div>
+
+    <!-- 总分 → 奖品：这一块是「攒」的反馈，不是单关反馈 -->
+    <div class="prize" id="donePrize">
+      <div class="prow">
+        <span class="pEmoji" id="donePrizeEmoji">&#127942;</span>
+        <div class="pMeta">
+          <div class="pTotal"><span class="ic">&#931;</span><b id="doneTotal">0</b></div>
+          <div class="pBar"><i id="doneBarFill"></i></div>
+        </div>
+      </div>
+      <div class="pTicks" id="doneTicks"></div>
+    </div>
+
     <div class="row">
       <button id="doneAgain" aria-label="再来一次">&#10226;</button>
       <button id="doneNext" class="pri" aria-label="下一关">&#9654;</button>
@@ -309,11 +379,18 @@
   </div>
 </div>
 
-<!-- 记录：四行，每行一个迷你网格 + 步数 + 用时 -->
+<!-- 记录：十行，每行一个迷你网格 + 步数 + 用时 + 分数；顶部一行总分 + 奖品 -->
 <div class="ov" id="topOv">
   <div class="panel">
+    <div class="topSum">
+      <span class="pEmoji" id="topPrizeEmoji">&#127942;</span>
+      <div class="pMeta">
+        <div class="pTotal"><span class="ic">&#931;</span><b id="topTotal">0</b></div>
+        <div class="pBar"><i id="topBarFill"></i></div>
+      </div>
+    </div>
     <div id="topList"></div>
-    <div class="row" style="margin-top:14px">
+    <div class="row" style="margin-top:12px">
       <button id="topPlay" class="pri" aria-label="玩这一关">&#9654;</button>
       <button id="topClose" aria-label="关闭">&#10005;</button>
     </div>
@@ -357,16 +434,67 @@ var SUITS = [
    点数只用于显示，配对判的是点数相同，所以牌面全是数字。 */
 var RANKS = ['2','3','4','5','6','7','8','9','10'];
 
-/* 四个难度：配对对数 → 网格。glyph 用来画关卡按钮上的迷你网格。
-   ⚠️ 网格是**受高度限制**的（手机竖屏，舞台矮而宽），所以列数要多给、行数要少给：
-   同一块舞台里，3 列 × 6 行只能排到 35×50，而 4 列 × 5 行能到 46×66 —— 牌大 40%。
-   最后一行允许留空（18 张排在 4×5=20 格里），空的那两格不画牌，视觉上也整齐。 */
+/* 十关：配对对数 + 网格。
+   ---------------------------------------------------------------------
+   ★ 列数**不是写死的**，由 layout() 按「牌面积最大」自动选（见 pickCols）。
+     手机竖屏的舞台是「矮而宽」，牌的实际尺寸 = min(按宽度排得下的,
+     按高度排得下的 / 0.7)，列数太多宽度成瓶颈、太少高度成瓶颈，
+     最优点通常在中间。写死列数的版本在 320 宽屏上实测：
+     16 张用 3 列只有 27px，而 4 列能到 44px —— 差 60%。
+     `cols` 在这里只是**默认值/调试提示**，layout 会重新算。 */
 var LEVELS = [
-  { id:0, pairs:3, cols:3, rows:2 },
-  { id:1, pairs:6, cols:4, rows:3 },
-  { id:2, pairs:8, cols:4, rows:4 },
-  { id:3, pairs:9, cols:5, rows:4 }
+  { id:0,  pairs:3,  cols:3 },
+  { id:1,  pairs:5,  cols:4 },
+  { id:2,  pairs:6,  cols:4 },
+  { id:3,  pairs:8,  cols:4 },
+  { id:4,  pairs:9,  cols:5 },
+  { id:5,  pairs:10, cols:5 },
+  { id:6,  pairs:12, cols:5 },
+  { id:7,  pairs:14, cols:6 },
+  { id:8,  pairs:16, cols:6 },
+  { id:9,  pairs:18, cols:6 }
 ];
+
+/* ★ 十档奖品：按「总分」给，从低到高。
+   全部用 emoji —— 它既是图形又能一眼认出「这个比那个好」，
+   而且**不需要认字**（本作的硬约束）。
+   顺序就是名次：0 = 最低档（空手），9 = 最高档（皇冠）。 */
+/* ★ 十档奖品：按「总分」给，从低到高。
+   ---------------------------------------------------------------------
+   选择标准（用户反馈「第一个是萝卜吗？第二个是什么？」之后重做的）：
+   1) **轮廓差异大**：13px 下认不出形状就白搭。所以这十档刻意排成
+      圆 → 圆 → 尖 → 椭圆 → 方 → 星 → 菱形 → 车形 → 冠形 → 杯形，
+      相邻两档**形状就不同**，不靠颜色区分（色弱玩家也分得出）
+   2) **不需要认字**：本作的硬约束
+   3) **有天然的贵贱直觉**：糖果 < 饼干 < 冰淇淋 < 气球 < 礼物 <
+      星星 < 宝石 < 小汽车 < 皇冠 < 金杯，小孩不用教就知道哪个好
+
+   ⚠️ 踩过的两个坑：
+   · 第一版用 🌱 小芽 / 🌿 小草 / 🌸 小红花，用户直接问「第一个是萝卜吗？
+     第二个是什么？」—— 这几个在小尺寸下根本认不出来，而且三档都是绿色植物，
+     轮廓几乎一样，看不出档次差别。
+   · 第二版换成 🪨 石头 / 🪶 羽毛 / 🪙 铜板，结果**渲染成空白方块** ——
+     它们是 Unicode 13（2020）新增的，很多设备（尤其老安卓）不支持。
+     **选 emoji 必须挑 Unicode 6.0 时代的老字符**，新字符在老设备上是豆腐块。
+     下面十个全是 2010 年就有的，最保险。
+
+   顺序就是名次：0 = 最低档，9 = 最高档。 */
+var PRIZES = [
+  { em:'\uD83C\uDF6C', name:'糖果' },       // 🍬 圆
+  { em:'\uD83C\uDF6A', name:'饼干' },       // 🍪 圆（带点）
+  { em:'\uD83C\uDF66', name:'冰淇淋' },     // 🍦 尖（甜筒）
+  { em:'\uD83C\uDF88', name:'气球' },       // 🎈 椭圆带线
+  { em:'\uD83C\uDF81', name:'礼物盒' },     // 🎁 方
+  { em:'\u2B50',       name:'星星' },       // ⭐ 五角
+  { em:'\uD83D\uDC8E', name:'宝石' },       // 💎 菱形
+  { em:'\uD83D\uDE97', name:'小汽车' },     // 🚗 车形
+  { em:'\uD83D\uDC51', name:'皇冠' },       // 👑 冠形
+  { em:'\uD83C\uDFC6', name:'金杯' }        // 🏆 杯形
+];
+
+/* 星级阈值：步数 / 对数 ≤ 1.45 → 3 星，≤ 2.05 → 2 星，否则 1 星 */
+var STAR_3 = 1.45;
+var STAR_2 = 2.05;
 
 var FLIP_BACK = 0.85;   // 两张对不上，停多久再翻回去（秒）
 var GONE_DELAY = 0.34;  // 配对成功后多久开始缩掉
@@ -412,6 +540,15 @@ var S = {
   t0: 0,
   elapsed: 0,
   stars: 0,
+  /* ★ 总分系统：每关结算时算出一个分数，10 关累计成总分，
+     总分决定最后给哪一档奖品（见 PRIZES）。 */
+  scores: [],         // 每关的得分（下标 = 关卡 id），-1 表示还没打过
+  total: 0,           // 总分（= scores 里有效项之和）
+  cleared: {},        // 已通关的关卡（关卡按钮上打勾用）
+  prize: -1,          // 本次结算对应的奖品档位（0~9）
+  lastScore: 0,       // 本关得分
+  newTotalBest: false,
+  prevTotalBest: null,
   doneT: 0,
   panelShown: false,
   panelDue: false,
@@ -423,13 +560,22 @@ var S = {
   cw: 0, ch: 0, gap: 0, cols: 3, rows: 2
 };
 
-var prog = { best:{}, sound:true, level:0 };
+var prog = { best:{}, scores:{}, sound:true, level:0 };
 
 function rnd(){ return S._rnd ? S._rnd() : Math.random(); }
 function rndInt(n){ return Math.floor(rnd() * n) % n; }
 
 /* =========================================================================
-   存档：每关只记一条最好成绩（先比步数，步数相同再比时间）
+   存档
+   -------------------------------------------------------------------------
+   prog = {
+     best:   { "<关卡>": {moves, ms, at} },   // 每关的最好成绩
+     scores: { "<关卡>": 分数 },              // 每关的最好分数（用来算总分）
+     total:  总分（= scores 之和）,
+     sound, level
+   }
+   总分不单独存一份「独立事实」，而是**从 scores 加出来的派生值** ——
+   否则两处数字会漂移（改了一关的成绩、总分忘了同步）。
    ========================================================================= */
 function cleanBest(e){
   if(!e || typeof e !== 'object') return null;
@@ -454,6 +600,17 @@ function bestOf(lv){
   var e = prog.best[String(lv)];
   return (e && typeof e.moves === 'number') ? e : null;
 }
+/* 每关的最好分数（0 表示还没打过） */
+function scoreOf(lv){
+  var v = prog.scores[String(lv)];
+  return (typeof v === 'number' && isFinite(v) && v > 0) ? v : 0;
+}
+/* 总分 = 各关最好分数之和。派生值，不存两份。 */
+function totalScore(){
+  var sum = 0;
+  for(var i=0;i<LEVELS.length;i++) sum += scoreOf(i);
+  return sum;
+}
 function loadProg(){
   try{
     var raw = localStorage.getItem(LS_KEY);
@@ -466,6 +623,14 @@ function loadProg(){
         if(!(Number(k) >= 0 && Number(k) < LEVELS.length)) continue;
         var e = cleanBest(o.best[k]);
         if(e) prog.best[k] = e;
+      }
+    }
+    if(o.scores && typeof o.scores === 'object'){
+      for(var k2 in o.scores){
+        if(!has(o.scores, k2)) continue;
+        if(!(Number(k2) >= 0 && Number(k2) < LEVELS.length)) continue;
+        var v = o.scores[k2];
+        if(typeof v === 'number' && isFinite(v) && v > 0) prog.scores[k2] = Math.round(v);
       }
     }
     if(typeof o.sound === 'boolean') prog.sound = o.sound;
@@ -558,22 +723,54 @@ function snd(kind, arg){
 /* =========================================================================
    发牌
    ========================================================================= */
-/* 抽 n 个**互不相同**的点数，每个点数配两张不同花色的牌。
-   这样「点数相同」就一定是一对，不会出现同一点数 4 张导致配对歧义。 */
+/* 抽 n 对牌（2n 张）。
+   ---------------------------------------------------------------------
+   ⚠️ 这里有个**硬约束**：点数池只有 9 种（2~10，不能用 A/J/Q/K 那些字母），
+      而一副牌里每个点数只有 4 张。所以：
+        · 第 1~9 对 → 每对用一个**不同**的点数（各配 2 张不同花色）
+        · 第 10~18 对 → 点数不够了，同一个点数会出现 **4 张 = 两对**
+          （真实扑克就是这样：♠7♥7♦7♣7 是四张 7，两两都能配）
+      第一版没处理这个，直接 `ranks[i]` 取到 undefined，
+      第 10 关（18 对）有 18 张牌的牌面是空的 —— 测试里的「点数全是数字」断言抓到了。
+
+   每个点数最多 4 张，所以对数上限是 9 × 2 = 18 对，正好是第 10 关。 */
 function deal(n){
-  var ranks = RANKS.slice(), out = [], i;
+  if(n * 2 > RANKS.length * 4){
+    /* 兜底：万一以后关卡表被改成超过 18 对，不要静默发出空牌 */
+    n = RANKS.length * 2;
+  }
+  var out = [], i, r;
+
+  /* ① 先把点数池洗一遍 */
+  var ranks = RANKS.slice();
   for(i=ranks.length-1;i>0;i--){
     var j = rndInt(i+1), t = ranks[i]; ranks[i] = ranks[j]; ranks[j] = t;
   }
-  for(i=0;i<n;i++){
-    var suitPool = [0,1,2,3];
-    for(var k=suitPool.length-1;k>0;k--){
-      var m = rndInt(k+1), tt = suitPool[k]; suitPool[k] = suitPool[m]; suitPool[m] = tt;
+
+  /* ② 分配「每个点数要出几对」：先每点 1 对（最多用前 n 个点数），不够再每点 2 对。
+     ⚠️ 这里第一版写错了：先把 perRank 全部初始化成 1，于是**最少也会发出 9 对**，
+     3 对的第一关实际发了 18 张牌。正确做法是「只给前 n 个点数各 1 对」，
+     用完 n 个之后剩下的才升级成 2 对。 */
+  var perRank = [];
+  for(i=0;i<ranks.length;i++) perRank.push(0);
+  var left = n;
+  for(i=0;i<ranks.length && left > 0;i++, left--) perRank[i] = 1;        // 第一轮：每点 1 对
+  for(i=0;i<ranks.length && left > 0;i++, left--) perRank[i] = 2;        // 第二轮：每点再加 1 对
+
+  /* ③ 按分配发牌。每个点数把自己那 4 种花色洗一遍，取前 perRank*2 张 */
+  for(r=0;r<ranks.length;r++){
+    var cnt = perRank[r] * 2;                            // 这个点数要出几张
+    if(cnt <= 0) continue;
+    var suits = [0,1,2,3];
+    for(i=suits.length-1;i>0;i--){
+      var m = rndInt(i+1), tt = suits[i]; suits[i] = suits[m]; suits[m] = tt;
     }
-    out.push({ id: out.length, rank: ranks[i], suit: suitPool[0], up:false, matched:false });
-    out.push({ id: out.length, rank: ranks[i], suit: suitPool[1], up:false, matched:false });
+    for(i=0;i<cnt;i++){
+      out.push({ id: 0, rank: ranks[r], suit: suits[i], up:false, matched:false });
+    }
   }
-  /* 洗牌：位置必须是随机的，否则「一对总是挨着」就没得玩了 */
+
+  /* ④ 洗牌：位置必须随机，否则「一对总是挨着」就没得玩了 */
   for(i=out.length-1;i>0;i--){
     var p = rndInt(i+1), c = out[i]; out[i] = out[p]; out[p] = c;
   }
@@ -587,29 +784,52 @@ function deal(n){
    牌宽 = min(按宽度排得下的宽, 按高度排得下的高 × 宽高比)。
    网格由关卡固定，**配对成功后也不重排**（见文件头的约束 ①）。
    ========================================================================= */
+/* 在给定舞台尺寸下，为 n 张牌挑「牌面积最大」的列数。
+   ---------------------------------------------------------------------
+   为什么必须算：手机竖屏舞台是「矮而宽」，牌尺寸 = min(按宽度排得下的,
+   按高度排得下的 / 0.7)。列太少 → 高度成瓶颈；列太多 → 宽度成瓶颈。
+   写死列数的版本在 320×568 上实测 16 张只有 27px，而 4 列能到 44px。
+
+   遍历 3~8 列，取面积最大的那个；平局时取列数少的（视觉上更整齐）。 */
+function pickCols(n, aw, ah){
+  var best = { cols: 3, cw: 0 };
+  for(var cols = 3; cols <= 8; cols++){
+    if(cols > n) break;                        // 列数比牌还多没有意义
+    var rows = Math.ceil(n / cols);
+    var gap = clamp(Math.round(Math.min(aw, ah) * 0.035), 5, 12);
+    var wByW = (aw - gap * (cols - 1)) / cols;
+    var hByH = (ah - gap * (rows - 1)) / rows;
+    var cw = Math.min(wByW, hByH * CARD_RATIO);
+    if(cw > best.cw + 0.5){ best = { cols: cols, cw: cw }; }
+  }
+  return best.cols;
+}
+
 function layout(){
   var stage = $('stage'), board = $('board');
   if(!stage || !board) return;
-  var L = LEVELS[S.level];
-  var cols = L.cols;
-  /* 行数按**实际牌数**算，不是按 cols*rows 的容量算 ——
-     18 张排在 5 列里只需要 4 行（最后一行 3 张），按容量算会多留一行空白，
-     牌就白小了。 */
-  var n = S.cards.length || L.pairs * 2;
-  var rows = Math.ceil(n / cols);
+  var n = S.cards.length || LEVELS[S.level].pairs * 2;
 
   var aw = stage.clientWidth || 0, ah = stage.clientHeight || 0;
   if(!(aw > 0)) aw = 320;
   if(!(ah > 0)) ah = 240;
-  aw -= 16; ah -= 16;
+  aw -= 14; ah -= 14;
   if(aw < 40) aw = 40;
   if(ah < 40) ah = 40;
 
-  var gap = clamp(Math.round(Math.min(aw, ah) * 0.035), 6, 14);
+  /* ★ 列数由「牌面积最大」自动决定，不再写死在关卡表里 */
+  var cols = pickCols(n, aw, ah);
+  var rows = Math.ceil(n / cols);
+
+  var gap = clamp(Math.round(Math.min(aw, ah) * 0.035), 5, 12);
   var wByW = (aw - gap * (cols - 1)) / cols;
   var hByH = (ah - gap * (rows - 1)) / rows;
   var cw = Math.min(wByW, hByH * CARD_RATIO);
-  cw = Math.max(26, Math.floor(cw));
+  /* ⚠️ 这里原来写的是 Math.max(26, ...)，本意是「别小得看不见」，
+     但它是个**下限**，会把算出来的尺寸往上顶 —— 36 张时算出来 20px，
+     被顶到 26px，于是行高变大、牌桌直接溢出舞台。
+     下限必须低于任何可能的计算结果；「别太小」应该靠关卡设计保证。 */
+  cw = Math.max(8, Math.floor(cw));
   var ch = Math.floor(cw / CARD_RATIO);
 
   S.cw = cw; S.ch = ch; S.gap = gap; S.cols = cols; S.rows = rows;
@@ -724,12 +944,15 @@ function paintHud(){
 }
 
 /* 关卡按钮上的迷你网格：直接把「你会得到的那张牌桌」画出来。
-   点数 = 实际牌数（不是 cols×rows），所以最后一行的空位不会画成点 ——
-   按钮上看到的形状和真正摆出来的牌桌一模一样。 */
+   点数 = 实际牌数，列数用跟牌桌**同一套算法**（pickCols）——
+   这样按钮上看到的形状和真正摆出来的牌桌一模一样。
+   ⚠️ 按钮里的迷你格子很小，用固定的近似舞台尺寸算列数就够了
+      （迷你网格只要「形状对」，不需要像素级精确）。 */
 function glyphFor(L){
   var g = mk('div', 'glyph');
-  g.style.gridTemplateColumns = 'repeat(' + L.cols + ', 4px)';
   var n = L.pairs * 2;
+  var cols = pickCols(n, 300, 300);
+  g.style.gridTemplateColumns = 'repeat(' + cols + ', 3px)';
   for(var i=0;i<n;i++) g.appendChild(mk('span', 'dot'));
   return g;
 }
@@ -745,6 +968,8 @@ function renderLevels(){
       b.setAttribute('aria-label', '关卡 ' + (L.id + 1));
       b.appendChild(glyphFor(L));
       if(L.id === S.level) b.className = 'on';
+      /* 通关过的关卡右上角点一个绿点：十关里哪几关打过了，一眼看得出来 */
+      if(S.cleared[String(L.id)]) b.classList.add('done');
       if(b.addEventListener){
         b.addEventListener('click', function(){
           if(L.id === S.level && S.phase === 'play' && S.started) return;  // 玩到一半别打断
@@ -783,6 +1008,7 @@ function newGame(level, seed){
   S.t0 = 0;
   S.elapsed = 0;
   S.stars = 0;
+  S.lastScore = 0;
   S.doneT = 0;
   S.panelShown = false;
   S.panelDue = false;
@@ -862,9 +1088,68 @@ function resolveMiss(){
 /* 星级：按「步数 / 对数」的比值算 —— 全凭记忆的话，最少步数就是对数本身 */
 function starsFor(moves, pairs){
   var r = moves / Math.max(1, pairs);
-  if(r <= 1.45) return 3;
-  if(r <= 2.05) return 2;
+  if(r <= STAR_3) return 3;
+  if(r <= STAR_2) return 2;
   return 1;
+}
+
+/* ★ 单关分数。
+   三个乘数，各自对应一件玩家能理解的事：
+     · 对数     —— 关卡越大越值钱（18 对远难于 3 对）
+     · 星级     —— 1/2/3 星 → ×1 / ×1.6 / ×2.2（记忆效率）
+     · 速度     —— 每对平均用时越短越快，封顶 ×1.5（手速，不是硬指标）
+   底分用 100×对数，所以一关 3 对满分约 660、18 对满分约 5940，
+   十关全满大概 3 万上下 —— 数字够大才有「攒起来」的感觉。
+
+   ⚠️ 速度只做**温和**加成（最多 ×1.5）：这是记忆游戏，不该逼人抢时间。
+      抢时间的压力会让玩家不敢思考，而思考恰恰是这个游戏要练的东西。 */
+function scoreFor(moves, ms, pairs, stars){
+  var base = 100 * pairs;
+  var starMul = (stars >= 3) ? 2.2 : (stars === 2 ? 1.6 : 1);
+  /* 每对平均秒数：3 对 / 5 秒一对算「快」，8 秒一对是正常水平 */
+  var per = pairs > 0 ? (ms / 1000) / pairs : 99;
+  var speedMul = 1;
+  if(per <= 3) speedMul = 1.5;
+  else if(per <= 5) speedMul = 1.5 - (per - 3) * 0.15;      // 5 秒 → 1.2
+  else if(per <= 8) speedMul = 1.2 - (per - 5) * 0.06;      // 8 秒 → 1.02
+  else speedMul = 1;
+  speedMul = clamp(speedMul, 1, 1.5);
+  return Math.round(base * starMul * speedMul);
+}
+
+/* ★ 总分 → 奖品档位（0~9）。
+   ---------------------------------------------------------------------
+   ⚠️ 分档**不能均分**。实测把「总分/满分」十等分时，只打第 1 关（3 对）
+      就能拿到 3%，直接跨进第 1 档 —— 那玩家会觉得奖品太廉价，
+      十档的差别也就没了意义。
+
+   实际分数曲线（全部 3 星、每对 3 秒）：
+     L1 3% → L2 7.9% → L3 13.9% → L4 21.8% → L5 30.7%
+     → L6 40.6% → L7 52.5% → L8 66.3% → L9 82.2% → L10 100%
+   所以门槛按这个曲线设：每档大致对应「打到第 N 关」，
+   这样奖品档位就等于一个看得懂的进度（「我打到第 6 档了」≈「我打过第 6 关」）。 */
+var PRIZE_GATES = [0, 0.06, 0.12, 0.20, 0.29, 0.39, 0.50, 0.64, 0.80, 0.96];
+
+function prizeFor(total){
+  if(total <= 0) return 0;
+  var max = maxTotal();
+  if(max <= 0) return 0;
+  var ratio = clamp(total / max, 0, 1);
+  var idx = 0;
+  for(var i=0;i<PRIZE_GATES.length;i++){
+    if(ratio >= PRIZE_GATES[i]) idx = i;
+  }
+  return idx;
+}
+
+/* 满分：每关满分之和（3 星 + 最快速度的理论上限） */
+function maxTotal(){
+  var sum = 0;
+  for(var i=0;i<LEVELS.length;i++){
+    var p = LEVELS[i].pairs;
+    sum += Math.round(100 * p * 2.2 * 1.5);
+  }
+  return sum;
 }
 
 function finish(){
@@ -872,6 +1157,7 @@ function finish(){
   S.doneT = 0;
   S.elapsed = Math.max(0, clock() - S.t0);
   S.stars = starsFor(S.moves, LEVELS[S.level].pairs);
+  S.lastScore = scoreFor(S.moves, S.elapsed, LEVELS[S.level].pairs, S.stars);
 
   var key = String(S.level);
   var prev = bestOf(S.level);
@@ -880,11 +1166,23 @@ function finish(){
   if(better(cur, prev)){
     prog.best[key] = cur;
     S.newBest = true;
-    saveProg();
   } else {
     S.newBest = false;
   }
 
+  /* 每关只保留**最好分数**（跟最好成绩一致：步数少的分数一定更高，
+     但分数还吃时间，所以单独记一份，免得「步数相同但更快」被漏掉） */
+  var oldScore = scoreOf(S.level);
+  if(S.lastScore > oldScore) prog.scores[key] = S.lastScore;
+  S.cleared[key] = 1;
+
+  S.prevTotalBest = (typeof prog.total === 'number') ? prog.total : null;
+  S.total = totalScore();
+  S.newTotalBest = (S.prevTotalBest === null) || (S.total > S.prevTotalBest);
+  prog.total = S.total;
+  S.prize = prizeFor(S.total);
+
+  saveProg();
   paint();
   snd('win');
   burst();
@@ -897,6 +1195,29 @@ function finish(){
 /* =========================================================================
    过关面板 / 记录面板
    ========================================================================= */
+/* 渲染「十档刻度」：十颗奖品图标排一排，已拿到的亮、当前档位放大。
+   刻意**全部画出来**而不是只显示当前那一个 —— 玩家要能看到
+   「我拿到了第 3 档，第 4 档是小红花」，才有继续攒的动力。 */
+function renderTicks(box, prizeIdx){
+  if(!box) return;
+  for(var k=box.children.length-1;k>=0;k--) box.removeChild(box.children[k]);
+  for(var i=0;i<PRIZES.length;i++){
+    var t = mk('span', 't', PRIZES[i].em);
+    t.title = PRIZES[i].name;              // 悬停提示用真文字，屏幕上不显示
+    t.setAttribute('aria-label', PRIZES[i].name);
+    if(i <= prizeIdx) t.classList.add('got');
+    if(i === prizeIdx) t.classList.add('cur');
+    box.appendChild(t);
+  }
+}
+
+/* 总分 → 进度条宽度（相对满分） */
+function totalPct(total){
+  var max = maxTotal();
+  if(max <= 0) return 0;
+  return clamp(total / max, 0, 1) * 100;
+}
+
 function showDone(){
   if(S.panelShown) return;
   S.panelShown = true;
@@ -913,6 +1234,20 @@ function showDone(){
   if(mv) mv.textContent = String(S.moves);
   var tm = $('doneTime');
   if(tm) tm.textContent = fmtTime(S.elapsed);
+  var sc = $('doneScore');
+  if(sc) sc.textContent = String(S.lastScore);
+
+  /* ★ 总分 + 奖品 */
+  var total = totalScore();
+  S.total = total;
+  S.prize = prizeFor(total);
+  var tt = $('doneTotal');
+  if(tt) tt.textContent = String(total);
+  var pe = $('donePrizeEmoji');
+  if(pe) pe.textContent = PRIZES[S.prize].em;
+  var fill = $('doneBarFill');
+  if(fill) fill.style.width = totalPct(total).toFixed(1) + '%';
+  renderTicks($('doneTicks'), S.prize);
 
   /* 最后一关不显示「下一关」—— 点了没反应比没按钮更让人困惑 */
   var nx = $('doneNext');
@@ -935,7 +1270,7 @@ function openTop(lv){
   if(list){
     for(var k=list.children.length-1;k>=0;k--) list.removeChild(list.children[k]);
     for(var i=0;i<LEVELS.length;i++){
-      var L = LEVELS[i], b = bestOf(i);
+      var L = LEVELS[i], b = bestOf(i), sc2 = scoreOf(i);
       var row = mk('div', 'topRow');
       if(b) row.classList.add('has'); else row.classList.add('empty');
       if(i === S.topLevel) row.classList.add('me');
@@ -950,10 +1285,23 @@ function openTop(lv){
       t.appendChild(mk('span', null, b ? fmtTime(b.ms) : '\u2014'));
       nums.appendChild(m);
       nums.appendChild(t);
+      /* 第三行：这一关的得分（星星图标 + 数字） */
+      var s3 = mk('div', 't sc');
+      s3.appendChild(mk('span', 'ic', '\u2B50'));
+      s3.appendChild(mk('span', null, sc2 ? String(sc2) : '\u2014'));
+      nums.appendChild(s3);
       row.appendChild(nums);
       list.appendChild(row);
     }
   }
+  /* 顶部总分条 */
+  var total = totalScore();
+  var tt = $('topTotal');
+  if(tt) tt.textContent = String(total);
+  var pe = $('topPrizeEmoji');
+  if(pe) pe.textContent = PRIZES[prizeFor(total)].em;
+  var fill = $('topBarFill');
+  if(fill) fill.style.width = totalPct(total).toFixed(1) + '%';
   show('topOv');
 }
 function hideTop(){
@@ -1197,6 +1545,11 @@ function bind(){
 function boot(){
   loadProg();
   S.level = (prog.level >= 0 && prog.level < LEVELS.length) ? prog.level : 0;
+  /* 读档时恢复「哪几关打过了」—— scores 里有分数的就算通关过。
+     不另存一份 cleared：两处状态会漂移。 */
+  S.cleared = {};
+  for(var i=0;i<LEVELS.length;i++) if(scoreOf(i) > 0) S.cleared[String(i)] = 1;
+  S.total = totalScore();
   bind();
   newGame(S.level);
   var sb = $('btnSound');
@@ -1218,6 +1571,13 @@ window.__pairs = function(){
     newBest: !!S.newBest, prevBest: S.prevBest,
     topLevel: S.topLevel,
     cw: S.cw, ch: S.ch, gap: S.gap,
+    /* 总分系统 */
+    scores: JSON.parse(JSON.stringify(prog.scores)),
+    total: totalScore(),
+    lastScore: S.lastScore,
+    prize: S.prize,
+    cleared: JSON.parse(JSON.stringify(S.cleared)),
+    maxTotal: maxTotal(),
     cards: S.cards.map(function(c){
       return { id:c.id, rank:c.rank, suit:SUITS[c.suit].sym, red:SUITS[c.suit].red,
                up:!!c.up, matched:!!c.matched };
@@ -1238,9 +1598,16 @@ window.__pairsSetClock = function(fn){ _now = (typeof fn === 'function') ? fn : 
 window.__pairsSetDate = function(fn){ _dateNow = (typeof fn === 'function') ? fn : _defaultDate; };
 window.__pairsLevels = function(){
   return LEVELS.map(function(L){
-    return { id:L.id, pairs:L.pairs, cards:L.pairs*2, cols:L.cols, rows:L.rows };
+    return { id:L.id, pairs:L.pairs, cards:L.pairs*2, cols:L.cols };
   });
 };
+window.__pairsPrizes = function(){
+  return PRIZES.map(function(p, i){ return { idx:i, em:p.em, name:p.name }; });
+};
+window.__pairsPrizeFor = prizeFor;
+window.__pairsScoreFor = scoreFor;
+window.__pairsMaxTotal = maxTotal;
+window.__pairsTotal = totalScore;
 window.__pairsProg = function(){ return JSON.parse(JSON.stringify(prog)); };
 window.__pairsDeal = deal;
 window.__pairsStars = starsFor;

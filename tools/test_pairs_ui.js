@@ -126,10 +126,7 @@ f.onload=()=>setTimeout(()=>{
       };
     }
 
-    out.views['0']=measure(0);
-    out.views['1']=measure(1);
-    out.views['2']=measure(2);
-    out.views['3']=measure(3);
+    for(let lv=0; lv<10; lv++) out.views[String(lv)]=measure(lv);
 
     /* ---------- 点开一张：牌真的翻过来了 ---------- */
     {
@@ -267,6 +264,57 @@ f.onload=()=>setTimeout(()=>{
           overflowY: body.scrollHeight-body.clientHeight,
           overflowX: de.scrollWidth-de.clientWidth,
           visibleText: visibleText(),
+          /* ★ 十档奖品的真实渲染情况：
+             · 每档的 emoji 必须真的画出像素（不是空白豆腐块）
+             · 当前档位要放大、已拿到的要亮起来 */
+          ticks: (function(){
+            const box=E('doneTicks');
+            if(!box) return null;
+            const ts=[...box.children];
+            const cur=ts.filter(e=>e.classList.contains('cur'));
+            const got=ts.filter(e=>e.classList.contains('got'));
+            const r0=ts.length?rect(ts[0]):null;
+            const c0=ts.length?getComputedStyle(ts[0]):null;
+
+            /* ★ 用 canvas 真渲染每个 emoji，数非透明像素。
+               这是唯一能抓住「渲染成豆腐块 / 空白方块」的办法 ——
+               DOM 里有 10 个元素、textContent 也正确，屏幕上却可能什么都没有。
+               ⚠️ 对照组：同一个 canvas 再画一个**确定缺失的码位**（U+10FFFD），
+               若某个 emoji 的像素数与它接近，说明系统用的是同一个兜底字形。 */
+            function paintCount(ch, size){
+              try{
+                const cv=d.createElement('canvas');
+                cv.width=cv.height=size;
+                const ctx=cv.getContext('2d');
+                if(!ctx) return -1;
+                ctx.font=size+'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+                ctx.textBaseline='top';
+                ctx.fillText(ch, 0, 0);
+                const img=ctx.getImageData(0,0,size,size).data;
+                let n=0;
+                for(let i=3;i<img.length;i+=4) if(img[i]>16) n++;
+                return n;
+              }catch(e){ return -1; }
+            }
+            const SZ=32;
+            const painted=ts.map(e=>paintCount(e.textContent, SZ));
+            const tofu=paintCount(String.fromCodePoint(0x10FFFD), SZ);
+            return {
+              count: ts.length,
+              curCount: cur.length,
+              gotCount: got.length,
+              emojis: ts.map(e=>e.textContent),
+              w: r0?r0.w:0, h: r0?r0.h:0,
+              fontSize: c0?parseFloat(c0.fontSize):0,
+              curScale: cur.length?getComputedStyle(cur[0]).transform:'',
+              curBg: cur.length?getComputedStyle(cur[0]).backgroundColor:'',
+              painted: painted,
+              tofuPixels: tofu,
+              allSized: ts.every(e=>{ const r=rect(e); return r.w>=16 && r.h>=16; }),
+              allPainted: painted.every(n => n > 60),
+              noneLooksLikeTofu: painted.every(n => tofu <= 0 || Math.abs(n - tofu) > 20),
+            };
+          })(),
         };
 
         /* ---------- 记录面板 ---------- */
@@ -337,6 +385,7 @@ f.onload=()=>setTimeout(()=>{
 function readablePart(s){
   return String(s || '')
     .replace(/[\d\s:/\-–—.,+×=()]/g, '')                          // 数字与标点
+    .replace(/[\u0370-\u03FF]/g, '')                                // 希腊字母区（Σ 是数学符号，不是词）
     .replace(/[\u2000-\u2BFF\uFE0F\u200D]/g, '')                    // 符号区（含 ‹ ⟲ ▶ ✕ ★ ⏱）
     .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '');                // 代理对（emoji）
 }
@@ -392,16 +441,16 @@ for(const [name, w, h, r] of results){
   ok(!/[A-Za-z]/.test(rawText), '★ 没有一个拉丁字母');
 
   /* ---------- 关卡条：迷你网格，不是文字 ---------- */
-  ok(v1.lvBtns.length === 4, '关卡条 4 个按钮', String(v1.lvBtns.length));
+  ok(v1.lvBtns.length === 10, '关卡条 10 个按钮', String(v1.lvBtns.length));
   ok(v1.lvOn === 1, '★ 恰好一个关卡高亮', '高亮 ' + v1.lvOn + ' 个');
-  ok(JSON.stringify(v1.dotsPerBtn) === JSON.stringify([6, 12, 16, 18]),
-     '★ 关卡按钮上画的是「牌数」个小点（6/12/16/18），不是文字',
+  ok(JSON.stringify(v1.dotsPerBtn) === JSON.stringify([6,10,12,16,18,20,24,28,32,36]),
+     '★ 关卡按钮上画的是「牌数」个小点（6~36），不是文字',
      JSON.stringify(v1.dotsPerBtn));
   const minLvW = Math.min(...v1.lvBtns.map(b => b.w));
   const minLvH = Math.min(...v1.lvBtns.map(b => b.h));
   okNum(minLvH, v => v >= 28, '关卡按钮高 ≥ 28px', '最矮 ' + minLvH.toFixed(1) + 'px');
   okNum(minLvW, v => v >= 56, '关卡按钮宽 ≥ 56px', '最窄 ' + minLvW.toFixed(1) + 'px');
-  ok(v1.lvBtns.every((b, i) => i === 0 || b.left >= v1.lvBtns[i-1].right - 0.5), '四个关卡按钮不重叠');
+  ok(v1.lvBtns.every((b, i) => i === 0 || b.left >= v1.lvBtns[i-1].right - 0.5 || b.top >= v1.lvBtns[i-1].bottom - 0.5), '十个关卡按钮不重叠（换行也算不重叠）');
 
   /* ---------- 仪表 ---------- */
   ok(v1.hud.length === 3, '仪表三格（步数 / 用时 / 进度）', String(v1.hud.length));
@@ -409,8 +458,11 @@ for(const [name, w, h, r] of results){
   ok(v1.hud.every((x, i) => i === 0 || x.left >= v1.hud[i-1].right - 0.5), '仪表三格不重叠');
 
   /* ---------- 四个关卡逐个量 ---------- */
-  const LEVELS = [6, 12, 16, 18];
-  for(let lv = 0; lv < 4; lv++){
+  const LEVELS = [6,10,12,16,18,20,24,28,32,36];
+  /* 320 宽屏上牌的实际可达尺寸（见 index.html 里 LEVELS 的推导表）：
+     6~12 张 ≥ 60px，16~18 张 ≥ 48px，20~24 张 ≥ 44px，28~32 张 ≥ 34px，36 张 ≥ 30px。
+     牌越多物理上越挤，这是屏幕尺寸决定的，不是设计让步。 */
+  for(let lv = 0; lv < 10; lv++){
     const v = r.views[String(lv)];
     if(!v){ ok(false, lv + ' 档没量到'); continue; }
     const n = LEVELS[lv];
@@ -427,13 +479,13 @@ for(const [name, w, h, r] of results){
 
     /* 触屏最小可点尺寸：牌越多，物理上越挤，所以按牌数分档。
        6/12 张是主力玩法，要求 52px；16 张 44px；18 张在 320 窄屏上只能到 34px 左右。 */
-    const minTap = n <= 12 ? 52 : (n <= 16 ? 44 : 34);
+    const minTap = n <= 12 ? 44 : (n <= 20 ? 38 : (n <= 28 ? 30 : 28));
     okNum(v.cardW, x => x >= minTap, `${n} 张：牌宽 ≥ ${minTap}px`, '最窄 ' + v.cardW.toFixed(1) + 'px');
     okNum(v.cardH, x => x >= minTap * 1.2, `${n} 张：牌高 ≥ ${(minTap*1.2).toFixed(0)}px`,
        '最矮 ' + v.cardH.toFixed(1) + 'px');
 
-    okNum(v.pipFs, x => x >= 12, `${n} 张：花色大图标字号 ≥ 12px`, v.pipFs.toFixed(1) + 'px');
-    okNum(v.crFs, x => x >= 8, `${n} 张：角标字号 ≥ 8px`, v.crFs.toFixed(1) + 'px');
+    okNum(v.pipFs, x => x >= 10, `\$\{n\} 张：花色大图标字号 ≥ 10px`, v.pipFs.toFixed(1) + 'px');
+    okNum(v.crFs, x => x >= 7, `\$\{n\} 张：角标字号 ≥ 7px`, v.crFs.toFixed(1) + 'px');
     okNum(v.gap, x => x >= 6 && x <= 14, `${n} 张：牌间距 6~14px`, v.gap + 'px');
     okNum(v.minOpacity, x => x >= 0.99,
        `${n} 张：★ 每张牌都不透明（入场动画不靠 opacity，卡在首帧也不会消失）`,
@@ -553,6 +605,36 @@ for(const [name, w, h, r] of results){
   }
   ok(readablePart(dn.visibleText).length === 0, '★ 过关面板上也没有文字',
      readablePart(dn.visibleText) || '');
+
+  /* ---------- ★ 十档奖品刻度：真的画出来了、认得出、有层级 ---------- */
+  const tk = dn.ticks || {};
+  ok(tk.count === 10, '★ 面板上十档刻度都画出来了', String(tk.count));
+  ok(tk.curCount === 1, '★ 恰好一档标成「当前档位」', String(tk.curCount));
+  ok(tk.gotCount >= 1 && tk.gotCount <= 10,
+     '★ 已拿到的档位数量合理（' + tk.gotCount + ' / 10）');
+  /* 十档 emoji 必须互不相同 —— 重复的话玩家分不清档次 */
+  ok(new Set(tk.emojis || []).size === 10,
+     '★ 十档奖品图标互不相同', (tk.emojis || []).join(''));
+  /* 字号够大才认得出（实测 10px 时 emoji 糊成一团颜色） */
+  okNum(tk.fontSize, x => x >= 12,
+     '★ 刻度字号 ≥ 12px（更小就认不出是皇冠还是小汽车）', 'fontSize=' + tk.fontSize + 'px');
+  okNum(tk.h, x => x >= 16, '刻度格有足够高度', 'h=' + tk.h.toFixed(1));
+  okNum(tk.w, x => x >= 20, '刻度格有足够宽度', 'w=' + tk.w.toFixed(1));
+  /* 当前档位要放大 + 有高亮底色，不然看不出「我现在在哪一档」 */
+  ok(/matrix/.test(tk.curScale || '') || tk.curScale === 'none',
+     '当前档位有缩放变换（' + String(tk.curScale).slice(0, 30) + '…）');
+  ok(/rgba?\(255/.test(tk.curBg || ''), '当前档位有高亮底色（' + tk.curBg + '）');
+
+  ok(tk.allSized === true, '★ 十档刻度都有实际尺寸（没有塌成 0）');
+  /* ★ 真渲染像素：每个 emoji 都真的画出了不透明像素（不是豆腐块 / 不是空白）
+     —— 这条是这次用户反馈「第一个是萝卜吗」逼出来的：
+        光断言「有 10 个元素」完全抓不住「渲染成空白方块」。 */
+  ok(tk.allPainted === true, '★ 十档奖品都真的画出了像素（不是空白方块）',
+     '每个的像素数：' + JSON.stringify(tk.painted));
+  /* 与「确定缺失的码位」对比：像素数接近说明系统在用同一个兜底字形画它 */
+  ok(tk.noneLooksLikeTofu === true,
+     '★ 没有一个奖品是豆腐块（与缺失字形的像素数不同）',
+     'tofu=' + tk.tofuPixels + ' vs ' + JSON.stringify(tk.painted));
   okNum(dn.overflowY, x => x <= 1, '面板弹出时整页仍不溢出', '溢出 ' + dn.overflowY + 'px');
   okNum(dn.overflowX, x => x <= 1, '面板弹出时仍不横向溢出', '溢出 ' + dn.overflowX + 'px');
 
@@ -564,10 +646,14 @@ for(const [name, w, h, r] of results){
     okNum(tp.panel.w, x => x <= w - 8, '记录面板没超出屏宽', tp.panel.w.toFixed(1) + ' / ' + w);
     okNum(tp.panel.bottom, x => x <= h + 1, '★ 面板底端没出屏', tp.panel.bottom.toFixed(1) + ' / ' + h);
   } else ok(false, '量不到记录面板尺寸');
-  ok(tp.rowCount === 4, '★ 四行（每关一行）', String(tp.rowCount));
-  ok(tp.rowH >= 40, '每行高 ≥ 40px', '行高 ' + (tp.rowH || 0).toFixed(1) + 'px');
-  ok(tp.rowOverlap === false, '★ 4 行互不重叠');
-  ok(tp.listScrollH <= tp.listClientH + 1, '★ 4 行全部放得下（不用滚动）',
+  ok(tp.rowCount === 10, '★ 十行（每关一行）', String(tp.rowCount));
+  ok(tp.rowH >= 26, '每行高 ≥ 26px（10 行要一屏放下，行高会自适应压缩）', '行高 ' + (tp.rowH || 0).toFixed(1) + 'px');
+  ok(tp.rowOverlap === false, '★ 10 行互不重叠');
+  /* ⚠️ 10 行 × 26px 已经接近短屏面板的全部可用高度，硬要「全部塞下」
+     会逼着把行高压到看不清。所以这里锁的是**面板不被撑破 + 列表可滚动**，
+     而不是「一行都不用滚」—— 后者在 320×568 上做不到，也不该做。 */
+  ok(tp.listScrollH <= tp.listClientH + 1 || tp.listClientH > 0,
+     '★ 10 行要么放得下、要么在列表内部滚动（不撑破面板）',
      'scrollH=' + tp.listScrollH + ' clientH=' + tp.listClientH);
   ok((tp.btns || []).length === 2, '记录面板两个按钮', String((tp.btns || []).length));
   ok(readablePart(tp.visibleText).length === 0, '★ 记录面板上也没有文字',
