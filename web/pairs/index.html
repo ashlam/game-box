@@ -128,17 +128,38 @@
 
   /* 翻开的两张对不上：红圈提醒，随即翻回去（没有字，靠颜色说「错了」） */
   .card.miss .face{box-shadow:0 0 0 3px var(--bad),0 0 20px rgba(255,123,114,.5)}
-  /* 配对成功：绿圈 → 然后缩掉，留下一个空槽 */
+  /* 配对成功：绿框，并且**牌一直留在桌上、牌面始终看得清**。
+     ⚠️ 这里刻意不做「缩掉 / 变成空槽」那一套：玩家是靠记住「哪张已经配过了」
+     来判断剩下哪些还没配，牌一消失这条线索就没了，只能纯靠位置硬记。
+     所以配对的牌只换配色（牌面转成淡绿底 + 绿色描边 + 右上角一个勾），
+     点数和花色都还读得出来，只是明显「已完成」。 */
   .card.hit .face{box-shadow:0 0 0 3px var(--ok),0 0 22px rgba(56,211,159,.55)}
-  .card.gone{pointer-events:none}
-  .card.gone .inner{transform:scale(.72);transition:transform .3s ease,opacity .3s ease}
-  .card.gone{opacity:.16}
-  /* 配对后留下的虚线空槽：牌位不动，位置记忆才不会被重排打乱 */
-  .card.gone .face,.card.gone .back{
-    background:transparent;border:1px dashed rgba(139,149,167,.32);
-    box-shadow:none;color:transparent;
+  .card.gone{pointer-events:none;cursor:default}
+  .card.gone .face{
+    background:linear-gradient(158deg,#eaf7f1 0%,#dcf0e6 55%,#c9e6d9 100%);
+    border-color:rgba(56,211,159,.6);
+    box-shadow:0 0 0 3px rgba(56,211,159,.5),0 3px 10px rgba(0,0,0,.34),
+               inset 0 1px 0 rgba(255,255,255,.7);
   }
-  .card.gone .face .pip,.card.gone .face .cr{visibility:hidden}
+  /* 牌面褪色但**必须仍然读得出来**：0.55 是实测的折中 ——
+     再淡（0.42）点数就发灰、老人和小孩不容易看清；再深（0.8）又和没配对的牌分不开。 */
+  .card.gone .face .pip,
+  .card.gone .face .cr{opacity:.55}
+  /* ⚠️ 红桃/方块**不要**褪成灰绿：花色颜色本身是记忆线索（红还是黑），
+     统一改成灰绿等于把这条线索抹掉了。只压暗一点，保持偏红。 */
+  .card.gone .face.red{color:#b8605a}
+  /* 右上角一个勾：不用认字也能懂「这张已经配好了」。
+     用伪元素而不是真 DOM 节点 —— 它不参与布局，也不会被当成「文字」读出来。 */
+  .card.gone::after{
+    content:'\2713';
+    position:absolute;top:calc(var(--cw,72px) * -.10);right:calc(var(--cw,72px) * -.10);
+    width:calc(var(--cw,72px) * .38);height:calc(var(--cw,72px) * .38);
+    border-radius:99px;background:var(--ok);color:#0b1712;
+    font-size:calc(var(--cw,72px) * .24);font-weight:900;line-height:1;
+    display:flex;align-items:center;justify-content:center;
+    border:2px solid #0f1115;box-shadow:0 2px 8px rgba(0,0,0,.5);
+    z-index:3;pointer-events:none;
+  }
 
   /* ---------------- 底栏 ---------------- */
   #ctl{display:flex;gap:8px;flex:0 0 auto;margin:9px 0 0}

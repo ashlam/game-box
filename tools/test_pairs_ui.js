@@ -172,12 +172,35 @@ f.onload=()=>setTimeout(()=>{
       }
       const cards=[...d.querySelectorAll('#board .card')];
       const goneCount=cards.filter(e=>e.classList.contains('gone')).length;
-      const goneStyle=getComputedStyle(cards[pair[0]].querySelector('.face'));
+      const goneEl=cards[pair[0]];
+      const goneStyle=getComputedStyle(goneEl.querySelector('.face'));
+      const goneInner=getComputedStyle(goneEl.querySelector('.inner'));
+      /* ★ 配对的牌必须**还看得见**：牌面要有真实底色、真实字色，不能缩没 / 变透明 */
+      const gonePip=getComputedStyle(goneEl.querySelector('.pip'));
+      const goneCard=getComputedStyle(goneEl);
+      const afterBadge=getComputedStyle(goneEl, '::after');
+      /* 红/黑花色是记忆线索：配对后红色不能褪成灰绿 */
+      const redEl=cards.find(e=>e.classList.contains('gone') && e.querySelector('.face.red'));
+      const redColor = redEl ? getComputedStyle(redEl.querySelector('.face')).color : '';
+      const rm = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(redColor || '');
+      const redStaysRed = rm ? (+rm[1] > +rm[3] + 25 && +rm[1] > +rm[2] + 10) : true;
       out.match={
         countBefore:beforeRects.length, countAfter:afterRects.length,
         orderSame: beforeOrder===afterOrder,
         maxShift, goneCount,
-        goneBg: goneStyle.backgroundColor, goneBorder: goneStyle.borderStyle,
+        goneBg: goneStyle.backgroundColor,
+        goneBgImage: goneStyle.backgroundImage,
+        goneBorder: goneStyle.borderStyle,
+        goneColor: goneStyle.color,
+        gonePipOpacity: parseFloat(gonePip.opacity),
+        goneCardOpacity: parseFloat(goneCard.opacity),
+        goneInnerTransform: goneInner.transform,
+        goneCardW: afterRects[pair[0]].w,
+        normalCardW: beforeRects[pair[0]].w,
+        badgeContent: afterBadge ? afterBadge.content : '',
+        badgeBg: afterBadge ? afterBadge.backgroundColor : '',
+        goneRedColor: redColor,
+        redStaysRed: redStaysRed,
         found: w0.__pairs().found,
       };
     }
@@ -441,18 +464,55 @@ for(const [name, w, h, r] of results){
   ok(/matrix/.test(fp.backTransform || ''), '★ 背面的 rotateY(180deg) 真的生效了（不是正面透出来）',
      String(fp.backTransform).slice(0, 40));
 
-  /* ---------- ★ 配对成功后不能重排 ---------- */
-  section(`${name} ${w}×${h} · ★ 配对后不重排`);
+  /* ---------- ★ 配对成功后不能重排、且牌要留在桌上 ---------- */
+  section(`${name} ${w}×${h} · ★ 配对后不重排、牌留在桌上`);
   const mt = r.match || {};
   ok(mt.orderSame === true, '★ 配对后牌序完全没变（没有把后面的牌挪过来补位）');
-  ok(mt.countBefore === mt.countAfter, '★ DOM 牌数没减少（留空槽，不是删掉）',
+  ok(mt.countBefore === mt.countAfter, '★ DOM 牌数没减少（牌还在桌上）',
      mt.countBefore + ' → ' + mt.countAfter);
   okNum(mt.maxShift, x => x <= 1.5, '★ 配对后每一张牌都还在原位',
      '最大位移 ' + (mt.maxShift || 0).toFixed(2) + 'px');
   ok(mt.goneCount === 2, '恰好两张标成已配对（' + mt.goneCount + '）');
   ok(mt.found === 1, '已配对数 = 1');
-  ok(/dashed/.test(mt.goneBorder || ''), '★ 空槽画成虚线框（一眼看出「这里配好了」）', mt.goneBorder);
-  ok(/rgba\(0, 0, 0, 0\)|transparent/.test(mt.goneBg || ''), '空槽是透明的（不是又一张牌）', mt.goneBg);
+
+  /* ★ 用户的明确要求：翻成功的牌不要消失 —— 牌面要一直看得清 */
+  okNum(mt.goneCardOpacity, x => x >= 0.99, '★ 已配对的牌**不透明**（没有缩没 / 淡出）',
+     'opacity=' + mt.goneCardOpacity);
+  okNum(mt.goneCardW, x => Math.abs(x - mt.normalCardW) <= 1.5,
+     '★ 已配对的牌**尺寸不变**（没有缩掉）',
+     mt.goneCardW + ' vs 原 ' + mt.normalCardW);
+  /* ⚠️ 别直接匹配 matrix 的字面量：翻开状态的 .inner 是 rotateY(180deg)，
+     计算出来是 matrix3d(-1,0,0,0, 0,1,0,0, 0,0,-1,0, 0,0,0,1) —— 前三个对角元
+     是 (-1, 1, -1)，那是「翻转」不是「缩放」。要判断有没有被缩小，
+     得看缩放因子（对角元的绝对值）是不是 1。 */
+  const t = String(mt.goneInnerTransform || '');
+  let scaleOk = true;
+  const m3 = /matrix3d\(([^)]+)\)/.exec(t);
+  const m2 = /matrix\(([^)]+)\)/.exec(t);
+  if(m3){
+    const v = m3[1].split(',').map(Number);
+    scaleOk = Math.abs(Math.abs(v[0]) - 1) < 0.02 && Math.abs(Math.abs(v[5]) - 1) < 0.02;
+  } else if(m2){
+    const v = m2[1].split(',').map(Number);
+    scaleOk = Math.abs(Math.abs(v[0]) - 1) < 0.02 && Math.abs(Math.abs(v[3]) - 1) < 0.02;
+  } else if(t === 'none'){
+    scaleOk = true;
+  }
+  ok(scaleOk, '★ 已配对的牌没有缩放（.inner 的缩放因子仍是 1，只是翻转/没变）',
+     t.slice(0, 56));
+  ok(/rgb/.test(mt.goneBg || '') || /gradient/.test(mt.goneBgImage || ''),
+     '★ 已配对的牌有真实底色（不是透明空槽）', mt.goneBg + ' / ' + String(mt.goneBgImage).slice(0, 30));
+  ok(/rgb/.test(mt.goneColor || ''), '★ 牌面字色还在（点数和花色读得出来）', mt.goneColor);
+  okNum(mt.gonePipOpacity, x => x >= 0.3 && x <= 0.9,
+     '★ 花色图标只是「褪色」而不是隐藏（0.3~0.9 之间）', 'opacity=' + mt.gonePipOpacity);
+  /* ★ 红色花色不能褪成灰绿：红/黑本身就是记忆线索 */
+  ok(mt.redStaysRed === true,
+     '★ 红桃/方块配对后仍然偏红（花色颜色是记忆线索，不能抹成灰）', mt.goneRedColor);
+  ok(!/dashed/.test(mt.goneBorder || ''), '已配对的牌不再是虚线空槽（' + mt.goneBorder + '）');
+  /* 右上角那个勾：不用认字也能看出「这张配好了」 */
+  ok(/✓|\u2713/.test(mt.badgeContent || ''), '★ 已配对的牌右上角有个勾（图形标记，不是文字）',
+     'content=' + JSON.stringify(mt.badgeContent));
+  ok(/rgb/.test(mt.badgeBg || ''), '勾有实心底色（' + mt.badgeBg + '）');
 
   /* ---------- 配对失败 ---------- */
   section(`${name} ${w}×${h} · 配对失败`);

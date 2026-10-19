@@ -8,7 +8,7 @@
  *   3) 四个难度：3/6/8/9 对 → 6/12/16/18 张，网格尺寸
  *   4) 发牌：每个点数恰好两张、花色不同、位置随机、id 连续
  *   5) 配对成功 / 失败；失败会锁输入、到点翻回去
- *   6) ★ 配对成功的牌**原地留空槽**，不重排（否则位置记忆作废）
+ *   6) ★ 配对成功的牌**留在桌上不消失**，且不重排（否则位置记忆作废）
  *   7) 计时从第一次点击才开始
  *   8) 星级、成绩存档（先比步数再比时间）
  *   9) 单文件自包含
@@ -455,8 +455,8 @@ section('5) 配对成功 / 失败');
   ok(S().moves === 1, '翻回去不额外加步数');
 }
 
-/* ================= 6) ★ 配对后原地留空槽 ================= */
-section('6) ★ 配对成功的牌原地留空槽（不重排）');
+/* ================= 6) ★ 配对后牌留在桌上、不重排 ================= */
+section('6) ★ 配对成功的牌留在桌上（不消失、不重排）');
 {
   newGame(1, 21);
   const before = S().cards.map(c => c.id + ':' + c.rank + c.suit);
@@ -468,7 +468,7 @@ section('6) ★ 配对成功的牌原地留空槽（不重排）');
 
   /* DOM 上：已配对的那两张还在原来的位置，只是多了 gone 类 */
   const cs = cards();
-  ok(cs.length === before.length, '★ DOM 牌数没减少（留空槽，不是删掉）');
+  ok(cs.length === before.length, '★ DOM 牌数没减少（牌还在桌上，不是删掉）');
   ok(cs[pr[0]].gone && cs[pr[1]].gone, '那两张标成已配对');
   ok(cs[pr[0]].idx === pr[0] && cs[pr[1]].idx === pr[1], '位置下标也没变');
 
@@ -480,6 +480,21 @@ section('6) ★ 配对成功的牌原地留空槽（不重排）');
   }
   ok(stillThere === cs.length - 2, '★ 其余牌都还在原位扣着（' + stillThere + '/' + (cs.length-2) + '）');
 
+  /* ★ 用户的明确要求：翻成功的牌不要消失。
+     状态上要满足三件事：还翻开、数据还在、位置没动。
+     （视觉层面「看得见」由 UI 测试量 computed 样式。） */
+  ok(cs[pr[0]].down === false && cs[pr[1]].down === false,
+     '★ 已配对的牌保持翻开（没有翻回背面）');
+  ok(cs[pr[0]].rank === S().cards[pr[0]].rank && cs[pr[1]].suit === S().cards[pr[1]].suit,
+     '★ 已配对的牌牌面数据还在（点数和花色都读得出来）',
+     cs[pr[0]].rank + cs[pr[0]].suit + ' / ' + cs[pr[1]].rank + cs[pr[1]].suit);
+  ok(cs[pr[0]].rank && cs[pr[1]].suit, '★ DOM 上 dataset 里的点数花色没被清掉');
+
+  /* 再点一下已配对的牌：必须无效（不能重复计分） */
+  const foundBefore = S().found, movesBefore = S().moves;
+  ok(tap(pr[0]) === 'ignore', '★ 再点已配对的牌无效（不会重复配对）');
+  ok(S().found === foundBefore && S().moves === movesBefore, '重复点击不加分也不加步数');
+
   /* 而且后面还能继续玩：再配一对 */
   const remainRank = cs.find(c => !c.gone).rank;
   const pr2 = [];
@@ -487,7 +502,7 @@ section('6) ★ 配对成功的牌原地留空槽（不重排）');
     if(S().cards[i].rank === remainRank && !S().cards[i].matched) pr2.push(i);
   if(pr2.length >= 2){
     tap(pr2[0]); tap(pr2[1]);
-    ok(S().found === 2, '★ 空槽不影响继续配对（已配 ' + S().found + ' 对）');
+    ok(S().found === 2, '★ 已配对的牌留在桌上，也不影响继续配对（已配 ' + S().found + ' 对）');
   }
 }
 
