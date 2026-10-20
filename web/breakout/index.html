@@ -490,16 +490,54 @@
      直接按比例取「第一个字符」会漏砖：4 列时 10 宽图案每列只取 index 0/2/5/7，
      第 4 关 '.e......e.' 的 e 在 index 1 和 8 —— 全被跳过，整关变成纯普通砖（实测如此）。
      所以按「每列覆盖的字符区间里挑优先级最高的那个」取样：特殊砖（钢/爆/金/硬/移动）
-     永远优先于普通砖和空格，缩放多少列都不会把它们弄丢。 */
+     永远优先于普通砖和空格，缩放多少列都不会把它们弄丢。
+
+     ★★ 但分桶必须**左右镜像对称**，否则图案会整体偏一边：
+     原来用 lo = floor(c*n/cols)、hi = floor((c+1)*n/cols)，10→8 列时
+     col0 的窗口是 [0,1)（只含 index 0）、col7 的窗口是 [8,10)（含 2 个字符）——
+     左边桶窄、右边桶宽。而第 1/2 关的图案是 '.nnnnnnnn.'（第一个字符就是留白），
+     于是 col0 忠实取到那个 '.'，**左边凭空空出一列、右边却不空**（玩家一眼就看出不对称）。
+
+     修法：边界直接用镜像公式 b[c] = round(c*n/cols)（c ≤ cols/2），
+     右半边 b[cols-c] = n - b[c] 反推，天然满足 b[c] + b[cols-c] = n。
+     列数比图案宽（如 12 列 vs 10 字符）时会出现「零宽桶」，
+     这时取该边界处的那一个字符 —— 等价于把图案等比拉伸，且左右仍然对称。
+     ⚠️ 不能再加「每列至少覆盖 1 字符」的单调修正：它会和镜像约束打架
+     （11/12 列时实测又变回「左空 1、右空 2」）。 */
   const ART_PRI = { s:6, e:5, b:4, h:3, '~':2, n:1 };
 
+  function artBounds(n, cols){
+    const b = new Array(cols + 1);
+    b[0] = 0; b[cols] = n;
+    for(let c = 1; c < cols; c++){
+      b[c] = c * 2 <= cols ? Math.round(c * n / cols) : n - Math.round((cols - c) * n / cols);
+    }
+    return b;
+  }
+
   function sampleArt(line, cols){
-    const n = line.length, out = [];
+    const n = line.length;
+    /* 列数 ≥ 图案宽：用「最近邻插值」逐列取一个字符。
+       映射 src(c) = round((c + 0.5) * n / cols - 0.5) 天然镜像
+       （c 与 cols-1-c 落在 n-1 互为镜像的位置），既不会丢字符也不会偏边。
+       ⚠️ 这里不能用「分桶」：10 字符铺到 12 列时 round(c*10/12) 会算出重复边界
+       （0,1,2,3,3,4,…），第 3、8 列的桶宽度变成 0，直接把 index 3 和 6 的砖吃掉 ——
+       实测第 1 关最后一行 '..nnnnnn..' 在 12 列下中间只剩 6 个 n、两边各空 2 格，
+       而上面几行是「两边各空 1 格」，一屏里两种缩进，看着就是歪的。 */
+    if(cols >= n){
+      const out = [];
+      for(let c = 0; c < cols; c++){
+        const i = Math.round((c + 0.5) * n / cols - 0.5);
+        out.push(line[clamp(i, 0, n - 1)] || '.');
+      }
+      return out;
+    }
+    /* 列数 < 图案宽：分桶，桶内取优先级最高的字符（特殊砖不会被缩没） */
+    const b = artBounds(n, cols);
+    const out = [];
     for(let c = 0; c < cols; c++){
-      const lo = Math.floor(c * n / cols);
-      const hi = Math.max(lo + 1, Math.floor((c + 1) * n / cols));
       let best = '.', bestP = 0;
-      for(let i = lo; i < hi && i < n; i++){
+      for(let i = b[c]; i < b[c + 1]; i++){
         const p = ART_PRI[line[i]] || 0;
         if(p > bestP){ best = line[i]; bestP = p; }
       }

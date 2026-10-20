@@ -209,6 +209,96 @@ section('0) 关卡数据自洽');
   ok(C.CAPSULE_MAX === 3, '场上最多 3 个道具');
 }
 
+/* ================= 0b) ★ 图案缩放必须左右对称 =================
+   这条是玩家一眼看出来的 bug：第 1/2 关「左边总空一列、右边不空」。
+   根因是图案按 10 字符宽写、真实列数 4~12 变，按 floor 分桶时左右桶宽不等，
+   而这两关图案恰好以 '.' 开头，左边就凭空多空一列。
+   这里把「所有对称图案 × 所有列数」都跑一遍，取样后必须仍然镜像对称。 */
+section('0b) ★ 图案缩放到任意列数都保持左右对称');
+{
+  /* 从页面里抠出关卡图案，用与游戏完全相同的取样算法重算一遍 */
+  const src = fs.readFileSync(HTML, 'utf8');
+  const arts = [...src.matchAll(/\{ name:'([^']+)', art:\[([\s\S]*?)\]\}/g)]
+    .map(m => ({ name: m[1], art: [...m[2].matchAll(/'([^']*)'/g)].map(x => x[1]) }));
+  ok(arts.length === 10, `抠出 10 关图案（实际 ${arts.length}）`);
+  ok(arts.every(a => a.art.every(r => r.length === 10)), '每行图案都是 10 个字符宽');
+
+  const PRI = { s:6, e:5, b:4, h:3, '~':2, n:1 };
+  const cl = (v, a, b) => v < a ? a : (v > b ? b : v);
+  const bounds = (n, cols) => {
+    const b = new Array(cols + 1); b[0] = 0; b[cols] = n;
+    for (let c = 1; c < cols; c++) b[c] = c * 2 <= cols ? Math.round(c * n / cols) : n - Math.round((cols - c) * n / cols);
+    return b;
+  };
+  const sample = (line, cols) => {
+    const n = line.length;
+    if (cols >= n) {
+      const o = [];
+      for (let c = 0; c < cols; c++) {
+        const i = Math.round((c + 0.5) * n / cols - 0.5);
+        o.push(line[cl(i, 0, n - 1)] || '.');
+      }
+      return o;
+    }
+    const b = bounds(n, cols), o = [];
+    for (let c = 0; c < cols; c++) {
+      let best = '.', bp = 0;
+      for (let i = b[c]; i < b[c + 1]; i++) { const p = PRI[line[i]] || 0; if (p > bp) { best = line[i]; bp = p; } }
+      o.push(best);
+    }
+    return o;
+  };
+
+  const bad = [];
+  for (let cols = 4; cols <= 12; cols++) {
+    for (const lv of arts) {
+      if (!lv.art.every(r => r === r.split('').reverse().join(''))) continue;   // 只查本身对称的图案
+      const rows = lv.art.map(r => sample(r, cols).join(''));
+      for (const r of rows) {
+        if (r !== r.split('').reverse().join('')) { bad.push(`${lv.name}@${cols}列 行不对称：${r}`); break; }
+      }
+    }
+  }
+  ok(bad.length === 0, '★ 4~12 列下所有对称图案取样后仍左右对称', bad.slice(0, 4).join('；'));
+
+  /* 直接盯住玩家报的那个现象：第 1/2 关在任何列数下，左右留白必须相等 */
+  const margins = [];
+  for (let cols = 4; cols <= 12; cols++) {
+    for (const idx of [0, 1]) {
+      const rows = arts[idx].art.map(r => sample(r, cols).join(''));
+      const le = Math.min(...rows.map(r => r.match(/^\.*/)[0].length));
+      const re = Math.min(...rows.map(r => r.match(/\.*$/)[0].length));
+      if (le !== re) margins.push(`第${idx + 1}关@${cols}列 左${le}/右${re}`);
+    }
+  }
+  ok(margins.length === 0, '★ 第 1/2 关在任何列数下左右留白相等', margins.join('；'));
+
+  /* 拉伸时砖只会变多（一个字符被两列取到），绝不能变少。
+     ★ 这条一开始写反了方向：最近邻插值在 10 字符 → 12 列时必然有字符被取两次
+     （46 块变 58 块），我最初断言「数量必须相等」，结果整片红 ——
+     其实那是拉伸的正常行为，真正该盯的是「不许丢砖」。 */
+  const lost = [];
+  for (let cols = 10; cols <= 12; cols++) {          // 列数 ≥ 图案宽：一块都不该丢
+    for (const lv of arts) {
+      const want = lv.art.reduce((s, r) => s + [...r].filter(ch => ch !== '.').length, 0);
+      const got = lv.art.reduce((s, r) => s + sample(r, cols).filter(ch => ch !== '.').length, 0);
+      if (got < want) lost.push(`${lv.name}@${cols}列 应有 ${want} 实得 ${got}`);
+    }
+  }
+  ok(lost.length === 0, '★ 列数 ≥ 图案宽时一块砖都不丢（拉伸只会变多）', lost.join('；'));
+
+  /* 缩列（4~9 列）时同理：桶内取优先级最高的字符，砖只会合并、不会凭空少 */
+  const shrink = [];
+  for (let cols = 4; cols <= 9; cols++) {
+    for (const lv of arts) {
+      const want = lv.art.reduce((s, r) => s + [...r].filter(ch => ch !== '.').length, 0);
+      const got = lv.art.reduce((s, r) => s + sample(r, cols).filter(ch => ch !== '.').length, 0);
+      if (got === 0) shrink.push(`${lv.name}@${cols}列 整关空了`);
+    }
+  }
+  ok(shrink.length === 0, '★ 缩到 4 列时也没有哪一关整关变空', shrink.join('；'));
+}
+
 /* ================= 1) 完美挡板打通 10 关 ================= */
 section('1) 完美挡板（挡板始终追球）能否打通全部 10 关');
 touch('touchstart', W0 / 2);                       // 发球（同时把挡板放到中间）
