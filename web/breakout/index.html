@@ -754,7 +754,15 @@
   }
   let scale = 1;
 
-  /* ================= 输入 ================= */
+  /* ================= 输入 =================
+     ★ 「拖动挡板」和「发球」必须分开，否则手指一落下去就发球：
+     原来 touchstart 里直接调 launch()，玩家想把挡板拖到位、手指刚碰到屏幕球就飞出去了
+     —— 画面上写着「拖动挡板 · 点一下发球」，实际根本没法先拖再发（真机反馈）。
+     现在改成「轻点 = 发球，拖动 = 只移动挡板」：
+       touchstart 只记录起点，不动球；
+       touchmove  移动挡板，并标记「这次是拖动」；
+       touchend   若既没移动够远、也没按够久，才算一次轻点 → 发球。
+     拖动之后再发球，抬手轻点一下即可。 */
   function stageX(clientX){
     const r = cv.getBoundingClientRect();
     return clamp((clientX - r.left) / (r.width || 1) * W, 0, W);
@@ -763,20 +771,60 @@
     paddle.target = clamp(x, paddle.w / 2, W - paddle.w / 2);
   }
 
+  const TAP_PX = 12;              // 移动超过这么多像素就算拖动，不再触发发球
+  const TAP_MS = 400;             // 按住超过这么久算长按，不触发发球
+  let press = null;               // { x, y, t, moved }
+
+  function beginPress(clientX, clientY){
+    press = { x: clientX, y: clientY, t: Date.now(), moved: false };
+  }
+  function movePress(clientX, clientY){
+    if(press && !press.moved &&
+       (Math.abs(clientX - press.x) > TAP_PX || Math.abs(clientY - press.y) > TAP_PX)) press.moved = true;
+  }
+  /* 抬手：返回 true 表示这次是一次「轻点」，应该发球 */
+  function endPress(clientX, clientY){
+    if(!press) return false;
+    const wasTap = !press.moved && (Date.now() - press.t) < TAP_MS;
+    press = null;
+    return wasTap;
+  }
+
+  function onTap(){
+    if(state === 'ready') launch();
+    else if(state === 'play') launchStuck();     // 接球道具：轻点把吸住的球放出去
+  }
+
   cv.addEventListener('touchstart', e => {
     e.preventDefault();
     ac();
-    movePaddleTo(stageX(e.touches[0].clientX));
-    if(state === 'ready') launch();
-    else if(state === 'play') launchStuck();     // 接球道具：点一下把吸住的球放出去
+    const t = e.touches[0];
+    movePaddleTo(stageX(t.clientX));
+    beginPress(t.clientX, t.clientY);
   }, {passive:false});
   cv.addEventListener('touchmove', e => {
     e.preventDefault();
-    movePaddleTo(stageX(e.touches[0].clientX));
+    const t = e.touches[0];
+    movePress(t.clientX, t.clientY);
+    movePaddleTo(stageX(t.clientX));
   }, {passive:false});
+  cv.addEventListener('touchend', e => {
+    e.preventDefault();
+    // changedTouches 才是「抬起来的那根手指」；用 touches[0] 会拿错手指
+    const t = (e.changedTouches && e.changedTouches[0]) || null;
+    const x = t ? t.clientX : (press ? press.x : 0);
+    const y = t ? t.clientY : (press ? press.y : 0);
+    if(endPress(x, y)) onTap();
+  }, {passive:false});
+  cv.addEventListener('touchcancel', () => { press = null; });
 
-  cv.addEventListener('mousemove', e => { if(state !== 'over') movePaddleTo(stageX(e.clientX)); });
-  cv.addEventListener('mousedown', e => { ac(); if(state === 'ready') launch(); else if(state === 'play') launchStuck(); });
+  cv.addEventListener('mousemove', e => {
+    if(state === 'over') return;
+    movePress(e.clientX, e.clientY);
+    movePaddleTo(stageX(e.clientX));
+  });
+  cv.addEventListener('mousedown', e => { ac(); beginPress(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', e => { if(endPress(e.clientX, e.clientY)) onTap(); });
 
   document.addEventListener('keydown', e => {
     if(e.key === 'ArrowLeft' || e.key === 'a'){ e.preventDefault(); movePaddleTo(paddle.target - 26); }
@@ -884,10 +932,8 @@
     b.vx = vx * k; b.vy = vy * k;
   }
 
-  function step(dt){
-    if(state !== 'play') return;
-
-    // 挡板：向手指/按键目标位平滑靠拢（直接瞬移会有生硬的撕裂感）
+  /* 挡板跟随 + 吸球跟随：play 和 ready 都要跑（ready 时玩家要能先把挡板摆好再发球） */
+  function stepPaddle(dt){
     const prevX = paddle.x;
     // 加宽/变窄：宽度每帧按目标缩放重算，并在原位保持（不然会「跳一下」）
     const wantW = clamp(cfg.paddleW * paddleScale, 40, 150);
@@ -913,6 +959,15 @@
         if(b.catchT <= 0){ b.catchT = 0; releaseBall(b); }   // 吸住最多 2.5 秒，免得一直卡着不动
       }
     }
+  }
+
+  function step(dt){
+    /* ★ 挡板跟随必须放在 `state !== 'play'` 的提前返回**之前**：
+       等发球（ready）时玩家也要能把挡板拖到想发球的位置 —— 否则「先拖再发」根本做不到，
+       而画面提示恰恰写着「拖动摆挡板 · 轻点发球」（真机反馈的第二个问题）。
+       暂停（pause）时不跟手，避免暂停期间挡板乱跑。 */
+    if(state === 'play' || state === 'ready') stepPaddle(dt);
+    if(state !== 'play') return;
 
     /* ---- 计时器 ---- */
     if(expandT > 0){ expandT -= dt; if(expandT <= 0){ expandT = 0; paddleScale = 1; } }
@@ -991,7 +1046,15 @@
       }
     }
     capsules = capsules.filter(c => !c.dead);
+  }
 
+  /* ================= 动效衰减 =================
+     ★ 必须放在 step() 外面。step() 第一行是 `if(state !== 'play') return;`，
+     而丢命后状态会变成 'ready'（等玩家发球），于是 shakeT 的衰减永远不执行 ——
+     shakeT 停在 0.25，draw() 里每帧 `if(shakeT > 0)` 就随机平移画布，
+     **屏幕会一直抖到下一次发球**（真机反馈：死一条命后不发球，画面抖个不停）。
+     所以动效衰减改成跟帧率走，任何状态（ready / pause / clear / over）都照常衰减。 */
+  function tickFx(dt){
     if(shakeT > 0) shakeT = Math.max(0, shakeT - dt);
     if(flashT > 0) flashT = Math.max(0, flashT - dt);
     for(const f of floats) f.life -= dt;
@@ -1308,8 +1371,7 @@
         ctx.fillStyle = 'rgba(160,180,210,.5)';
         ctx.font = '10px -apple-system,"PingFang SC",sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('手指放这一带 · 拖动控制挡板', W / 2, (thumbTop + H) / 2 + 3);
-        ctx.textAlign = 'left';
+        ctx.fillText('手指放这一带 · 拖动控制挡板', W / 2, (thumbTop + H) / 2 + 3);        ctx.textAlign = 'left';
       }
     }
 
@@ -1468,10 +1530,12 @@
       const room = (paddle.y - 14) - (lastRowY + 8);
       const tipY = room > 16 ? (lastRowY + 8 + paddle.y - 14) / 2 : paddle.y - 16;
       if(room > 16){
+        // 文案要跟真实操作一致：现在「拖」和「点」是分开的两件事（拖动不发球）
+        const catchMode = state === 'play' && catchT > 0;
         ctx.fillStyle = 'rgba(255,213,74,.9)';
         ctx.font = '600 11px -apple-system,"PingFang SC",sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('拖动挡板 · 点一下发球', W / 2, tipY);
+        ctx.fillText(catchMode ? '轻点一下放出球' : '拖动摆挡板 · 轻点发球', W / 2, tipY);
         ctx.textAlign = 'left';
       }
     }
@@ -1533,6 +1597,7 @@
     if(dt > 0.05) dt = 0.05;              // 切回前台/卡顿时别让球瞬移穿墙
     if(dt < 0) dt = 0;
     step(dt);
+    tickFx(dt);                            // 动效衰减跟帧走，暂停/等发球时也要继续（见 tickFx 注释）
     // 命中动效衰减
     for(const b of bricks) if(b.hit > 0) b.hit = Math.max(0, b.hit - dt);
     draw();
@@ -1625,6 +1690,7 @@
     capsules: capsules.map(c => ({ kind: c.kind, x: c.x, y: c.y })),
     bolts: bolts.length, particles: particles.length,
     shieldT, slowT, catchT, lasers, expandT, shrinkT, paddleScale,
+    shakeT, flashT,
     capsulesGot, sinceCapsule,
     parts: { brick: parts.brick, bonus: parts.bonus, capsule: parts.capsule },
     panel: $('over').classList.contains('on')
@@ -1652,7 +1718,9 @@
   window.__breakoutEmpty = () => { for(const b of bricks) b.dead = true; alive = 0; return true; };
   window.__breakoutHit = i => { const b = bricks[i]; if(b) hitBrick(b, b.x + b.w / 2, b.y + b.h / 2, false); return true; };
   window.__breakoutExplode = i => { const b = bricks[i]; if(b) explode(b); return true; };
-  window.__breakoutStep = dt => { step(dt); return true; };
+  /* 测试用：推进一帧（和 frame() 一样同时跑 step + tickFx），
+     只调 step() 的话动效（震动/闪光/粒子）永远不衰减，测出来的 shakeT 是假的。 */
+  window.__breakoutStep = dt => { step(dt); tickFx(dt); return true; };
   window.__breakoutConst = { MAX_LEVEL, LEVELS: LEVELS.map(l => l.name), CAPS: Object.keys(CAPS),
     BT: Object.keys(BT), CAPSULE_MAX, COMBO_STEP, COMBO_SHIELD };
 })();

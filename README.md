@@ -49,7 +49,7 @@
   **连到 12 块送 6 秒护盾**（掉底会被弹回来一次）—— 让连击不只是加分，而是直接换来容错。
 - **多球时全掉光才扣命**，单球掉下去不扣；结算面板显示最高连击和接到几个道具。
 
-### 这一版踩到的三个真 bug（都写进代码注释了）
+### 这一版踩到的五个真 bug（都写进代码注释了）
 
 1. **接球道具一吸住，球就再也不动了**。`catchT` 的倒计时写在 `step()` 的球循环里，
    而那个循环前面有个「场上没有非 stuck 球 ⇒ 重置球」的判断 —— 球一吸住就被当成丢球重置成 `catchT=0` 的新球，
@@ -60,6 +60,16 @@
    `floor(c*n/cols)` 分桶时左边桶窄右边桶宽；第 1/2 关图案 `.nnnnnnnn.` 的第一个字符正是留白，
    于是左边多空一列。修法见上（最近邻 + 镜像桶边界），并在 `test_breakout.js` 里加了
    「4~12 列 × 10 关」全量对称断言，这类问题以后跑测试就会红。
+4. **死一条命后不发球，屏幕一直抖**（玩家反馈）。`shakeT` 的衰减写在 `step()` 里，而 `step()` 开头就是
+   `if(state !== 'play') return;` —— 丢命后状态变成 `ready`（等发球），衰减永远不跑，`shakeT` 停在 0.25，
+   `draw()` 里每帧 `if(shakeT > 0)` 就随机平移画布。修法：把震动/闪光/粒子/飘字的衰减抽成 `tickFx(dt)`，
+   由 `frame()` **无条件每帧**调用，与游戏状态无关。
+5. **手指一碰屏幕就发球，没法「先摆好挡板再发」**（玩家反馈）。原来 `touchstart` 里直接调 `launch()`，
+   而画面写着「拖动挡板 · 点一下发球」—— 文字和操作对不上。修法：
+   `touchstart` 只记录起点并移动挡板，`touchmove` 标记「这次是拖动」，
+   `touchend` 时只有「移动没超过 12px 且按住没超过 400ms」才算轻点、才发球。
+   同时把挡板跟随抽成 `stepPaddle(dt)`，在 `ready` 状态下也跑 —— 否则拖动时挡板根本不动，
+   「先摆位置」还是做不到。文案改成「拖动摆挡板 · 轻点发球」。
 
 ## 火箭车：生命值 / 连击护盾 / 大货车
 
@@ -135,7 +145,7 @@ node tools/test_racer.js        # 火箭车：265 项
 node tools/test_racer_cfg.js    # 火箭车调参链路：67 项
 node tools/test_2048.js         # 92 项
 node tools/test_blockpuzzle.js  # 96 项
-node tools/test_breakout.js     # 113 项
+node tools/test_breakout.js     # 131 项
 node tools/test_frog.js         # 53 项
 node tools/test_klotski.js      # 203 项
 node tools/test_marble.js       # 弹珠乐园逻辑：455 项
@@ -157,7 +167,7 @@ node tools/test_memcards_ui.js  # 记忆扑克**真机布局**：828 项 / 6 视
 node tools/test_index.js        # 首页卡片：24 项（图标不重复 / 链接都通 / 卡片数对得上）
 ```
 
-合计 5580+ 项断言，全绿（2026-10-19 实测；打砖块这一版从 23 项扩到 113 项）。
+合计 5580+ 项断言，全绿（2026-10-19 实测；打砖块这一版从 23 项扩到 131 项）。
 
 > ⚠️ `tools/test_othello.js` 原来把游戏路径写死成迁移前的绝对路径
 > （`/volume1/docker/hermes/.../web/othello/index.html`），迁移到新目录后一直 `ENOENT` ——
@@ -1614,4 +1624,5 @@ git push origin master
 | `/opt/data/android-build/project/` | `android/project/` |
 | `/opt/data/android-build/output/gamebox-offline.apk` | `releases/小游戏盒子离线版.apk` |
 | `/opt/data/android-build/output/gamebox-release.jks` | `private/gamebox-release.jks` |
+
 

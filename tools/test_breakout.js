@@ -177,10 +177,20 @@ function ok(cond, label, extra) {
 }
 function section(t) { console.log(`\n== ${t} ==`); }
 
-/* 用真实事件路径驱动：发球 / 拖挡板 */
-const touch = (type, x) => cv.dispatch(type, { touches: [{ clientX: x }] });
-const dragTo = x => touch('touchmove', x);
-const tapFire = x => touch('touchstart', x);
+/* 用真实事件路径驱动。
+   ★ 发球现在是「轻点」（touchstart + touchend），拖动只移动挡板 —— 见 index.html 的输入段注释。
+   所以 tapFire 必须走完整的一次按下+抬起；只 dispatch touchstart 是不发球的。 */
+const touchEv = (type, x) => {
+  const t = { clientX: x, clientY: 200 };
+  return cv.dispatch(type, { touches: [t], changedTouches: [t] });
+};
+const touchDown = x => touchEv('touchstart', x);
+const dragTo = x => touchEv('touchmove', x);
+const touchUp = x => touchEv('touchend', x);
+/* 一次完整的轻点：按下 → 抬起（中间不移动） */
+const tapFire = x => { touchDown(x); touchUp(x); };
+/* 一次完整的拖动：按下 → 移动很远 → 抬起（不应该发球） */
+const dragFire = (from, to) => { touchDown(from); dragTo(to); touchUp(to); };
 
 /* 把游戏推进到「正在游戏中」。用例之间球可能刚好掉了（随机轨迹），
    不先把状态摆正，后面的断言会因为前置状态不对而假失败。 */
@@ -299,9 +309,88 @@ section('0b) ★ 图案缩放到任意列数都保持左右对称');
   ok(shrink.length === 0, '★ 缩到 4 列时也没有哪一关整关变空', shrink.join('；'));
 }
 
+/* ================= 0c) ★ 输入：拖动不发球，轻点才发球 =================
+   玩家反馈：画面上写着「拖动挡板 · 点一下发球」，但手指一碰到屏幕球就飞出去了 ——
+   因为原来 touchstart 里直接调 launch()。这条 bug 的验收标准就是：
+   ① 只按下不抬起 → 不发球；② 按下后拖动 → 不发球；③ 按下后原地抬起 → 发球。 */
+section('0c) ★ 拖动不发球，轻点才发球');
+{
+  $('btnRetry').click();
+  ok(S().state === 'ready', '（前置）重开后是 ready，球吸在挡板上');
+  const l0 = S().level;
+
+  // ① 只按下不抬起：球必须还吸着
+  touchDown(W0 / 2);
+  ok(S().state === 'ready', '★ 手指按下（未抬起）→ 不发球');
+  ok(S().balls[0].stuck === true, '★ 按下时球仍吸在挡板上');
+
+  // ② 按下后横向拖动很远再抬起：仍然不能发球
+  const paddleBefore = S().paddle.x;
+  dragTo(W0 / 2 + 80);
+  dragTo(W0 - 20);
+  touchUp(W0 - 20);
+  ok(S().state === 'ready', '★ 拖动挡板（移了 100+ 像素）→ 不发球');
+  ok(S().balls[0].stuck === true, '★ 拖动后球仍吸在挡板上');
+  /* 挡板是平滑跟随目标位的，拖动只改了 target，得推几帧才真的挪过去。
+     （一开始这里直接比 paddle.x，测出来永远在中间，看着像「拖动没生效」，其实是测法错了） */
+  let dg = 0;
+  while (dg++ < 60) runOne();
+  ok(S().paddle.x > paddleBefore + 40, `拖动确实移动了挡板（${paddleBefore.toFixed(0)} → ${S().paddle.x.toFixed(0)}）`);
+
+  // ③ 原地轻点：这次才发球
+  tapFire(W0 / 2);
+  ok(S().state === 'play', '★ 原地轻点（按下→抬起）→ 发球');
+  ok(S().balls[0].stuck === false, '★ 轻点后球离开挡板');
+
+  // ④ 长按（按住超过 400ms 不移动）不算轻点，不发球
+  $('btnRetry').click();
+  ok(S().state === 'ready', '（前置）再次 ready');
+  touchDown(W0 / 2);
+  const t0 = Date.now();
+  while (Date.now() - t0 < 460) { /* 空转等长按超时 */ }
+  touchUp(W0 / 2);
+  ok(S().state === 'ready', '★ 长按（>400ms）不移动 → 不发球，避免误触');
+
+  // ⑤ 拖动之后再轻点，仍然能正常发球（不能把玩家卡死）
+  tapFire(W0 / 2);
+  ok(S().state === 'play', '★ 长按之后仍能正常轻点发球');
+}
+
+/* ================= 0d) ★ 等发球时画面不能一直抖 =================
+   玩家反馈：死一条命后如果不马上发球，屏幕会一直震动。
+   根因是 shakeT 的衰减写在 step() 里，而 step() 开头就 `if(state!=='play') return;`，
+   丢命后 state 变成 'ready'，衰减永远不跑，shakeT 停在 0.25，draw() 每帧随机平移。
+   验收标准：进入 ready 后推帧若干次，shakeT 必须归零。 */
+section('0d) ★ 丢命后等发球时画面不再持续抖动');
+{
+  $('btnRetry').click();
+  tapFire(W0 / 2);
+  ok(S().state === 'play', '（前置）已发球');
+  // 把球直接扔出底部 → 丢命 → 回到 ready
+  let g = 0;
+  while (S().state === 'play' && g++ < 400) {
+    win.__breakoutSetBall({ x: S().W / 2, y: S().H + 30, vx: 0, vy: 200, stuck: false });
+    runOne();
+  }
+  ok(S().state === 'ready', `（前置）丢命后回到 ready（state=${S().state}）`);
+  const livesNow = S().lives;
+  ok(livesNow === 2, `丢了一条命（剩 ${livesNow}）`);
+
+  // ★ 关键：在 ready 状态下推帧，shakeT 必须衰减到 0
+  let f = 0;
+  while (f++ < 120) runOne();
+  ok(S().shakeT === 0, `★ 等发球期间 shakeT 衰减到 0（实际 ${S().shakeT}）`);
+  ok(S().flashT === 0, '闪光也一并衰减到 0');
+  // 再推一会儿，确认不会「又抖起来」
+  let f2 = 0;
+  while (f2++ < 120) runOne();
+  ok(S().shakeT === 0, '★ 继续等待也不会重新抖动');
+  ok(S().state === 'ready', '等待期间状态没被意外改掉');
+}
+
 /* ================= 1) 完美挡板打通 10 关 ================= */
 section('1) 完美挡板（挡板始终追球）能否打通全部 10 关');
-touch('touchstart', W0 / 2);                       // 发球（同时把挡板放到中间）
+tapFire(W0 / 2);                                   // 轻点发球（同时把挡板放到中间）
 ok(S().state === 'play', 'touchstart 后进入 play 状态');
 
 const MAXF = 400000;
