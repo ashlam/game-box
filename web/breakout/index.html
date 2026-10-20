@@ -871,6 +871,7 @@
     b.vx = Math.sin(ang) * sp;
     b.vy = -Math.abs(Math.cos(ang) * sp);
     b.stuck = false; b.catchT = 0;
+    b.trail.length = 0;          // 放出去时也清一次：拖尾从挡板位置重新长，不拉长线
     enforceAngles(b, sp, paddle.vx);
     return b;
   }
@@ -954,6 +955,14 @@
       if(!b.stuck || b.dead) continue;
       b.x = clamp(paddle.x + b.off, b.r, W - b.r);
       b.y = paddle.y - b.r - 1;
+      /* ★ 吸住的球必须清空拖尾，否则残影会永久留在屏幕上：
+         step() 的球循环里 `if(b.stuck) continue;` 在「往 trail 里 push 位置」之前，
+         球一被 C 道具吸住，trail 就再也不会更新 —— 最后 9 个点被永久冻结，
+         而 draw() 照样把 trail 画出来，于是屏幕上挂着一条不动的残影
+         （玩家反馈：吃到 C 之后球移动的残影留在屏幕上）。
+         每帧都清一次最稳妥：既清掉吸住瞬间留下的旧拖尾，
+         也保证 releaseBall 之后拖尾是从挡板位置重新长出来的，不会拉出一条长线。 */
+      b.trail.length = 0;
       if(b.catchT > 0){
         b.catchT -= dt;
         if(b.catchT <= 0){ b.catchT = 0; releaseBall(b); }   // 吸住最多 2.5 秒，免得一直卡着不动
@@ -1011,9 +1020,13 @@
       const steps = clamp(Math.ceil(speed * bdt / (b.r * 0.7)), 1, 10);   // 子步进，防穿砖
       for(let i = 0; i < steps && state === 'play' && !b.dead; i++) substep(b, bdt / steps);
 
-      // 拖尾
-      b.trail.push({x: b.x, y: b.y});
-      if(b.trail.length > 9) b.trail.shift();
+      // 拖尾：★ 球被吸住的那一帧不能再 push —— substep 里刚设 stuck，这行还会跑到，
+      //   于是吸住的球会带着 1 个「冻结点」，下一帧才被 stepPaddle 清掉，
+      //   屏幕上就闪一下残影。这里直接跳过。
+      if(!b.stuck){
+        b.trail.push({x: b.x, y: b.y});
+        if(b.trail.length > 9) b.trail.shift();
+      }
     }
     balls = balls.filter(b => !b.dead);
     if(!balls.length && state === 'play'){ state = 'ready'; resetBall(true); }
@@ -1096,6 +1109,7 @@
         b.off = clamp(b.x - paddle.x, -half + 2, half - 2);
         b.catchT = 2.5;
         b.vx = 0; b.vy = 0;
+        b.trail.length = 0;      // 吸住瞬间清拖尾，否则这条残影会留在屏幕上（见 stepPaddle 注释）
       }
     }
 
@@ -1496,14 +1510,17 @@
 
     // 球
     for(const b of balls){
-      // 拖尾
-      for(let i = 0; i < b.trail.length; i++){
-        const t = b.trail[i], k = (i + 1) / b.trail.length;
-        ctx.globalAlpha = k * 0.30;
-        ctx.fillStyle = b.color;
-        ctx.beginPath(); ctx.arc(t.x, t.y, b.r * k * 0.85, 0, 7); ctx.fill();
+      /* 拖尾：吸住的球一律不画（它停在挡板上不动，画拖尾就是一条假残影）。
+         这是第二道防线 —— 第一道在 stepPaddle 里每帧清 trail，见那段注释。 */
+      if(!b.stuck){
+        for(let i = 0; i < b.trail.length; i++){
+          const t = b.trail[i], k = (i + 1) / b.trail.length;
+          ctx.globalAlpha = k * 0.30;
+          ctx.fillStyle = b.color;
+          ctx.beginPath(); ctx.arc(t.x, t.y, b.r * k * 0.85, 0, 7); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
       }
-      ctx.globalAlpha = 1;
       ctx.shadowColor = 'rgba(232,236,243,.85)';
       ctx.shadowBlur = 12;
       ctx.fillStyle = b.color;
@@ -1682,7 +1699,8 @@
     levelName: cfg ? cfg.name : '', rows: cfg ? cfg.art.length : 0,
     speed: cfg ? cfg.speed : 0, paddleW: cfg ? cfg.paddleW : 0,
     combo, comboMult: comboMult(), bestCombo,
-    balls: balls.map(b => ({ x:b.x, y:b.y, vx:b.vx, vy:b.vy, r:b.r, stuck:b.stuck, color:b.color })),
+    balls: balls.map(b => ({ x:b.x, y:b.y, vx:b.vx, vy:b.vy, r:b.r, stuck:b.stuck, color:b.color,
+                             trail: b.trail.length, catchT: b.catchT })),
     ball: balls.length ? {x: balls[0].x, y: balls[0].y, vx: balls[0].vx, vy: balls[0].vy, r: balls[0].r, stuck: balls[0].stuck} : null,
     paddle: { x: paddle.x, w: paddle.w, y: paddle.y },
     bricks: bricks.map(b => ({ hp: b.hp, kind: b.kind, dead: b.dead, x: b.x, y: b.y })),

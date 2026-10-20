@@ -706,7 +706,6 @@ section('5) 道具');
   g = 0;
   while (g++ < 4000 && S().catchT > 0) { dragTo(S().balls[0].x); runOne(); }
   ok(S().catchT === 0, 'C：12 秒后到期');
-
   // U 加命
   const lv0 = S().lives;
   win.__breakoutApply('U');
@@ -735,6 +734,51 @@ section('5) 道具');
   ok(S().balls.length <= 6, 'M：球数上限 6');
   // 多球颜色要不一样，否则分不清谁是谁
   ok(new Set(S().balls.map(b => b.color)).size > 1, 'M：分裂出的球颜色不同（看得清）');
+}
+
+/* ================= 5b) ★ 接球道具吸住后不能留残影 =================
+   玩家反馈：吃到 C 道具后，球移动的残影留在屏幕上。
+   根因：step() 的球循环里 `if(b.stuck) continue;` 在「往 trail 里 push 位置」之前，
+   球一被吸住，trail 就不再更新 —— 最后 9 个点被永久冻结，而 draw() 照样把它们画出来。
+   验收标准：吸住后 trail 必须为空；放球后 trail 必须从挡板位置重新长。 */
+section('5b) ★ C 吸球后不留残影');
+{
+  win.__breakoutGoto(1);
+  ensurePlaying();
+  // 先让球跑一会儿，攒出一条拖尾
+  let g = 0;
+  while (g++ < 120) { dragTo(S().balls[0].x); runOne(); }
+  const trailBefore = S().balls[0].trail;
+  ok(trailBefore > 0, `（前置）球有拖尾（${trailBefore} 个点）`);
+
+  // 开接球道具，把球直接送到挡板上让它吸住
+  win.__breakoutApply('C');
+  win.__breakoutSetBall({ x: S().paddle.x, y: S().paddle.y - S().ball.r - 0.5, vx: 0, vy: 160, stuck: false });
+  g = 0;
+  while (g++ < 400 && !S().balls[0].stuck) { dragTo(S().paddle.x); runOne(); }
+  ok(S().balls[0].stuck === true, '★ 球被 C 道具吸住');
+  ok(S().balls[0].trail === 0, `★ 吸住后拖尾被清空（实际 ${S().balls[0].trail} 个点）`);
+
+  // 吸着不动推很多帧，拖尾不能又长出来（这就是「残影留在屏幕上」的直接来源）
+  g = 0;
+  while (g++ < 60) { dragTo(S().paddle.x); runOne(); }
+  ok(S().balls[0].trail === 0, `★ 吸住期间一直没拖尾（实际 ${S().balls[0].trail}）`);
+
+  // 拖动挡板，吸住的球跟着走，也不能留拖尾
+  dragTo(S().W * 0.75);
+  g = 0;
+  while (g++ < 40) runOne();
+  ok(S().balls[0].trail === 0, '★ 拖着吸住的球移动也不留拖尾');
+
+  // 放出去之后拖尾要能正常重新长出来（别把拖尾功能整个搞坏了）
+  win.__breakoutApply('C');                       // 重新给接球时间
+  tapFire(S().paddle.x);                          // 轻点放出球
+  g = 0;
+  while (g++ < 200 && S().balls[0].stuck) { dragTo(S().balls[0].x); runOne(); }
+  ok(S().balls[0].stuck === false, '（前置）球已放出');
+  g = 0;
+  while (g++ < 120 && S().balls[0].trail === 0) { dragTo(S().balls[0].x); runOne(); }
+  ok(S().balls[0].trail > 0, `★ 放球后拖尾恢复正常（${S().balls[0].trail} 个点）`);
 }
 
 /* ================= 6) 多球：全掉光才扣命 ================= */

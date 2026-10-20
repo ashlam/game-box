@@ -49,7 +49,7 @@
   **连到 12 块送 6 秒护盾**（掉底会被弹回来一次）—— 让连击不只是加分，而是直接换来容错。
 - **多球时全掉光才扣命**，单球掉下去不扣；结算面板显示最高连击和接到几个道具。
 
-### 这一版踩到的五个真 bug（都写进代码注释了）
+### 这一版踩到的六个真 bug（都写进代码注释了）
 
 1. **接球道具一吸住，球就再也不动了**。`catchT` 的倒计时写在 `step()` 的球循环里，
    而那个循环前面有个「场上没有非 stuck 球 ⇒ 重置球」的判断 —— 球一吸住就被当成丢球重置成 `catchT=0` 的新球，
@@ -70,6 +70,12 @@
    `touchend` 时只有「移动没超过 12px 且按住没超过 400ms」才算轻点、才发球。
    同时把挡板跟随抽成 `stepPaddle(dt)`，在 `ready` 状态下也跑 —— 否则拖动时挡板根本不动，
    「先摆位置」还是做不到。文案改成「拖动摆挡板 · 轻点发球」。
+6. **吃到 C 道具后，球的拖尾残影留在屏幕上**（玩家反馈）。`step()` 的球循环里
+   `if(b.stuck) continue;` 在「往 `trail` 里 push 位置」**之前**，球一被吸住 `trail` 就不再更新，
+   最后 9 个点被永久冻结，而 `draw()` 照样把它们画出来 —— 屏幕上挂着一条不动的残影。
+   修法三处：① `stepPaddle` 里每帧清 `trail`；② `substep` 里吸住瞬间也清一次
+   （同一帧 `step()` 循环还会跑到 push 那行，不清就会留 1 个冻结点）；
+   ③ `draw()` 里 `if(!b.stuck)` 才画拖尾，作为第二道防线。
 
 ## 火箭车：生命值 / 连击护盾 / 大货车
 
@@ -145,7 +151,7 @@ node tools/test_racer.js        # 火箭车：265 项
 node tools/test_racer_cfg.js    # 火箭车调参链路：67 项
 node tools/test_2048.js         # 92 项
 node tools/test_blockpuzzle.js  # 96 项
-node tools/test_breakout.js     # 131 项
+node tools/test_breakout.js     # 138 项
 node tools/test_frog.js         # 53 项
 node tools/test_klotski.js      # 203 项
 node tools/test_marble.js       # 弹珠乐园逻辑：455 项
@@ -167,7 +173,7 @@ node tools/test_memcards_ui.js  # 记忆扑克**真机布局**：828 项 / 6 视
 node tools/test_index.js        # 首页卡片：24 项（图标不重复 / 链接都通 / 卡片数对得上）
 ```
 
-合计 5580+ 项断言，全绿（2026-10-19 实测；打砖块这一版从 23 项扩到 131 项）。
+合计 5580+ 项断言，全绿（2026-10-19 实测；打砖块这一版从 23 项扩到 138 项）。
 
 > ⚠️ `tools/test_othello.js` 原来把游戏路径写死成迁移前的绝对路径
 > （`/volume1/docker/hermes/.../web/othello/index.html`），迁移到新目录后一直 `ENOENT` ——
@@ -1624,5 +1630,6 @@ git push origin master
 | `/opt/data/android-build/project/` | `android/project/` |
 | `/opt/data/android-build/output/gamebox-offline.apk` | `releases/小游戏盒子离线版.apk` |
 | `/opt/data/android-build/output/gamebox-release.jks` | `private/gamebox-release.jks` |
+
 
 
