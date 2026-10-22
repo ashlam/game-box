@@ -195,9 +195,13 @@
     position:absolute; left:0; right:0; text-align:center; font-weight:900;
     font-size:74px; line-height:1; color:var(--gold); font-variant-numeric:tabular-nums;
     opacity:0; transform:scale(.55);
-    transition:opacity .3s, transform .42s cubic-bezier(.2,1.5,.4,1);
+    transition:opacity .3s, transform .42s cubic-bezier(.2,1.5,.4,1),
+               top .58s cubic-bezier(.3,.9,.3,1), font-size .42s ease;
   }
   .dNum.on{opacity:1; transform:scale(1)}
+  .dNum.tick{animation:numtick .19s ease-out 1}
+  @keyframes numtick{0%{transform:scale(1)}44%{transform:scale(1.2)}100%{transform:scale(1)}}
+  .dEq .dS{color:var(--gold)}
 </style>
 </head>
 <body>
@@ -799,16 +803,44 @@ async function runDemo(a, b){
   }
   await wait(240);
 
-  // ---- 5. 收回成数字 ----
-  all.forEach((it, i) => {
-    setTimeout(() => { it.s = 0.15; it.el.style.opacity = "0"; render(it, 260); }, i * 5);
-  });
+  // ---- 5. 图形一个个变回数字：从 0 开始，收一个涨一个 ----
+  const blockH2 = rows * S2 + (rows - 1) * G2;
+  num.textContent = "0";
+  num.style.top = (Math.min(cy + blockH2 / 2 + 54, H - 120) - 40) + "px";
   num.classList.add("on");
+  Snd.pop();
+  await wait(480);
+
+  // 总数越多每步越快，但整段固定在 3 秒出头，方便小数目看清楚
+  const stepConv = Math.max(20, Math.min(250, Math.round(3200 / total)));
+  for(let i = 0; i < all.length; i++){
+    const it = all[i];
+    it.s = 0.01;
+    it.el.style.opacity = "0";
+    render(it, 280);
+    num.textContent = String(i + 1);
+    num.classList.remove("tick");
+    void num.offsetWidth;
+    num.classList.add("tick");
+    if(total <= 24) Snd.note(i + 1);
+    await wait(stepConv);
+  }
+
+  // ---- 6. 数字归位，算式补全，停一会儿让他看清 ----
+  await wait(220);
+  num.style.top = (cy - 40) + "px";
+  num.style.fontSize = "86px";
+  await wait(560);
+
+  const dEq = demo.querySelector(".dEq");
+  dEq.innerHTML = '<b class="dA">' + a + '</b><i>+</i><b class="dB">' + b + '</b>' +
+                  '<i>=</i><b class="dS">' + total + '</b>';
   Snd.right();
-  await wait(760);
+
+  await wait(1800);            // 定格：让他盯着这道对题看一会儿，再弹星星
 
   demo.classList.remove("on");
-  await wait(300);
+  await wait(320);
   demo.remove();
 
   showStars(S.stars);
