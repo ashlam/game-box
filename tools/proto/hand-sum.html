@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#FFF7EC">
+<title>落在哪儿 · 加法原型</title>
+<style>
+  :root{
+    --bg:#FFF7EC; --ink:#2B2118; --dim:#A08D79;
+    --coral:#E4593F; --teal:#1E9E90; --gold:#E9A93B;
+    --skin:#EBC9A8; --skinDeep:#D9AE85; --line:#EADCC8; --card:#FFFDF8;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    display:flex; flex-direction:column; overflow:hidden;
+    user-select:none; -webkit-user-select:none; touch-action:manipulation;
+    padding:calc(env(safe-area-inset-top) + 8px) 10px calc(env(safe-area-inset-bottom) + 8px);
+  }
+
+  #stage{flex:1 1 auto; min-height:0; position:relative;
+         display:flex; flex-direction:column; justify-content:center}
+  #hands{
+    flex:0 0 auto; display:flex; justify-content:center; align-items:flex-end;
+    gap:22px; transition:opacity .6s;
+  }
+  #hands.gone{opacity:.18}
+  #answer{flex:0 0 auto; height:172px}
+  .hand{
+    position:relative; width:46vw; max-width:178px; aspect-ratio:140/170;
+    color:var(--skin); transition:color .45s; cursor:pointer;
+  }
+  .hand svg{position:absolute; inset:0; width:100%; height:100%; display:block;
+    filter:drop-shadow(0 10px 16px rgba(150,110,70,.18));}
+  .hand.full{color:var(--gold)}
+  .hand.full svg{filter:drop-shadow(0 0 16px rgba(233,169,59,.55)) drop-shadow(0 10px 16px rgba(150,110,70,.18))}
+
+  .pad{
+    position:absolute; width:17%; aspect-ratio:1; border-radius:50%;
+    transform:translate(-50%,-50%);
+    border:2.5px dashed rgba(180,140,100,.55);
+    background:rgba(255,255,255,.28);
+    transition:background .2s, border-color .2s, box-shadow .2s;
+  }
+  .pad.aim{background:rgba(233,169,59,.35); border-color:var(--gold); box-shadow:0 0 0 6px rgba(233,169,59,.22)}
+  .hand.full .pad{border-color:rgba(255,255,255,.7); background:rgba(255,255,255,.35)}
+
+  .cnt{
+    position:absolute; left:50%; top:100%; transform:translate(-50%, 4px);
+    font-size:26px; font-weight:900; line-height:1; font-variant-numeric:tabular-nums;
+    color:var(--ink); opacity:0; transition:opacity .3s, color .4s, transform .3s;
+  }
+  .cnt.on{opacity:1}
+  .hand.full .cnt{color:var(--gold); transform:translate(-50%, 4px) scale(1.16)}
+
+  #layer{position:absolute; inset:0; pointer-events:none; overflow:hidden}
+  .ball{
+    position:absolute; left:50%; top:50%; border-radius:50%;
+    background:radial-gradient(circle at 32% 26%, rgba(255,255,255,.68), rgba(255,255,255,0) 58%), var(--c);
+    box-shadow:0 5px 12px rgba(120,90,60,.22), inset 0 -3px 6px rgba(0,0,0,.10);
+    will-change:transform;
+  }
+  .ball.drop{transition:none}
+  .num{
+    position:absolute; left:50%; top:50%; font-weight:900; line-height:1;
+    font-variant-numeric:tabular-nums; transform:translate(-50%,-50%);
+    opacity:0; transition:opacity .35s, transform .45s cubic-bezier(.2,1.5,.4,1);
+  }
+  .num.on{opacity:1}
+
+  #bar{flex:0 0 auto; display:flex; align-items:center; justify-content:center; height:86px; gap:10px}
+  #go{
+    width:74px; height:74px; border-radius:50%; border:none; cursor:pointer;
+    background:var(--ink); color:#FFF7EC; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 10px 22px rgba(60,40,25,.28);
+    transform:scale(.86); opacity:.28; pointer-events:none;
+    transition:transform .3s cubic-bezier(.2,1.5,.4,1), opacity .3s, background .3s;
+  }
+  #go.ready{transform:scale(1); opacity:1; pointer-events:auto; animation:breathe 2.2s ease-in-out infinite}
+  #go.wide{width:auto; padding:0 26px; border-radius:40px; font:inherit; font-weight:800; font-size:15px;
+           gap:8px; transform:scale(1); opacity:1; pointer-events:auto; animation:none}
+  @keyframes breathe{0%,100%{box-shadow:0 10px 22px rgba(60,40,25,.28)}50%{box-shadow:0 10px 30px rgba(60,40,25,.42),0 0 0 8px rgba(43,33,24,.06)}}
+  #hintline{flex:0 0 auto; text-align:center; font-size:11.5px; color:var(--dim); height:16px; line-height:16px; letter-spacing:.3px}
+
+  .flash{animation:fl .5s ease-out 1}
+  @keyframes fl{0%{filter:brightness(1)}35%{filter:brightness(1.3)}100%{filter:brightness(1)}}
+  .shake{animation:sh .32s ease-in-out 1}
+  @keyframes sh{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div id="hands"></div>
+  <div id="answer"></div>
+  <div id="layer"></div>
+</div>
+<div id="hintline"></div>
+<div id="bar">
+  <button id="go" aria-label="合起来"></button>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- 声音 ---------- */
+const Snd = (() => {
+  let ctx = null;
+  const P = [0, 2, 4, 7, 9];
+  function ac(){
+    if(!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if(ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+  function blip(n, dur, gain, type){
+    n = Math.max(1, Math.round(n));
+    dur = dur || 0.17; gain = gain || 0.13; type = type || "triangle";
+    const c = ac(), i = n - 1;
+    const oct = Math.floor(i / 5), deg = ((i % 5) + 5) % 5;
+    const f = 261.63 * Math.pow(2, oct + P[deg] / 12);
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.value = f;
+    const t = c.currentTime;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(c.destination);
+    o.start(t); o.stop(t + dur + 0.03);
+  }
+  function chord(list, gap){
+    gap = gap || 55;
+    list.forEach((n, i) => setTimeout(() => blip(n, 0.34, 0.10), i * gap));
+  }
+  function slide(){
+    const c = ac();
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(520, c.currentTime);
+    o.frequency.exponentialRampToValueAtTime(240, c.currentTime + 0.22);
+    g.gain.setValueAtTime(0.06, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.24);
+    o.connect(g).connect(c.destination);
+    o.start(); o.stop(c.currentTime + 0.26);
+  }
+  function buzz(){
+    const c = ac();
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = "square"; o.frequency.value = 130;
+    g.gain.setValueAtTime(0.05, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.16);
+    o.connect(g).connect(c.destination);
+    o.start(); o.stop(c.currentTime + 0.18);
+  }
+  return { blip, chord, slide, buzz };
+})();
+
+/* ---------- 工具 ---------- */
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const $ = id => document.getElementById(id);
+
+function gridCells(n, cols, S, G){
+  const rows = Math.ceil(n / cols), out = [];
+  for(let r = 0; r < rows; r++){
+    const inRow = Math.min(cols, n - r * cols);
+    const rowW = inRow * S + (inRow - 1) * G;
+    for(let c = 0; c < inRow; c++){
+      out.push({ x: -rowW / 2 + S / 2 + c * (S + G), y: (r - (rows - 1) / 2) * (S + G) });
+    }
+  }
+  return out;
+}
+function put(el, x, y, ms){
+  if(ms === undefined) ms = 0;
+  el.style.transition = ms
+    ? "transform " + ms + "ms cubic-bezier(.28,.9,.3,1), width " + ms + "ms ease, height " + ms + "ms ease"
+    : "none";
+  el.style.transform = "translate(calc(-50% + " + x + "px), calc(-50% + " + y + "px))";
+}
+function putO(el, x, y, ms){
+  el.style.transition = ms ? "transform " + ms + "ms cubic-bezier(.28,.9,.3,1)" : "none";
+  el.style.transform = "translate(" + x + "px," + y + "px)";
+}
+
+/* ---------- 手的几何 ---------- */
+const VB = { w: 140, h: 170 };
+// 四个指尖 + 掌心 = 五个位置（填满的过程 = 从指尖一路收到手心）
+const PAD_UV = [
+  [34 / VB.w, 44 / VB.h],
+  [60 / VB.w, 34 / VB.h],
+  [86 / VB.w, 40 / VB.h],
+  [109 / VB.w, 54 / VB.h],
+  [68 / VB.w, 120 / VB.h]
+];
+const HAND_PATH = `
+  <g fill="currentColor">
+    <rect x="14" y="76" width="106" height="88" rx="36"/>
+    <rect x="22" y="26" width="24" height="62" rx="12"/>
+    <rect x="48" y="14" width="24" height="74" rx="12"/>
+    <rect x="74" y="22" width="24" height="66" rx="12"/>
+    <rect x="98" y="38" width="22" height="50" rx="11"/>
+    <rect x="0" y="92" width="22" height="50" rx="11" transform="rotate(-36 11 117)"/>
+  </g>`;
+
+/* ---------- 状态 ---------- */
+const COLORS = ["#E4593F", "#1E9E90"];
+const MAX = 5;
+let hands = [];          // {el, cntEl, pads:[]}
+let balls = [[], []];    // 每一格上的球元素
+let counts = [0, 0];
+let phase = "play";
+let busy = false;
+
+const layer = $("layer");
+
+function layerCenter(){
+  const r = layer.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+function padPage(h, i){
+  const r = hands[h].el.getBoundingClientRect();
+  return {
+    x: r.left + PAD_UV[i][0] * r.width,
+    y: r.top + PAD_UV[i][1] * r.height
+  };
+}
+function toLayerXY(px, py){
+  const c = layerCenter();
+  return { x: px - c.x, y: py - c.y };
+}
+function padLayer(h, i){
+  const p = padPage(h, i);
+  return toLayerXY(p.x, p.y);
+}
+
+function buildHands(){
+  const wrap = $("hands");
+  wrap.innerHTML = "";
+  hands = [0, 1].map(h => {
+    const el = document.createElement("div");
+    el.className = "hand";
+    el.dataset.h = String(h);
+    el.innerHTML = '<svg viewBox="0 0 140 170">' + HAND_PATH + "</svg>";
+    const cnt = document.createElement("div");
+    cnt.className = "cnt";
+    el.appendChild(cnt);
+    const pads = PAD_UV.map((uv, i) => {
+      const d = document.createElement("div");
+      d.className = "pad";
+      d.style.left = (uv[0] * 100) + "%";
+      d.style.top = (uv[1] * 100) + "%";
+      d.dataset.i = String(i);
+      el.appendChild(d);
+      return d;
+    });
+    wrap.appendChild(el);
+    return { el, cnt, pads };
+  });
+}
+
+function ballSize(){
+  const r = hands[0].el.getBoundingClientRect();
+  return Math.round(r.width * 0.155);
+}
+function mkBall(h){
+  const d = document.createElement("div");
+  d.className = "ball";
+  d.style.setProperty("--c", COLORS[h]);
+  const s = ballSize();
+  d.style.width = d.style.height = s + "px";
+  layer.appendChild(d);
+  return d;
+}
+
+function syncCount(h){
+  const c = counts[h];
+  hands[h].cnt.textContent = c ? String(c) : "";
+  hands[h].cnt.classList.toggle("on", c > 0);
+  hands[h].el.classList.toggle("full", c === MAX);
+}
+
+/* ---------- 点击：核心互动 ---------- */
+async function tap(ev){
+  if(phase !== "play" || busy) return;
+  const padEl = ev.target.closest(".pad");
+  const handEl = ev.target.closest(".hand");
+  if(!handEl) return;
+
+  let h = +handEl.dataset.h;
+  let guess = padEl ? +padEl.dataset.i : (counts[h] < MAX ? counts[h] : 0);
+
+  // 这只手满了 → 球滑到另一只
+  if(counts[h] >= MAX){
+    const other = 1 - h;
+    if(counts[other] >= MAX){ Snd.buzz(); handEl.classList.remove("shake"); void handEl.offsetWidth; handEl.classList.add("shake"); return; }
+    h = other;
+    guess = -1;
+    Snd.slide();
+  }
+
+  const truth = counts[h];      // 球真正会落在第几格
+  if(truth >= MAX) return;
+  busy = true;
+
+  // 先把他点的那一格照亮（他觉得会落这儿）
+  if(guess >= 0 && guess < MAX){
+    hands[h].pads[guess].classList.add("aim");
+  }
+
+  const b = mkBall(h);
+  const start = (guess >= 0 && guess < MAX) ? padLayer(h, guess) : padLayer(h, truth);
+  const target = padLayer(h, truth);
+  const s = ballSize();
+  put(b, start.x, start.y, 0);
+  b.style.opacity = "0";
+  b.style.transition = "transform 0s, opacity .18s";
+  await wait(20);
+  b.style.opacity = "1";
+
+  const hit = (guess === truth);
+
+  if(hit){
+    await wait(120);
+    put(b, target.x, target.y, 260);
+    b.classList.add("flash");
+    await wait(270);
+  }else{
+    // 停一下 —— 就这么一瞬的"咦？"
+    await wait(240);
+    put(b, target.x, target.y, 380);
+    await wait(300);
+  }
+
+  if(guess >= 0 && guess < MAX) hands[h].pads[guess].classList.remove("aim");
+
+  counts[h]++;
+  balls[h].push(b);
+  syncCount(h);
+  Snd.blip(counts[h]);
+
+  if(counts[h] === MAX){
+    Snd.chord([1, 3, 5, 8], 70);
+    hands[h].el.classList.remove("flash"); void hands[h].el.offsetWidth; hands[h].el.classList.add("flash");
+  }
+
+  busy = false;
+  refreshGo();
+}
+
+/* ---------- 合起来 ---------- */
+function refreshGo(){
+  const go = $("go");
+  if(phase === "done"){
+    go.classList.add("wide"); go.classList.remove("ready");
+    go.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg><span>再来一组</span>';
+    return;
+  }
+  const ok = counts[0] > 0 && counts[1] > 0;
+  go.classList.toggle("ready", ok);
+  if(!go.classList.contains("wide")){
+    go.innerHTML = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6 4 12l5 6"/><path d="M15 6l5 6-5 6"/></svg>';
+  }
+}
+
+async function merge(){
+  if(phase !== "play" || busy) return;
+  if(!(counts[0] > 0 && counts[1] > 0)) return;
+  busy = true; phase = "merging";
+  $("go").classList.remove("ready");
+  $("hintline").textContent = "";
+
+  const total = counts[0] + counts[1];
+  const a = counts[0];
+  const stageW = $("stage").getBoundingClientRect().width;
+  const S = Math.round(Math.max(30, Math.min(44, stageW * 0.11)));
+  const G = Math.round(S * 0.34);
+
+  // 一行排开；两组之间留一道缝 —— 缝的左边是第一个数，右边是第二个数
+  let cells;
+  if(total <= 6){
+    const extra = Math.round(S * 0.8);
+    cells = gridCells(total, total, S, G);
+    for(let i = a; i < total; i++) cells[i].x += extra;
+    cells.forEach(c => { c.x -= extra / 2; });
+  }else{
+    cells = gridCells(total, 6, S, G);
+  }
+
+  const ans = $("answer").getBoundingClientRect();
+  const rowY = ans.top + ans.height * 0.27 - layerCenter().y;
+
+  const seq = balls[0].concat(balls[1]);
+  seq.forEach(b => { b.style.width = b.style.height = S + "px"; });
+  for(let i = 0; i < seq.length; i++){
+    put(seq[i], cells[i].x, rowY + cells[i].y, 680);
+    setTimeout(() => { Snd.blip(i + 1); }, 120 + i * 105);
+    await wait(85);
+  }
+
+  // 手的数字退场，双手淡出（重点转到这一行）
+  hands.forEach(hd => hd.cnt.classList.remove("on"));
+  $("hands").classList.add("gone");
+
+  await wait(560);
+
+  const num = document.createElement("div");
+  num.className = "num";
+  num.textContent = String(total);
+  num.style.fontSize = Math.min(64, S * 1.75) + "px";
+  num.style.color = "var(--gold)";
+  layer.appendChild(num);
+  put(num, 0, ans.top + ans.height * 0.63 - layerCenter().y, 0);
+  await wait(30);
+  num.classList.add("on");
+  Snd.chord([3, 5, 8]);
+
+  // 算式最后才长出来 —— 先有物，再有数，最后才是符号
+  await wait(430);
+  const eq = document.createElement("div");
+  eq.className = "num";
+  eq.style.fontSize = Math.min(25, S * 0.6) + "px";
+  eq.style.fontWeight = "800";
+  eq.style.letterSpacing = "1px";
+  eq.innerHTML =
+    '<span style="color:#E4593F">' + a + '</span>' +
+    '<span style="color:#A08D79"> + </span>' +
+    '<span style="color:#1E9E90">' + counts[1] + '</span>' +
+    '<span style="color:#A08D79"> = </span>' +
+    '<span style="color:#E9A93B">' + total + '</span>';
+  layer.appendChild(eq);
+  put(eq, 0, ans.top + ans.height * 0.89 - layerCenter().y, 0);
+  await wait(30);
+  eq.classList.add("on");
+
+  $("hintline").textContent = a + " 加 " + counts[1] + " 一共 " + total + " 个";
+
+  phase = "done";
+  busy = false;
+  refreshGo();
+}
+
+function reset(){
+  layer.innerHTML = "";
+  balls = [[], []];
+  counts = [0, 0];
+  phase = "play";
+  busy = false;
+  hands.forEach((h, i) => { syncCount(i); });
+  $("hands").classList.remove("gone");
+  $("go").classList.remove("wide");
+  $("hintline").textContent = "";
+  refreshGo();
+}
+
+/* ---------- 启动 ---------- */
+buildHands();
+hands.forEach((h, i) => h.el.addEventListener("click", tap));
+$("go").addEventListener("click", () => {
+  if(phase === "done") reset();
+  else merge();
+});
+refreshGo();
+$("hintline").textContent = "点一只手的空位 —— 球会落在该落的地方";
+</script>
+</body>
+</html>
