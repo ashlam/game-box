@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#FFF7EC">
+<title>加法闯关 · 小游戏盒子</title>
+<style>
+  :root{
+    --bg:#FFF7EC; --ink:#2B2118; --dim:#A08D79;
+    --coral:#E4593F; --teal:#1E9E90; --gold:#E9A93B; --blue:#4A6FE3;
+    --line:#EADCC8; --card:#FFFFFF; --bad:#D2402B;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    display:flex; flex-direction:column; overflow:hidden;
+    user-select:none; -webkit-user-select:none; touch-action:manipulation;
+    padding:calc(env(safe-area-inset-top) + 8px) 10px calc(env(safe-area-inset-bottom) + 8px);
+  }
+  [hidden]{display:none !important}
+
+  /* ---------- 顶部进度 ---------- */
+  #head{flex:0 0 auto}
+  #prog{height:7px; border-radius:4px; background:#F0E4D2; overflow:hidden}
+  #prog i{display:block; height:100%; width:0%; border-radius:4px;
+    background:linear-gradient(90deg,var(--teal),#54C0A8);
+    transition:width .5s cubic-bezier(.3,.9,.3,1)}
+  #meta{display:flex; justify-content:space-between; font-size:11.5px; color:var(--dim);
+    padding:5px 2px 0; letter-spacing:.4px}
+
+  /* ---------- 算式 ---------- */
+  #stage{flex:1 1 auto; min-height:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:14px}
+  #eq{display:flex; align-items:center; justify-content:center; gap:9px;
+      position:relative; padding:10px 0}
+  #eq.win{animation:winpulse .62s ease-out 2}
+  @keyframes winpulse{0%{transform:scale(1)}42%{transform:scale(1.07)}100%{transform:scale(1)}}
+  #eq.win .cell.filled{color:var(--gold) !important;
+    text-shadow:0 0 20px rgba(255,186,60,.95), 0 0 42px rgba(255,186,60,.55);
+    border-color:var(--gold); background:#FFFCF2;
+    box-shadow:0 0 0 4px rgba(233,169,59,.22), 0 10px 26px rgba(233,169,59,.30)}
+  #eq.win .op{color:var(--gold)}
+
+  .cell{
+    width:88px; height:88px; border-radius:24px; display:flex;
+    align-items:center; justify-content:center;
+    font-size:clamp(28px,9.6vw,44px); font-weight:900; line-height:1;
+    font-variant-numeric:tabular-nums; letter-spacing:-.5px;
+    border:3px dashed var(--line); color:#C6B39A;
+    background:rgba(255,255,255,.62);
+    transition:all .18s;
+  }
+  .cell.filled{border-style:solid; background:var(--card);
+    box-shadow:0 6px 16px rgba(120,90,60,.13)}
+  .cell.c0.filled{color:var(--coral); border-color:rgba(228,89,63,.55)}
+  .cell.c1.filled{color:var(--teal); border-color:rgba(30,158,144,.55)}
+  .cell.ans{border-color:rgba(233,169,59,.65); color:var(--gold); background:rgba(255,250,238,.9)}
+  .cell.ans.filled{color:var(--gold); border-color:var(--gold); background:#FFFBF0}
+  .cell.hot{border-color:var(--blue); background:#EEF3FF;
+    box-shadow:0 0 0 5px rgba(74,111,227,.20)}
+  .cell.bad{animation:shake .34s ease-in-out 1; border-color:var(--bad) !important; color:var(--bad) !important}
+  @keyframes shake{0%,100%{transform:translateX(0)}22%{transform:translateX(-7px)}62%{transform:translateX(7px)}}
+
+  .op{font-size:clamp(22px,7vw,32px); font-weight:800; color:var(--dim); width:26px; text-align:center;
+      transition:opacity .26s, transform .26s}
+
+  /* 还没到出场的时候：彻底不占位（出现时用 FLIP 把整行推过去，不会生硬跳） */
+  .hideq{display:none}
+  .popin{animation:popin .34s cubic-bezier(.2,1.5,.4,1) 1}
+  @keyframes popin{from{opacity:0; transform:scale(.7)} to{opacity:1; transform:scale(1)}}
+
+  /* 提示晃动 */
+  .wob{animation:wob 1.7s ease-in-out infinite}
+  @keyframes wob{0%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}66%{transform:translateY(4px)}}
+
+  /* ---------- 时间条 ---------- */
+  #tbar{width:min(300px,74vw); height:5px; border-radius:3px; background:#F0E4D2; overflow:hidden;
+        opacity:0; transition:opacity .3s}
+  #tbar.on{opacity:1}
+  #tbar i{display:block; height:100%; width:100%; border-radius:3px; background:var(--teal)}
+
+  /* ---------- 底部托盘 ---------- */
+  #tray{
+    flex:0 0 auto; height:152px; display:flex; flex-wrap:wrap;
+    align-items:center; justify-content:center; align-content:center;
+    gap:11px; padding:8px 2px; transition:opacity .25s, transform .25s;
+  }
+  #tray.out{opacity:0; transform:translateY(10px); pointer-events:none}
+  #tray.gone{opacity:0; pointer-events:none}
+
+  .chip{
+    width:66px; height:66px; border-radius:19px; display:flex;
+    align-items:center; justify-content:center;
+    font-size:29px; font-weight:900; font-variant-numeric:tabular-nums;
+    background:var(--card); color:var(--ink);
+    border:2px solid var(--line);
+    box-shadow:0 5px 12px rgba(120,90,60,.11);
+    cursor:grab; touch-action:none;
+    transition:transform .16s cubic-bezier(.2,1.5,.4,1), box-shadow .16s, border-color .16s, opacity .2s;
+  }
+  .chip.live:active{transform:scale(.95)}
+  .chip.sel{border-color:var(--blue); color:var(--blue);
+    box-shadow:0 0 0 4px rgba(74,111,227,.18), 0 6px 14px rgba(74,111,227,.22);
+    transform:translateY(-3px)}
+  .chip.optset{background:#FFFCF2; border-color:rgba(233,169,59,.5)}
+  .chip.in{animation:chipIn .32s cubic-bezier(.2,1.5,.4,1) backwards}
+  @keyframes chipIn{from{opacity:0; transform:scale(.56)} to{opacity:1; transform:scale(1)}}
+  .chip.taken{opacity:.22}
+  .chip.used{opacity:.22; pointer-events:none; filter:grayscale(1)}
+  .chip.dead{opacity:.24; pointer-events:none; text-decoration:line-through}
+
+  .ghostChip{
+    position:fixed; z-index:900; pointer-events:none; margin:0;
+    box-shadow:0 16px 30px rgba(60,40,25,.30) !important;
+    transform:scale(1.1); border-color:var(--blue) !important; color:var(--blue) !important;
+  }
+
+  /* ---------- 遮罩 ---------- */
+  #ov{
+    position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center;
+    background:rgba(43,33,24,.34); backdrop-filter:blur(3px);
+    opacity:0; pointer-events:none; transition:opacity .3s;
+  }
+  #ov.on{opacity:1; pointer-events:auto}
+  .panel{
+    background:#FFFDF8; border-radius:30px; padding:26px 30px 22px;
+    box-shadow:0 24px 60px rgba(60,40,25,.30); text-align:center;
+    transform:scale(.88); transition:transform .34s cubic-bezier(.2,1.5,.4,1);
+    min-width:258px;
+  }
+  #ov.on .panel{transform:scale(1)}
+  .panel h2{margin:0 0 4px; font-size:16px; font-weight:800; letter-spacing:1px; color:var(--dim)}
+  .stars{display:flex; gap:8px; justify-content:center; margin:10px 0 12px}
+  .star{position:relative; width:58px; height:58px}
+  .star svg{position:absolute; inset:0; width:100%; height:100%; overflow:visible}
+  .st-empty path{fill:none; stroke:#E6D5BD; stroke-width:1.5}
+  .st-full path{fill:var(--gold); stroke:var(--gold); stroke-width:1.5;
+    filter:drop-shadow(0 5px 10px rgba(233,169,59,.42))}
+  .st-mask{position:absolute; left:0; top:0; height:100%; width:0%; overflow:hidden;
+    transition:width .36s cubic-bezier(.3,1.15,.4,1)}
+  .st-mask svg{display:block; width:58px; height:58px}
+  .star.pop{animation:starpop .5s cubic-bezier(.2,1.6,.4,1) 1}
+  @keyframes starpop{0%{transform:scale(.4)}60%{transform:scale(1.16)}100%{transform:scale(1)}}
+  .big{font-size:44px; font-weight:900; line-height:1; color:var(--gold);
+    font-variant-numeric:tabular-nums; margin:6px 0 2px}
+  .sub{font-size:12.5px; color:var(--dim); letter-spacing:.5px}
+  .btn{
+    margin-top:16px; font:inherit; font-size:15px; font-weight:800; letter-spacing:1px;
+    color:#FFF7EC; background:var(--ink); border:none; border-radius:99px;
+    padding:13px 34px; cursor:pointer; box-shadow:0 10px 22px rgba(60,40,25,.24);
+  }
+  .btn:active{transform:scale(.96)}
+
+  /* ---------- 撒花 ---------- */
+  .conf{position:fixed; width:9px; height:13px; border-radius:2.5px; z-index:950;
+    pointer-events:none; will-change:transform,opacity;
+    animation:confFly 1.25s cubic-bezier(.2,.6,.4,1) forwards}
+  @keyframes confFly{
+    0%{transform:translate(0,0) rotate(0deg) scale(1); opacity:1}
+    100%{transform:translate(var(--dx),var(--dy)) rotate(var(--rot)) scale(.7); opacity:0}
+  }
+
+  /* ---------- 演示复盘 ---------- */
+  #demo{
+    position:fixed; inset:0; z-index:960; background:#FFF7EC;
+    opacity:0; transition:opacity .26s; pointer-events:none;
+  }
+  #demo.on{opacity:1; pointer-events:auto}
+  .dEq{
+    position:absolute; left:0; right:0; top:9%; display:flex; justify-content:center;
+    align-items:baseline; gap:11px; font-weight:900;
+    font-size:40px; font-variant-numeric:tabular-nums; line-height:1;
+    transition:opacity .35s, transform .35s;
+  }
+  .dEq .dA{color:var(--coral)}
+  .dEq .dB{color:var(--teal)}
+  .dEq i{font-style:normal; color:var(--dim); font-size:26px; font-weight:800}
+  .dEq.dim{opacity:.35}
+  .dLayer{position:absolute; inset:0}
+  .icon{
+    position:absolute; left:0; top:0; will-change:transform;
+    transition:transform .5s cubic-bezier(.3,.9,.3,1), opacity .28s;
+  }
+  .icon svg{width:100%; height:100%; display:block}
+  .ic-ball{
+    border-radius:50%;
+    background:radial-gradient(circle at 32% 26%, rgba(255,255,255,.72), rgba(255,255,255,0) 58%), var(--c);
+    box-shadow:0 3px 7px rgba(120,90,60,.18);
+  }
+  .icon.lit{filter:drop-shadow(0 0 7px rgba(233,169,59,.9))}
+  .dNum{
+    position:absolute; left:0; right:0; text-align:center; font-weight:900;
+    font-size:74px; line-height:1; color:var(--gold); font-variant-numeric:tabular-nums;
+    opacity:0; transform:scale(.55);
+    transition:opacity .3s, transform .42s cubic-bezier(.2,1.5,.4,1);
+  }
+  .dNum.on{opacity:1; transform:scale(1)}
+</style>
+</head>
+<body>
+
+<div id="head">
+  <div id="prog"><i></i></div>
+  <div id="meta"><span id="mLv">第 1 区 · 第 1 / 20 题</span><span id="mSt"></span></div>
+</div>
+
+<div id="stage">
+  <div id="eq">
+    <div class="cell slot c0 wob" id="cx" data-kind="addend" data-slot="0">x</div>
+    <div class="op">+</div>
+    <div class="cell slot c1 wob" id="cy" data-kind="addend" data-slot="1">y</div>
+    <div class="op hideq" id="opeq">=</div>
+    <div class="cell ans hideq" id="ca" data-kind="answer">?</div>
+  </div>
+  <div id="tbar"><i></i></div>
+</div>
+
+<div id="tray"></div>
+<div id="ov"></div>
+
+<script>
+"use strict";
+
+/* =========================================================
+   配置：难度表全部在这里，加关卡只改 STAGES
+   ========================================================= */
+const CFG = {
+  levels: 20,          // 每局 20 小关
+  tmax: 20,            // 时间条长度（秒）
+  maxScore: 300,
+  // 用时扣分：超过 t 秒扣 d 分，取第一个满足的
+  timeTiers: [ {t: 8, d: 0}, {t: 14, d: 30}, {t: 20, d: 60}, {t: 1e9, d: 90} ],
+  // 选错扣分：错 n 次扣 d 分
+  wrongTiers: [0, 40, 80, 120],
+  // 每 5 关一档：m = 加数上限，n = 候选数字个数，opt = 答案选项个数，mix = 混合小数字
+  STAGES: [
+    { name: "第一区", bands: [
+      { m: 9,  n: 4, opt: 3 },
+      { m: 20, n: 4, opt: 3 },
+      { m: 30, n: 5, opt: 3 },
+      { m: 45, n: 5, opt: 4 }
+    ]},
+    { name: "第二区", bands: [
+      { m: 20, n: 5, opt: 4, mix: true },
+      { m: 30, n: 5, opt: 4 },
+      { m: 45, n: 6, opt: 4 },
+      { m: 65, n: 6, opt: 4 }
+    ]}
+  ]
+};
+
+/* =========================================================
+   声音
+   ========================================================= */
+const Snd = (() => {
+  let ctx = null;
+  const P = [0, 2, 4, 7, 9];
+  function ac(){
+    if(!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if(ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+  function tone(freq, t0, dur, gain, type){
+    const c = ac(), o = c.createOscillator(), g = c.createGain();
+    o.type = type || "triangle"; o.frequency.value = freq;
+    const t = c.currentTime + t0;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + 0.014);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(c.destination);
+    o.start(t); o.stop(t + dur + 0.03);
+  }
+  const nf = n => 261.63 * Math.pow(2, Math.floor((n-1)/5) + P[(((n-1)%5)+5)%5] / 12);
+  return {
+    pick:  n => tone(nf(Math.max(1, Math.min(6, n % 6 + 1))), 0, 0.12, 0.10),
+    drop:  () => tone(420, 0, 0.10, 0.09, "sine"),
+    right: () => { [0, 3, 5, 8].forEach((n, i) => tone(nf(n + 1), i * 0.075, 0.30, 0.12)); },
+    wrong: () => { tone(196, 0, 0.14, 0.10, "square"); tone(150, 0.10, 0.20, 0.09, "square"); },
+    star:  i => tone(nf([3, 5, 8][i] || 8) * 2, 0, 0.28, 0.11),
+    note:  n => tone(nf(((n - 1) % 10) + 1), 0, 0.11, 0.09),
+    pop:   () => tone(660, 0, 0.16, 0.10, "sine"),
+    fanfare: () => { [1, 3, 5, 6, 8].forEach((n, i) => tone(nf(n) * (i===4?2:1), i * 0.09, 0.42, 0.11)); }
+  };
+})();
+
+/* =========================================================
+   工具
+   ========================================================= */
+const $ = s => document.querySelector(s);
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const wait = ms => new Promise(r => setTimeout(r, ms));
+function shuffle(a){ for(let i = a.length - 1; i > 0; i--){ const j = rnd(0, i); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+/* =========================================================
+   状态
+   ========================================================= */
+const S = {
+  stage: 0,
+  level: 0,
+  phase: "idle",      // idle | addend | answer | done
+  a: 0, b: 0,
+  wrong: 0,
+  t0: 0,
+  score: 0,
+  stars: 0,
+  totalStars: 0,
+  results: [],        // 本局每关的星数
+  optsShown: false,
+  pool: []
+};
+let tickId = null;
+
+/* =========================================================
+   生成
+   ========================================================= */
+function bandOf(level){
+  return CFG.STAGES[S.stage].bands[Math.min(3, Math.floor(level / 5))];
+}
+function makePool(band){
+  const set = new Set();
+  let guard = 0;
+  while(set.size < band.n && guard++ < 800){
+    const v = (band.mix && Math.random() < 0.5) ? rnd(1, 10) : rnd(1, band.m);
+    set.add(v);
+  }
+  return shuffle([...set]);
+}
+function makeOptions(a, b, count){
+  const s = a + b;
+  const seeds = [s + 1, s - 1, s + 10, s - 10, s + 2, s - 2, a, b, s + 3];
+  const out = [s], used = new Set([s]);
+  for(const v of seeds){
+    if(out.length >= count) break;
+    if(v <= 0 || used.has(v)) continue;
+    used.add(v); out.push(v);
+  }
+  let guard = 0;
+  while(out.length < count && guard++ < 200){
+    const v = Math.max(1, s + rnd(-5, 5));
+    if(used.has(v)) continue;
+    used.add(v); out.push(v);
+  }
+  return shuffle(out);
+}
+
+/* =========================================================
+   渲染
+   ========================================================= */
+const eq = $("#eq"), cx = $("#cx"), cy = $("#cy"), ca = $("#ca"), opeq = $("#opeq");
+const tray = $("#tray"), tbar = $("#tbar"), tbari = tbar.querySelector("i");
+const ov = $("#ov");
+
+function resetEq(){
+  cx.textContent = "x"; cx.className = "cell slot c0 wob";
+  cy.textContent = "y"; cy.className = "cell slot c1 wob";
+  ca.textContent = "?"; ca.className = "cell ans hideq";
+  opeq.className = "op hideq";
+  eq.classList.remove("win");
+  ca.classList.remove("wob");
+  tray.className = "";
+  tray.innerHTML = "";
+  tbar.classList.remove("on");
+  tbari.style.width = "100%";
+  tbari.style.background = "var(--teal)";
+}
+
+function renderTray(values, mode){
+  tray.classList.remove("gone", "out");
+  tray.innerHTML = "";
+  values.forEach((v, i) => {
+    const d = document.createElement("div");
+    d.className = "chip live in" + (mode === "options" ? " optset" : "");
+    d.dataset.v = String(v);
+    d.dataset.kind = mode === "options" ? "answer" : "addend";
+    d.textContent = String(v);
+    d.style.animationDelay = (i * 45) + "ms";
+    tray.appendChild(d);
+  });
+}
+
+/* =========================================================
+   关卡流程
+   ========================================================= */
+function startLevel(){
+  S.phase = "addend";
+  S.a = 0; S.b = 0; S.wrong = 0; S.optsShown = false;
+  resetEq();
+  S.pool = makePool(bandOf(S.level));
+  renderTray(S.pool, "addend");
+  $("#mLv").textContent = CFG.STAGES[S.stage].name + " · 第 " + (S.level + 1) + " / " + CFG.levels + " 题";
+  $("#mSt").textContent = starTotalThisStage() ? ("本区 " + starTotalThisStage() + " 星") : "";
+  $("#prog i").style.width = (S.level / CFG.levels * 100) + "%";
+  startTimer();
+}
+
+function starTotalThisStage(){
+  return S.results.reduce((s, v) => s + v, 0);
+}
+
+function startTimer(){
+  S.t0 = performance.now();
+  tbar.classList.add("on");
+  clearInterval(tickId);
+  tickId = setInterval(() => {
+    const p = Math.min(1, (performance.now() - S.t0) / (CFG.tmax * 1000));
+    tbari.style.width = (100 - p * 100) + "%";
+    tbari.style.background = p < .5 ? "var(--teal)" : (p < .85 ? "var(--gold)" : "#C9B8A4");
+  }, 100);
+}
+function stopTimer(){
+  clearInterval(tickId); tickId = null;
+  tbar.classList.remove("on");
+}
+
+/* ---------- 填加数 ---------- */
+function fillAddend(slot, v){
+  const cell = slot === 0 ? cx : cy;
+  if(cell.classList.contains("filled")) return;
+  cell.dataset.v = String(v);
+  cell.textContent = String(v);
+  cell.className = "cell slot filled " + (slot === 0 ? "c0" : "c1");
+  Snd.pick(v);
+  if(slot === 0) S.a = v; else S.b = v;
+  if(S.a && S.b) afterBoth();
+}
+
+function afterBoth(){
+  S.phase = "answer";
+  tray.classList.add("out");
+  setTimeout(() => { tray.classList.add("gone"); tray.innerHTML = ""; }, 250);
+  setTimeout(revealTail, 230);
+  Snd.drop();
+}
+
+function revealTail(){
+  const r1 = eq.getBoundingClientRect();
+  opeq.className = "op popin";
+  ca.className = "cell ans popin";
+  const r2 = eq.getBoundingClientRect();
+  const dx = r1.left - r2.left;
+  if(Math.abs(dx) > 1){
+    eq.style.transition = "none";
+    eq.style.transform = "translateX(" + dx + "px)";
+    void eq.offsetWidth;
+    eq.style.transition = "transform .38s cubic-bezier(.3,.9,.3,1)";
+    eq.style.transform = "translateX(0)";
+    setTimeout(() => { eq.style.transition = ""; eq.style.transform = ""; }, 430);
+  }
+  setTimeout(() => { if(S.phase === "answer") ca.className = "cell ans wob"; }, 380);
+}
+
+/* ---------- 揭示选项 ---------- */
+function revealOptions(){
+  if(S.optsShown) return;
+  S.optsShown = true;
+  ca.classList.remove("wob");
+  const band = bandOf(S.level);
+  const n = Math.max(2, band.opt);
+  const opts = makeOptions(S.a, S.b, n);
+  tray.classList.remove("gone", "out");
+  tray.innerHTML = "";
+  renderTray(opts, "options");
+  Snd.drop();
+}
+
+/* ---------- 判题 ---------- */
+function submitAnswer(v, chipEl){
+  if(S.phase !== "answer") return;
+  const s = S.a + S.b;
+  if(v === s){
+    S.phase = "done";
+    stopTimer();
+    ca.textContent = String(v);
+    ca.className = "cell ans filled";
+    eq.classList.add("win");
+    Snd.right();
+    confetti();
+    const secs = (performance.now() - S.t0) / 1000;
+    S.score = scoreFor(secs, S.wrong);
+    S.stars = starsFor(S.score);
+    console.log("[L" + (S.level + 1) + "] " + S.a + "+" + S.b + "=" + s
+      + " | 用时 " + secs.toFixed(1) + "s 错 " + S.wrong + " 次 → " + S.score + " 分 / " + S.stars + " 星");
+    setTimeout(() => runDemo(S.a, S.b), 820);
+  }else{
+    S.wrong++;
+    if(chipEl){ chipEl.classList.add("dead"); }
+    ca.textContent = String(v);
+    ca.classList.add("bad");
+    Snd.wrong();
+    setTimeout(() => {
+      if(S.phase !== "answer") return;
+      ca.textContent = "?";
+      ca.className = "cell ans";
+      if(!S.optsShown) ca.classList.add("wob");
+    }, 520);
+  }
+}
+
+function scoreFor(secs, wrong){
+  let d = 0;
+  for(const t of CFG.timeTiers){ if(secs <= t.t){ d += t.d; break; } }
+  d += CFG.wrongTiers[Math.min(wrong, CFG.wrongTiers.length - 1)];
+  return Math.max(CFG.maxScore - d, 60);
+}
+function starsFor(score){
+  return Math.round(score / 50) / 2;   // 0 ~ 3，半星步进
+}
+
+/* =========================================================
+   撒花
+   ========================================================= */
+const CONF_COLORS = ["#E9A93B", "#E4593F", "#1E9E90", "#4A6FE3", "#F2C14E", "#FF8A65"];
+function confetti(){
+  const r = eq.getBoundingClientRect();
+  const ox = r.left + r.width / 2, oy = r.top + r.height / 2;
+  for(let i = 0; i < 32; i++){
+    const d = document.createElement("i");
+    d.className = "conf";
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 70 + Math.random() * 150;
+    d.style.left = ox + "px";
+    d.style.top = oy + "px";
+    d.style.background = CONF_COLORS[i % CONF_COLORS.length];
+    d.style.setProperty("--dx", Math.cos(ang) * dist + "px");
+    d.style.setProperty("--dy", (Math.sin(ang) * dist + 60) + "px");
+    d.style.setProperty("--rot", rnd(-540, 540) + "deg");
+    d.style.animationDelay = (Math.random() * 0.10) + "s";
+    if(Math.random() < .4) d.style.borderRadius = "50%";
+    document.body.appendChild(d);
+    setTimeout(() => d.remove(), 1500);
+  }
+}
+
+/* =========================================================
+   星星
+   ========================================================= */
+const STAR_D = "M12 2.3 L14.95 9.0 L22.2 9.72 L16.7 14.55 L18.35 21.7 L12 17.85 L5.65 21.7 L7.3 14.55 L1.8 9.72 L9.05 9.0 Z";
+function starEl(){
+  const d = document.createElement("div");
+  d.className = "star";
+  d.innerHTML = '<svg viewBox="0 0 24 24" class="st-empty"><path d="' + STAR_D + '"/></svg>' +
+                '<div class="st-mask"><svg viewBox="0 0 24 24" class="st-full"><path d="' + STAR_D + '"/></svg></div>';
+  return d;
+}
+
+function showStars(v){
+  S.results.push(v);
+  S.totalStars += v;
+
+  const panel = document.createElement("div");
+  panel.className = "panel";
+  panel.innerHTML = '<h2>这一题</h2><div class="stars"></div><div class="sub" id="subl"></div>';
+  const row = panel.querySelector(".stars");
+  const fills = [];
+  for(let i = 0; i < 3; i++){
+    const st = starEl();
+    const f = Math.max(0, Math.min(1, v - i));
+    fills.push(f);
+    row.appendChild(st);
+  }
+  ov.innerHTML = "";
+  ov.appendChild(panel);
+  void ov.offsetWidth;
+  ov.classList.add("on");
+
+  fills.forEach((f, i) => {
+    const st = row.children[i];
+    setTimeout(() => {
+      st.querySelector(".st-mask").style.width = (f * 100) + "%";
+      if(f > 0){
+        st.classList.add("pop");
+        Snd.star(i);
+      }
+    }, 190 + i * 190);
+  });
+
+  panel.querySelector("#subl").textContent = v >= 3 ? "全部答对，很厉害" : (v >= 2 ? "不错" : (v >= 1 ? "继续加油" : "再试一次"));
+
+  const go = () => { ov.classList.remove("on"); ov.onclick = null; clearTimeout(tid); nextLevel(); };
+  const tid = setTimeout(go, 2500);
+  ov.onclick = go;
+}
+
+/* =========================================================
+   关卡推进
+   ========================================================= */
+function nextLevel(){
+  S.level++;
+  if(S.level >= CFG.levels) return stageEnd();
+  startLevel();
+}
+
+function stageEnd(){
+  stopTimer();
+  const total = S.results.reduce((s, v) => s + v, 0);
+  const panel = document.createElement("div");
+  panel.className = "panel";
+  const hasNext = S.stage + 1 < CFG.STAGES.length;
+  panel.innerHTML =
+    '<h2>' + CFG.STAGES[S.stage].name + ' 完成</h2>' +
+    '<div class="big">' + total + '</div>' +
+    '<div class="sub">颗星 · 满分 ' + (CFG.levels * 3) + '</div>' +
+    '<div class="sub" style="margin-top:6px">本局 ' + CFG.levels + ' 题</div>' +
+    '<button class="btn" id="btnNext">' + (hasNext ? "进入下一区" : "再玩一次") + '</button>';
+  ov.innerHTML = "";
+  ov.appendChild(panel);
+  void ov.offsetWidth;
+  ov.classList.add("on");
+  Snd.fanfare();
+
+  panel.querySelector("#btnNext").onclick = () => {
+    ov.classList.remove("on");
+    if(hasNext){ S.stage++; } else { S.stage = 0; }
+    S.level = 0; S.totalStars = 0; S.results = [];
+    startLevel();
+  };
+}
+
+/* =========================================================
+   演示复盘：把两个加数变成图形 → 两堆分开 → 合并 → 逐个点亮 → 收成答案
+   ========================================================= */
+const ICON_KINDS = ["ball", "star", "flower"];
+const COLORS = ["#E4593F", "#1E9E90"];
+const STAR_PTS = "50,3 61,36 97,36 68,57 79,92 50,71 21,92 32,57 3,36 39,36";
+const FLOWER_PTS = '<circle cx="50" cy="21" r="21"/><circle cx="79" cy="42" r="21"/>'
+  + '<circle cx="68" cy="77" r="21"/><circle cx="32" cy="77" r="21"/>'
+  + '<circle cx="21" cy="42" r="21"/><circle cx="50" cy="50" r="15" fill="#FFF7EC"/>';
+
+// 每 5 个一行，整块居中
+function cellsOf(n, S, G){
+  const per = 5, rows = Math.ceil(n / per), out = [];
+  const blockH = rows * S + (rows - 1) * G;
+  for(let i = 0; i < n; i++){
+    const r = Math.floor(i / per), c = i % per;
+    const inRow = Math.min(per, n - r * per);
+    const rowW = inRow * S + (inRow - 1) * G;
+    out.push({
+      x: -rowW / 2 + S / 2 + c * (S + G),
+      y: -blockH / 2 + S / 2 + r * (S + G)
+    });
+  }
+  return out;
+}
+
+function mkIcon(kind, color, S){
+  const d = document.createElement("div");
+  d.className = "icon";
+  d.style.width = d.style.height = S + "px";
+  d.style.setProperty("--c", color);
+  d.style.color = color;
+  if(kind === "ball"){
+    d.classList.add("ic-ball");
+  }else if(kind === "star"){
+    d.innerHTML = '<svg viewBox="0 0 100 100"><polygon points="' + STAR_PTS + '" fill="currentColor"/></svg>';
+  }else{
+    d.innerHTML = '<svg viewBox="0 0 100 100" fill="currentColor">' + FLOWER_PTS + '</svg>';
+  }
+  return d;
+}
+
+async function runDemo(a, b){
+  const total = a + b;
+  const kind = ICON_KINDS[rnd(0, ICON_KINDS.length - 1)];
+  const W = innerWidth, H = innerHeight;
+  const cy = H * 0.575;
+  const per = 5, rows = Math.ceil(total / per);
+
+  // 两堆并排时只能这么小；合并之后可以放大 —— 尺寸的变化本身就是"合成一堆"的暗示
+  let S1 = Math.floor(Math.min(32, (W - 54) / 11.76, (H * 0.46 - (rows - 1) * 6) / rows));
+  S1 = Math.max(6, S1);
+  const G1 = Math.max(3, Math.round(S1 * 0.22));
+  let S2 = Math.floor(Math.min(48, (W - 44) / 5.88, (H * 0.50 - (rows - 1) * 10) / rows));
+  S2 = Math.max(S1, Math.min(S2, 48));
+  const G2 = Math.max(3, Math.round(S2 * 0.22));
+  const k = S2 / S1;
+
+  const demo = document.createElement("div");
+  demo.id = "demo";
+  demo.innerHTML =
+    '<div class="dEq"><b class="dA">' + a + '</b><i>+</i><b class="dB">' + b + '</b></div>' +
+    '<div class="dLayer"></div>' +
+    '<div class="dNum">' + total + '</div>';
+  document.body.appendChild(demo);
+  void demo.offsetWidth;              // 强制回流，不要用 rAF（虚拟时间下会被推迟）
+  demo.classList.add("on");
+  await wait(200);
+
+  const rA = demo.querySelector(".dA").getBoundingClientRect();
+  const rB = demo.querySelector(".dB").getBoundingClientRect();
+  const layer = demo.querySelector(".dLayer");
+  const num = demo.querySelector(".dNum");
+  num.style.top = (cy - 40) + "px";
+
+  const items = [];
+  function render(it, ms){
+    it.el.style.transitionDuration = (ms || 0) + "ms";
+    it.el.style.transform =
+      "translate(" + it.X + "px," + it.Y + "px) translate(-50%,-50%) scale(" + (it.k * it.s) + ")";
+  }
+  function spawn(color, cx, cyy){
+    const el = mkIcon(kind, color, S1);
+    layer.appendChild(el);
+    const it = { el, k: 1, s: 0.25, X: cx, Y: cyy };
+    el.style.transitionDuration = "0ms";
+    el.style.opacity = "0";
+    render(it, 0);
+    items.push(it);
+    return it;
+  }
+  function place(it, x, y, ms){
+    it.X = W / 2 + x;
+    it.Y = cy + y;
+    render(it, ms);
+  }
+
+  const many = total > 24;
+  const stepIn = many ? 9 : 48;
+  const stepLit = many ? 13 : 72;
+
+  const cA = cellsOf(a, S1, G1), cB = cellsOf(b, S1, G1);
+  const maxW = 5 * S1 + 4 * G1;
+  const off = maxW / 2 + Math.max(10, S1 * 0.42);
+
+  const X0 = rA.left + rA.width / 2, Y0 = rA.top + rA.height / 2;
+  const X1 = rB.left + rB.width / 2, Y1 = rB.top + rB.height / 2;
+
+  // ---- 1. 第一个加数化成图形，落到左边一堆 ----
+  const A = [];
+  for(let i = 0; i < a; i++) A.push(spawn(COLORS[0], X0, Y0));
+  await wait(30);
+  A.forEach((it, i) => {
+    it.el.style.opacity = "1";
+    it.s = 1;
+    setTimeout(() => {
+      place(it, cA[i].x - off, cA[i].y, 420);
+      if(i % 2 === 0 || a <= 10) Snd.note(i + 1);
+    }, i * stepIn);
+  });
+  await wait(a * stepIn + 440);
+
+  // ---- 2. 第二个加数化成图形，落到右边一堆 ----
+  const B = [];
+  for(let i = 0; i < b; i++) B.push(spawn(COLORS[1], X1, Y1));
+  await wait(30);
+  B.forEach((it, i) => {
+    it.el.style.opacity = "1";
+    it.s = 1;
+    setTimeout(() => {
+      place(it, cB[i].x + off, cB[i].y, 420);
+      if(i % 2 === 0 || b <= 10) Snd.note(i + 1);
+    }, i * stepIn);
+  });
+  await wait(b * stepIn + 460);
+  await wait(720);          // 停一拍，让他看清左边几个、右边几个
+
+  // ---- 3. 两堆合并成一堆（同时放大一档） ----
+  const all = A.concat(B);
+  const cM = cellsOf(total, S2, G2);
+  all.forEach((it, i) => {
+    it.k = k;
+    setTimeout(() => { place(it, cM[i].x, cM[i].y, 620); }, i * (many ? 3 : 10));
+  });
+  Snd.pop();
+  await wait(640 + all.length * (many ? 3 : 10));
+
+  // ---- 4. 逐个点亮，把它数一遍 ----
+  for(let i = 0; i < all.length; i++){
+    const it = all[i];
+    it.s = 1.34;
+    render(it, 120);
+    it.el.style.setProperty("--c", "#E9A93B");
+    it.el.style.color = "#E9A93B";
+    it.el.classList.add("lit");
+    Snd.note(i + 1);
+    setTimeout(() => { it.s = 1; render(it, 190); }, 135);
+    await wait(stepLit);
+  }
+  await wait(240);
+
+  // ---- 5. 收回成数字 ----
+  all.forEach((it, i) => {
+    setTimeout(() => { it.s = 0.15; it.el.style.opacity = "0"; render(it, 260); }, i * 5);
+  });
+  num.classList.add("on");
+  Snd.right();
+  await wait(760);
+
+  demo.classList.remove("on");
+  await wait(300);
+  demo.remove();
+
+  showStars(S.stars);
+}
+
+/* =========================================================
+   拖拽 / 点选
+   ========================================================= */
+let drag = null, sel = null, lastCommit = 0;
+
+function clearSel(){
+  if(sel && sel.el) sel.el.classList.remove("sel");
+  sel = null;
+}
+function clearHot(){
+  document.querySelectorAll(".cell.hot").forEach(e => e.classList.remove("hot"));
+}
+function dropTargetAt(x, y, kind){
+  const el = document.elementFromPoint(x, y);
+  if(!el) return null;
+  const t = el.closest('[data-kind="' + kind + '"]');
+  if(!t) return null;
+  if(kind === "addend" && t.classList.contains("filled")) return null;
+  if(kind === "answer" && t.classList.contains("filled")) return null;
+  return t;
+}
+
+function onPick(ev, el){
+  if(!el.classList.contains("live")) return;
+  if(ev.pointerType === "mouse" && ev.button !== 0) return;
+  ev.preventDefault();
+  drag = {
+    el, kind: el.dataset.kind, v: +el.dataset.v,
+    sx: ev.clientX, sy: ev.clientY, moved: false, ghost: null, ox: 0, oy: 0
+  };
+  window.addEventListener("pointermove", onMove, { passive: false });
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onUp);
+}
+
+function onMove(ev){
+  const d = drag; if(!d) return;
+  const dx = ev.clientX - d.sx, dy = ev.clientY - d.sy;
+  if(!d.moved && Math.hypot(dx, dy) > 7){
+    d.moved = true;
+    const r = d.el.getBoundingClientRect();
+    const g = d.el.cloneNode(true);
+    g.className = "chip ghostChip";
+    g.style.width = r.width + "px";
+    g.style.height = r.height + "px";
+    g.style.left = r.left + "px";
+    g.style.top = r.top + "px";
+    document.body.appendChild(g);
+    d.ghost = g;
+    d.ox = d.sx - r.left;
+    d.oy = d.sy - r.top;
+    d.el.classList.add("taken");
+    clearSel();
+  }
+  if(!d.ghost) return;
+  ev.preventDefault();
+  d.ghost.style.left = (ev.clientX - d.ox) + "px";
+  d.ghost.style.top = (ev.clientY - d.oy) + "px";
+  clearHot();
+  const t = dropTargetAt(ev.clientX, ev.clientY, d.kind);
+  if(t) t.classList.add("hot");
+}
+
+function onUp(ev){
+  window.removeEventListener("pointermove", onMove);
+  window.removeEventListener("pointerup", onUp);
+  window.removeEventListener("pointercancel", onUp);
+  const d = drag; drag = null;
+  if(!d) return;
+  clearHot();
+
+  if(!d.moved){
+    // 轻点 = 选中 / 取消选中（给拖不稳的小孩留一条路）
+    if(sel && sel.el === d.el){ clearSel(); return; }
+    clearSel();
+    sel = { el: d.el, kind: d.kind, v: d.v };
+    d.el.classList.add("sel");
+    Snd.pick(d.v);
+    return;
+  }
+
+  const t = dropTargetAt(ev.clientX, ev.clientY, d.kind);
+  if(t){
+    if(d.ghost){
+      const r = t.getBoundingClientRect();
+      d.ghost.style.transition = "left .18s ease, top .18s ease, transform .18s ease, opacity .18s";
+      d.ghost.style.left = (r.left + r.width / 2 - r.width / 2) + "px";
+      d.ghost.style.top = (r.top + r.height / 2 - r.height / 2) + "px";
+      d.ghost.style.transform = "scale(.62)";
+      d.ghost.style.opacity = "0";
+      const g = d.ghost;
+      setTimeout(() => g.remove(), 200);
+    }
+    d.el.classList.remove("taken");
+    lastCommit = Date.now();
+    commit(d.kind, d.v, t, d.el);
+  }else{
+    // 飞回去
+    if(d.ghost){
+      const r = d.el.getBoundingClientRect();
+      const g = d.ghost;
+      g.style.transition = "left .22s ease, top .22s ease, transform .22s ease";
+      g.style.left = r.left + "px";
+      g.style.top = r.top + "px";
+      g.style.transform = "scale(1)";
+      setTimeout(() => { g.remove(); d.el.classList.remove("taken"); }, 230);
+    }else{
+      d.el.classList.remove("taken");
+    }
+  }
+}
+
+function commit(kind, v, target, srcEl){
+  if(kind === "addend"){
+    if(srcEl) srcEl.classList.add("used");
+    fillAddend(+target.dataset.slot, v);
+  }else{
+    submitAnswer(v, srcEl || null);
+  }
+}
+
+/* 点选模式下点目标 */
+function onTargetClick(ev, cell){
+  if(Date.now() - lastCommit < 320) return;
+  const kind = cell.dataset.kind;
+  if(kind === "answer" && !S.optsShown){
+    revealOptions();
+    return;
+  }
+  if(!sel || sel.kind !== kind) return;
+  if(cell.classList.contains("filled")) return;
+  const el = sel.el, v = sel.v;
+  clearSel();
+  el.classList.remove("taken");
+  commit(kind, v, cell, el);
+}
+
+/* =========================================================
+   事件绑定
+   ========================================================= */
+tray.addEventListener("pointerdown", ev => {
+  const c = ev.target.closest(".chip");
+  if(c) onPick(ev, c);
+});
+cx.addEventListener("click", () => onTargetClick(0, cx));
+cy.addEventListener("click", () => onTargetClick(0, cy));
+ca.addEventListener("click", () => onTargetClick(0, ca));
+
+/* =========================================================
+   启动
+   ========================================================= */
+S.stage = 0; S.level = 0; S.totalStars = 0; S.results = [];
+startLevel();
+</script>
+</body>
+</html>
