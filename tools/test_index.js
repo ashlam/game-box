@@ -16,6 +16,9 @@
  *   4) 卡片数 = 实际游戏数（加了游戏忘了加卡片也抓得到）
  *   5) 图标是单字符（emoji），不是一串文字
  *   6) 样式内联、无外链（离线 APK 要能直接用）
+ *   7) ★ 管理游戏（隐藏 / 显示入口）：每个游戏都有一张可管理的卡片 + 角标、
+ *      隐藏状态只存在本机 localStorage、且**只写相对 / 无 href 的标记**
+ *      （离线 APK 里任何 `href="/..."` 都会被 sync_assets 判成外链）
  *
  * 用法：node tools/test_index.js
  */
@@ -163,6 +166,63 @@ section('6) ★ 两个扑克牌记忆游戏要能区分');
   }
 }
 
+/* ================= 6.5) ★ 管理游戏（隐藏 / 显示入口） ================= */
+section('6.5) ★ 每个游戏都能被单独隐藏 / 恢复');
+{
+  /* 每张卡必须被 .cell[data-game] 包着，且 data-game 与 href 一致 ——
+     对不上就会出现「点了隐藏 A，淡掉的却是 B」这种很难查的错位。 */
+  const cellRe = /<div class="cell" data-game="([^"]+)">([\s\S]*?)<\/div>\s*(?=<div class="cell"|<div class="empty"|<div class="soon")/g;
+  const cells = [];
+  let cm;
+  while((cm = cellRe.exec(html)) !== null){
+    const body = cm[2];
+    const href = /<a class="card" href="([^"]+)"/.exec(body);
+    const pick = /<button class="pick"/.test(body);
+    cells.push({ game: cm[1], href: href ? href[1] : '', pick });
+  }
+  ok(cells.length === cards.length,
+     '★ 每张卡片都包在 .cell[data-game] 里（' + cells.length + ' / ' + cards.length + '）');
+  ok(cells.every(c => c.pick), '★ 每个 .cell 里都有隐藏 / 显示角标按钮');
+  const mismatch = cells.filter(c => c.href !== '/' + c.game + '/');
+  ok(mismatch.length === 0, '★ data-game 与卡片 href 一一对应（错位就会藏错游戏）',
+     mismatch.map(c => c.game + ' vs ' + c.href).join('；'));
+
+  /* 角标在非管理模式下不能挡住点卡片：默认 display:none，只有 .managing 才显示 */
+  ok(/\.pick\{[\s\S]*?display:none/.test(html), '角标默认不显示（平时不挡视线）');
+  ok(/\.grid\.managing \.pick\{display:grid\}/.test(html),
+     '★ 只有进入管理模式角标才出现');
+  /* ★ 平时隐藏 = 真的不占位（主菜单要干净）；管理模式 = 全部露出来才好点回来 */
+  ok(/\.grid:not\(\.managing\) \.cell\.hidden\{display:none\}/.test(html),
+     '★ 平时被隐藏的游戏完全不占位（不是留一个灰块）');
+  ok(/\.grid\.managing \.cell\.hidden \.card\{[\s\S]*?opacity/.test(html),
+     '★ 管理模式里被隐藏的卡片仍然看得见（淡出样式，能点回来）');
+
+  /* 存储键：改名会让玩家之前的选择全部丢失，所以锁死 */
+  ok(/gbox_hidden_v1/.test(html), '★ 隐藏状态用固定键 gbox_hidden_v1 存本机');
+  ok(/localStorage\.setItem\(\s*KEY/.test(html), '隐藏状态会写回 localStorage');
+  ok(/localStorage\.getItem\(\s*KEY/.test(html), '打开首页会读回上次的隐藏状态');
+  /* 读回来必须校验：存档被手改成垃圾（非数组 / 不存在的目录）不能让首页崩 */
+  ok(/\[object Array\]/.test(html), '读存档时校验「必须是数组」');
+  ok(/cells\.some/.test(html), '★ 只认确实存在的游戏目录（脏数据直接忽略）');
+  /* 全部隐藏时要有空状态，否则玩家以为页面坏了 */
+  ok(/id="empty"/.test(html) && /\.hidden\s*=\s*shown\s*>\s*0/.test(html),
+     '★ 全部隐藏时给出空状态提示');
+  /* ★ 有 display 的按钮必须显式处理 [hidden]：作者样式的 display:inline-flex
+     会盖掉 UA 的 [hidden]{display:none}，按钮会一直显示在页面上（截图抓到过）。 */
+  ok(/\.manage\[hidden\]\{display:none\}/.test(html),
+     '★ 按钮带 display 时必须显式写 [hidden]{display:none}（否则藏不住）');
+  ok(/id="showAllBtn"[^>]*hidden/.test(html),
+     '「全部显示」初始是 hidden（没藏东西时不出现）');
+  /* 管理模式外点卡片必须能正常进游戏 */
+  ok(/if\(!managing\) return;/.test(html),
+     '★ 非管理模式下点卡片照常进游戏（不会误吞点击）');
+  /* 「全部显示」要有 —— 藏多了得能一键复原 */
+  ok(/id="showAllBtn"/.test(html) && /hidden = \[\];/.test(html),
+     '★ 有「全部显示」一键复原');
+  /* 管理按钮要能再次点掉（进入 / 退出） */
+  ok(/setManaging\(!managing\)/.test(html), '管理按钮可切换进出管理模式');
+}
+
 /* ================= 7) 单文件自包含 ================= */
 section('7) 首页自身可离线');
 {
@@ -172,6 +232,10 @@ section('7) 首页自身可离线');
   ok(!/<script[^>]+src=/i.test(html), '没有外部脚本');
   ok(/<meta name="viewport"/.test(html), '有 viewport（手机上要能用）');
   ok(/href="\/"/.test(html) || cards.length > 0, '（首页本身就是站点根，不需要返回链接）');
+  /* ★ 首页新加的按钮 / 空状态不能带 href：sync_assets.py 会把任何 href="/..." 判成外链
+     直接让 APK 构建失败，而 `<a href="#">` 这类又会在 WebView 里跳走。 */
+  ok(!/<button[^>]+href=/i.test(html), '按钮上没有 href（离线包会判成外链）');
+  ok(!/href="#"/.test(html), '没有 href="#" 空链接');
 }
 
 /* ================= 汇总 ================= */

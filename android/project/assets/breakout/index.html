@@ -64,14 +64,20 @@
   #menu{position:fixed;inset:0;background:rgba(10,16,24,.74);backdrop-filter:blur(3px);display:none;
         align-items:center;justify-content:center;padding:22px;z-index:65}
   #menu.on{display:flex}
-  #menu .mpanel{width:100%;max-width:300px;background:var(--card,#191d26);border:1px solid var(--line,#2b3242);
+  #menu .mpanel{width:100%;max-width:320px;background:var(--card,#191d26);border:1px solid var(--line,#2b3242);
                 border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:9px;
-                box-shadow:0 20px 50px rgba(0,0,0,.55)}
+                box-shadow:0 20px 50px rgba(0,0,0,.55);max-height:88vh;overflow:auto}
   #menu h2{margin:0 0 6px;font-size:15px;text-align:center;color:var(--dim,#8b95a7);letter-spacing:2px}
   #menu button{font-size:14.5px;padding:13px;border-radius:11px;border:1px solid var(--line,#2b3242);
                background:rgba(255,255,255,.05);color:var(--txt,#e8ecf3);font-family:inherit}
   #menu button.pri{background:var(--acc,#5b8cff);border-color:var(--acc,#5b8cff);color:#fff;font-weight:700}
   #menu button:active{filter:brightness(.94)}
+  /* 道具图鉴：菜单里一张小卡片讲清每个道具是干嘛的（不识字也能看颜色和字母） */
+  #menu .legend{border:1px solid var(--line,#2b3242);border-radius:12px;padding:10px 12px;background:rgba(255,255,255,.03)}
+  #menu .legend h3{margin:0 0 7px;font-size:11.5px;color:var(--dim,#8b95a7);letter-spacing:1px;font-weight:600}
+  #menu .legend div{font-size:12px;line-height:1.85;color:#c8d2e2;display:flex;align-items:center;gap:7px}
+  #menu .legend i{width:15px;height:15px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;
+                  font-style:normal;font-size:9.5px;font-weight:800;color:#0d1016;flex:0 0 auto}
   #dbg{position:fixed;left:6px;right:6px;bottom:6px;z-index:60;display:none;font-size:10px;line-height:1.45;
     font-family:ui-monospace,Menlo,Consolas,monospace;color:#a8b8cf;background:rgba(8,10,14,.88);
     border:1px solid rgba(120,150,200,.24);border-radius:8px;padding:7px 9px;
@@ -82,13 +88,30 @@
   /* 顶部压成一行（统计塞进标题那一行）、按钮压扁、宽度上限放开 —— 把屏幕尽量让给场地 */
   body.v2{--mw:2400px}
   body.v2 .top{margin-bottom:6px}
-  body.v2 .top a{font-size:18px;padding:4px 9px;border-radius:9px}
-  body.v2 .top h1{flex:1;text-align:left;padding-right:0;font-size:15px;color:var(--dim)}
-  body.v2 .hud{margin:0 0 0 auto;width:auto;gap:9px;align-items:center;
+  body.v2 .top a{font-size:18px;padding:4px 9px;border-radius:9px;flex:0 0 auto}
+  body.v2 .top h1{flex:1 1 auto;text-align:left;padding-right:0;font-size:15px;color:var(--dim);
+                  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  body.v2 .hud{margin:0;width:auto;min-width:0;gap:9px;align-items:center;flex:0 0 auto;
                background:var(--card);border:1px solid var(--line);border-radius:11px;padding:5px 10px}
-  body.v2 .hud>div{background:none;border:0;border-radius:0;padding:0;display:flex;align-items:center;gap:5px}
+  body.v2 .hud>div{background:none;border:0;border-radius:0;padding:0;display:flex;align-items:center;gap:5px;
+                   flex:0 0 auto;min-width:0;white-space:nowrap}
   body.v2 .hud .k{font-size:11.5px}
   body.v2 .hud .v{font-size:14px}
+  body.v2 #btnMenu{flex:0 0 auto}
+  /* 窄屏（手机）：标题让位给统计栏。实测 390×844 上「打砖块」标题被挤成 9px 宽、
+     320×568 上三个中文标签把整页顶到 380px（横向溢出 60px），所以手机上干脆不要标题：
+     返回键和菜单都在，标题没有信息量。 */
+  @media (max-width:430px){
+    body.v2 .top h1{display:none}
+    #btnMenu .mlabel{display:none}
+    body.v2 .hud{margin-left:auto;gap:7px;padding:5px 8px}
+    body.v2 #btnMenu{padding:6px 8px}
+  }
+  /* 320px 这类极窄屏：中文标签也藏掉，只留数值（再挤下去就轮到「关卡 1 / 10」换行了） */
+  @media (max-width:340px){
+    body.v2 .hud .k{display:none}
+    body.v2 .hud .v{font-size:13px}
+  }
   body.v2 .bar{margin-top:8px}
   body.v2 .bar button{font-size:13px;padding:9px 6px;border-radius:11px}
   @media (max-height:700px){
@@ -128,7 +151,7 @@
 <div class="top">
   <a href="../index.html">‹</a>
   <h1>打砖块</h1>
-  <button id="btnMenu">☰ 菜单</button>
+  <button id="btnMenu">☰<span class="mlabel"> 菜单</span></button>
 </div>
 
 <div class="hud">
@@ -141,6 +164,16 @@
 
 <div id="menu"><div class="mpanel">
   <h2>菜单</h2>
+  <div class="legend">
+    <h3>掉下来的道具 · 挡板接住就生效</h3>
+    <div><i style="background:#38d39f">E</i>挡板加宽</div>
+    <div><i style="background:#4fd1ff">S</i>球变慢（更好控）</div>
+    <div><i style="background:#5b8cff">M</i>分裂成多球</div>
+    <div><i style="background:#ff8a5b">L</i>挡板两侧发射激光</div>
+    <div><i style="background:#ffd54a">C</i>接住球，点一下再发</div>
+    <div><i style="background:#c37bff">P</i>挡板变窄（小心）</div>
+    <div><i style="background:#ff6b9d">U</i>多一个球（最多 5 个）</div>
+  </div>
   <button id="btnPause">暂停</button>
   <button id="btnSound">音效：开</button>
   <button id="btnRetry">重开本关</button>
@@ -183,18 +216,19 @@
        手机 382px → 4 列(84px)   平板 759px → 8 列(87px)   桌面 1276px → 12 列(103px)
      ================================================================ */
   const COLS_TARGET_PX = 92;       // 每块砖的目标屏幕宽度
-  const MAX_LEVEL = 8;
+  const MAX_LEVEL = 10;
 
   /* ===== 场地几何：全部按逻辑高度 H 等比缩放 =====
      为什么不能写死：手机横屏时场地只有 ~110 个单位高（竖屏有 ~600），
      写死的砖高 26 + 顶部留白 26 会把矮场地直接占满，逼得 H_MIN 必须很大，
      而 H_MIN 一大，缩放比就只能按高度算 ⇒ 宽度白白浪费（实测横屏只占 58% 宽、两侧各空 193px）。
      按 H 等比算之后，矮场地自动用更薄的砖、更小的球，宽度就能吃满。 */
-  const BRICK_TOP_R = 0.058, BRICK_H_R = 0.052, GAP_R = 0.010;
+  const BRICK_TOP_R = 0.050, BRICK_H_R = 0.062, GAP_R = 0.008;
   const BALL_R_R = 0.0155, PADDLE_H_R = 0.026;
   /* PADDLE_Y_R = 挡板离场地底边的距离（占 H 的比例）。
      原来是 0.050（≈24 逻辑单位 / 30 屏幕像素）—— 手指一放就盖住挡板，这是用户的真实抱怨。
-     抬到 0.110 留出「拇指区」：指腹落在挡板下方，而不是压在挡板上。 */
+     抬到 0.110 留出「拇指区」：指腹落在挡板下方，而不是压在挡板上。
+     下限压到 30：横屏时场地只有 ~125 逻辑高，40 会白吃掉三分之一的可玩区。 */
   const PADDLE_Y_R = 0.110;
 
   /* M 是砖墙左右两侧的留白。它必须大于球直径，否则球挤不进「砖墙边缘 ↔ 侧墙」那条缝，
@@ -207,17 +241,23 @@
 
   function recomputeBrickW(){ BRICK_W = (W - 2 * M - (COLS - 1) * GAP) / COLS; }
   function computeCols(availW){ return clamp(Math.round(availW / COLS_TARGET_PX), 4, 12); }
-  function maxRows(){ return clamp(Math.floor((H - BRICK_TOP - H * 0.30) / (BRICK_H + GAP)), 2, 7); }
+  /* 砖墙最多铺几行：按「挡板上方还剩多少高度」算，保证砖墙下面永远留出球的活动区。
+     ★ 原来用 H*0.34 这个固定比例，横屏（H≈125）时算出 6 行、砖墙下沿 82 而挡板在 95 ——
+     中间只剩 13 单位，球几乎贴着砖墙弹（真机横屏实测「没法玩」）。改成跟着 PADDLE_Y_OFF 算。 */
+  function maxRows(){
+    const usable = (H - PADDLE_Y_OFF - H * 0.18) - BRICK_TOP;
+    return clamp(Math.floor(usable / (BRICK_H + GAP)), 2, 8);
+  }
 
   /** 按当前 H 重算所有几何量（场地矮就整体缩小，保证砖墙不会占满场地） */
   function applyGeometry(){
     BRICK_TOP    = clamp(Math.round(H * BRICK_TOP_R), 10, 40);
-    BRICK_H      = clamp(Math.round(H * BRICK_H_R), 10, 26);
+    BRICK_H      = clamp(Math.round(H * BRICK_H_R), 9, 30);
     GAP          = clamp(Math.round(H * GAP_R), 3, 6);
     M            = clamp(Math.round(H * 0.026), 12, 20);
     BALL_R       = clamp(H * BALL_R_R, 4, 7);
     PADDLE_H     = clamp(Math.round(H * PADDLE_H_R), 7, 12);
-    PADDLE_Y_OFF = clamp(Math.round(H * PADDLE_Y_R), 40, 90);
+    PADDLE_Y_OFF = clamp(Math.round(H * PADDLE_Y_R), 30, 90);
   }
 
   const cv = document.getElementById('cv');
@@ -258,20 +298,33 @@
   const sndWall    = () => tone(210, 0.045, {type:'sine',     gain:0.055});
   const sndPaddle  = () => { tone(300, 0.09, {type:'triangle', gain:0.14, to:240}); tone(620, 0.04, {type:'square', gain:0.035}); };
   const sndBrick   = row => tone(520 + row * 62, 0.07, {type:'triangle', gain:0.13, to: 380 + row * 40});
-  const sndHard    = row => { tone(330 + row * 40, 0.06, {type:'square', gain:0.06}); sndBrick(row); };  // 硬砖没碎
+  const sndHard    = row => { tone(330 + row * 40, 0.06, {type:'square', gain:0.06}); sndBrick(row); };
+  const sndSteel   = () => { tone(1180, 0.05, {type:'square', gain:0.05, to:900}); };
+  const sndBoom    = () => { tone(120, 0.42, {type:'sawtooth', gain:0.15, to:42}); tone(70, 0.5, {type:'sine', gain:0.13, to:32, at:0.02}); };
+  const sndCapsule = () => { [660,880,1180].forEach((f,i)=>tone(f, 0.1, {type:'square', gain:0.09, at:i*0.055})); };
+  const sndLaser   = () => tone(1500, 0.05, {type:'square', gain:0.045, to:600});
   const sndLaunch  = () => { tone(340, 0.1, {type:'square', gain:0.1, to:700}); };
   const sndLost    = () => { tone(400, 0.5, {type:'sawtooth', gain:0.11, to:110}); tone(200, 0.55, {type:'sine', gain:0.09, to:70, at:0.06}); };
+  const sndShield  = () => { tone(520, 0.2, {type:'sine', gain:0.12, to:1040}); };
   const sndClear   = () => { [523,659,784,1047].forEach((f,i)=>tone(f, 0.16, {type:'triangle', gain:0.11, at:i*0.085})); };
   const sndWin     = () => { [523,659,784,1047,1319].forEach((f,i)=>tone(f, 0.22, {type:'triangle', gain:0.11, at:i*0.11})); };
   const sndOver    = () => { [392,330,262,196].forEach((f,i)=>tone(f, 0.26, {type:'sawtooth', gain:0.09, at:i*0.13})); };
+  const sndCombo   = n => tone(520 + Math.min(n, 8) * 90, 0.09, {type:'triangle', gain:0.1, to: 700 + Math.min(n, 8) * 110});
 
   /* ================= 状态 ================= */
   const BKEY = 'breakout_best';
   let best = 0;
   try{ best = parseInt(localStorage.getItem(BKEY) || '0', 10) || 0; }catch(e){ best = 0; }
 
-  let level, score, lives, bricks, alive, state, ball, paddle, particles, shakeT, flashT;
+  let level, score, lives, bricks, alive, state, balls, paddle, particles, shakeT, flashT;
   let cfg = null, overTimer = null, loopT = 0, lastT = 0, sinceBreak = 0;
+  let now = 0;
+  let combo = 0, bestCombo = 0;                 // 连击：不碰挡板连续打碎砖块
+  let capsules = [], bolts = [], floats = [];   // 道具胶囊 / 激光弹 / 飘字
+  let shieldT = 0, slowT = 0, catchT = 0, lasers = 0, laserCd = 0;
+  let expandT = 0, shrinkT = 0, paddleScale = 1;
+  let sinceCapsule = 0, capsulesGot = 0;
+  let parts = { brick: 0, bonus: 0, capsule: 0 };   // 分数分项（测试用它验证 score 恒等于各项之和）
 
   const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
 
@@ -281,26 +334,139 @@
   const MIN_VY = 0.40, MIN_VX = 0.17;
   const STALL_S = 12;               // 连续这么久没碰到砖 ⇒ 认为进了周期轨道，微调方向打破
 
-  function enforceAngles(sp, px){
-    let vx = ball.vx, vy = ball.vy;
-    const s = Math.hypot(vx, vy) || sp || 1;
-    if(Math.abs(vy) < s * MIN_VY) vy = (vy <= 0 ? -1 : 1) * s * MIN_VY;
-    if(Math.abs(vx) < s * MIN_VX){
-      const dir = Math.abs(px || 0) > 1 ? Math.sign(px) : (Math.random() < 0.5 ? -1 : 1);
-      vx = dir * s * MIN_VX;
-    }
-    const k = s / (Math.hypot(vx, vy) || 1);
-    ball.vx = vx * k; ball.vy = vy * k;
-  }
+  /* ================= 砖块类型 =================
+     街机原作的乐趣有一半来自「这块砖不一样」：硬砖要敲好几下、钢砖敲不动、
+     爆炸砖会连累邻居、会跑的砖逼你算提前量、金砖是纯奖励。 */
+  const BT = {
+    n: { hp:1, pts:10, name:'普通砖' },
+    h: { hp:3, pts:30, name:'硬砖（敲三下）' },
+    s: { hp:Infinity, pts:0, name:'钢砖（打不碎）' },
+    e: { hp:1, pts:15, name:'爆炸砖（炸掉周围一圈）' },
+    b: { hp:1, pts:50, name:'金砖（高分）' },
+    m: { hp:1, pts:15, name:'移动砖（会左右跑）' },
+  };
+  const CH2T = { n:'n', h:'h', s:'s', e:'e', b:'b', '~':'m' };
+  const MOVE_AMP = 12;             // 移动砖的左右摆幅（逻辑单位）
+
+  /* ================= 关卡图案 =================
+     10 个字符宽（窄屏/宽屏都会按比例拉伸到真实列数），`.` 是空格。
+     每关一个名字，让玩家知道「这一关在玩什么」。
+     行数就是图案行数（6 行 = 24~60 块砖，跟原作一屏的量级一致）。 */
+  const LEVELS = [
+    { name:'热身', art:[
+      '.nnnnnnnn.',
+      '.nnnnnnnn.',
+      '.nnnnnnnn.',
+      '.nnnnnnnn.',
+      '.nnnnnnnn.',
+      '..nnnnnn..',
+    ]},
+    { name:'砖墙', art:[
+      '.hhhhhhhh.',
+      '.nnnnnnnn.',
+      '.nnnnnnnn.',
+      '.nnnnnnnn.',
+      '.nnnnnnnn.',
+      '.nnnnnnnn.',
+    ]},
+    { name:'双塔', art:[
+      '.n......n.',
+      '.n......n.',
+      '.n......n.',
+      '.n......n.',
+      '.h......h.',
+      '.nn....nn.',
+    ]},
+    { name:'炸弹阵', art:[
+      '.e......e.',
+      '.nnnnnnnn.',
+      '.e......e.',
+      '.nnnnnnnn.',
+      '.e......e.',
+      '.nnnnnnnn.',
+    ]},
+    { name:'金库', art:[
+      'ss......ss',
+      '.n......n.',
+      '.nnnnnnnn.',
+      '.nnbbbbnn.',
+      '.nnnnnnnn.',
+      '.n......n.',
+    ]},
+    { name:'漩涡', art:[
+      '.~~~~~~~~.',
+      '.nnnnnnnn.',
+      '.n~....~n.',
+      '.n~....~n.',
+      '.nnnnnnnn.',
+      '.~~~~~~~~.',
+    ]},
+    { name:'铁壁', art:[
+      'ssssssssss',
+      '.hhhhhhhh.',
+      '.nnnnnnnn.',
+      '.nnnnnnnn.',
+      '.nnnnnnnn.',
+      '.nnnnnnnn.',
+    ]},
+    { name:'蜂巢', art:[
+      '..n.nn.n..',
+      '.nn.nn.nn.',
+      'nn.nn.nn.n',
+      '.nn.nn.nn.',
+      '..n.nn.n..',
+      '...e..e...',
+    ]},
+    { name:'要塞', art:[
+      'ss.hhhh.ss',
+      '.n.nn.nn.n',
+      '.n.bbbb.n.',
+      '.n.nn.nn.n',
+      'nn.hhhh.nn',
+      '.n.nnnn.n.',
+    ]},
+    { name:'终局', art:[
+      'ssssssssss',
+      '.hhhhhhhh.',
+      '.nnnnnnnn.',
+      '.n~eeee~n.',
+      '.nnnnnnnn.',
+      '.hhhhhhhh.',
+    ]},
+  ];
 
   function levelCfg(n){
+    const L = LEVELS[clamp(n, 1, MAX_LEVEL) - 1];
     return {
-      // 砖块总数从 ~24 起（列数越多、行数越少），不随屏幕变宽而暴涨
-      rows:  Math.min(maxRows(), clamp(Math.round(24 / COLS), 2, 7) + Math.floor((n - 1) / 2)),
-      hard:  2, hardRows: n >= 4 ? 1 : 0,                // 第 4 关起最上面一行要打两下
-      speedBase: Math.min(460, 300 + (n - 1) * 24),      // 球速要够快，否则来回一趟太久
-      paddleW: Math.max(50, 76 - (n - 1) * 3)
+      name: L.name,
+      art: L.art,
+      speedBase: Math.min(470, 290 + (n - 1) * 20),      // 球速要够快，否则来回一趟太久
+      paddleW: Math.max(48, 78 - (n - 1) * 3)
     };
+  }
+
+  /* ================= 道具 =================
+     掉了要接住才生效 —— 「接」这一下就是街机版最抓人的地方：
+     为了接道具，玩家会主动把挡板挪到危险的位置。 */
+  const CAPS = {
+    E: { c:'#38d39f', text:'挡板加宽', dur:14 },
+    S: { c:'#4fd1ff', text:'球变慢',   dur:9  },
+    M: { c:'#5b8cff', text:'多球！',   dur:0  },
+    L: { c:'#ff8a5b', text:'激光 ×8',  dur:0  },
+    C: { c:'#ffd54a', text:'接住球',   dur:12 },
+    P: { c:'#c37bff', text:'挡板变窄', dur:10 },
+    U: { c:'#ff6b9d', text:'多一个球', dur:0  },
+  };
+  const CAP_WEIGHT = [['E',3],['S',2],['M',3],['L',3],['C',2],['P',2],['U',1]];
+  const CAP_TOTAL_W = CAP_WEIGHT.reduce((a, b) => a + b[1], 0);
+  const CAPSULE_P = 0.16;          // 每碎一块砖掉道具的概率
+  const CAPSULE_PITY = 14;         // 最多碎这么多块还没掉 ⇒ 必掉一个（防运气太差）
+  const CAPSULE_MAX = 3;           // 场上最多同时存在几个
+
+  function rollCapsule(){
+    let r = Math.random() * CAP_TOTAL_W;
+    for(const [k, w] of CAP_WEIGHT){ if((r -= w) < 0) return k; }
+    return 'E';
   }
 
   /* 场地变高 ⇒ 来回距离变长，球速按同比例放大，每关耗时才不会随设备变来变去 */
@@ -310,47 +476,126 @@
 
   /* 逻辑高度变了（旋转屏幕 / 换设备）⇒ 挡板位置和球的位置都得跟着挪，否则会卡在场地外 */
   function onFieldResize(){
-    if(!paddle || !ball) return;
-    ball.r = BALL_R;                 // 场地高度变了 ⇒ 球/挡板的尺寸也按新几何同步
+    if(!paddle || !balls || !balls.length) return;
     paddle.h = PADDLE_H;
     paddle.y = H - PADDLE_Y_OFF;
-    ball.y = ball.stuck ? paddle.y - ball.r - 1 : clamp(ball.y, ball.r + 0.5, H - ball.r - 0.5);
+    for(const b of balls){
+      b.r = BALL_R;
+      b.y = b.stuck ? paddle.y - b.r - 1 : clamp(b.y, b.r + 0.5, H - b.r - 0.5);
+    }
+  }
+
+  /* ================= 建砖 =================
+     ★ 图案是按 10 列画的，但真实列数随屏宽在 4~12 之间变（见文件头）。
+     直接按比例取「第一个字符」会漏砖：4 列时 10 宽图案每列只取 index 0/2/5/7，
+     第 4 关 '.e......e.' 的 e 在 index 1 和 8 —— 全被跳过，整关变成纯普通砖（实测如此）。
+     所以按「每列覆盖的字符区间里挑优先级最高的那个」取样：特殊砖（钢/爆/金/硬/移动）
+     永远优先于普通砖和空格，缩放多少列都不会把它们弄丢。
+
+     ★★ 但分桶必须**左右镜像对称**，否则图案会整体偏一边：
+     原来用 lo = floor(c*n/cols)、hi = floor((c+1)*n/cols)，10→8 列时
+     col0 的窗口是 [0,1)（只含 index 0）、col7 的窗口是 [8,10)（含 2 个字符）——
+     左边桶窄、右边桶宽。而第 1/2 关的图案是 '.nnnnnnnn.'（第一个字符就是留白），
+     于是 col0 忠实取到那个 '.'，**左边凭空空出一列、右边却不空**（玩家一眼就看出不对称）。
+
+     修法：边界直接用镜像公式 b[c] = round(c*n/cols)（c ≤ cols/2），
+     右半边 b[cols-c] = n - b[c] 反推，天然满足 b[c] + b[cols-c] = n。
+     列数比图案宽（如 12 列 vs 10 字符）时会出现「零宽桶」，
+     这时取该边界处的那一个字符 —— 等价于把图案等比拉伸，且左右仍然对称。
+     ⚠️ 不能再加「每列至少覆盖 1 字符」的单调修正：它会和镜像约束打架
+     （11/12 列时实测又变回「左空 1、右空 2」）。 */
+  const ART_PRI = { s:6, e:5, b:4, h:3, '~':2, n:1 };
+
+  function artBounds(n, cols){
+    const b = new Array(cols + 1);
+    b[0] = 0; b[cols] = n;
+    for(let c = 1; c < cols; c++){
+      b[c] = c * 2 <= cols ? Math.round(c * n / cols) : n - Math.round((cols - c) * n / cols);
+    }
+    return b;
+  }
+
+  function sampleArt(line, cols){
+    const n = line.length;
+    /* 列数 ≥ 图案宽：用「最近邻插值」逐列取一个字符。
+       映射 src(c) = round((c + 0.5) * n / cols - 0.5) 天然镜像
+       （c 与 cols-1-c 落在 n-1 互为镜像的位置），既不会丢字符也不会偏边。
+       ⚠️ 这里不能用「分桶」：10 字符铺到 12 列时 round(c*10/12) 会算出重复边界
+       （0,1,2,3,3,4,…），第 3、8 列的桶宽度变成 0，直接把 index 3 和 6 的砖吃掉 ——
+       实测第 1 关最后一行 '..nnnnnn..' 在 12 列下中间只剩 6 个 n、两边各空 2 格，
+       而上面几行是「两边各空 1 格」，一屏里两种缩进，看着就是歪的。 */
+    if(cols >= n){
+      const out = [];
+      for(let c = 0; c < cols; c++){
+        const i = Math.round((c + 0.5) * n / cols - 0.5);
+        out.push(line[clamp(i, 0, n - 1)] || '.');
+      }
+      return out;
+    }
+    /* 列数 < 图案宽：分桶，桶内取优先级最高的字符（特殊砖不会被缩没） */
+    const b = artBounds(n, cols);
+    const out = [];
+    for(let c = 0; c < cols; c++){
+      let best = '.', bestP = 0;
+      for(let i = b[c]; i < b[c + 1]; i++){
+        const p = ART_PRI[line[i]] || 0;
+        if(p > bestP){ best = line[i]; bestP = p; }
+      }
+      out.push(best);
+    }
+    return out;
   }
 
   function makeBricks(){
     const arr = [];
-    for(let r = 0; r < cfg.rows; r++){
+    const art = cfg.art || [];
+    const rows = Math.min(art.length, maxRows());
+    for(let r = 0; r < rows; r++){
+      const cells = sampleArt(art[r], COLS);
       for(let c = 0; c < COLS; c++){
-        const hp = r < cfg.hardRows ? cfg.hard : 1;
+        const kind = CH2T[cells[c]];
+        if(!kind) continue;
+        const t = BT[kind];
         arr.push({
           x: M + c * (BRICK_W + GAP),
           y: BRICK_TOP + r * (BRICK_H + GAP),
           w: BRICK_W, h: BRICK_H,
-          row: r, hp: hp, max: hp, hit: 0
+          row: r, col: c, kind: kind,
+          hp: t.hp, max: t.hp, hit: 0,
+          baseX: M + c * (BRICK_W + GAP),
+          phase: Math.random() * Math.PI * 2,
+          dead: false
         });
       }
     }
     return arr;
   }
 
+  function newBall(x, y, vx, vy, stuck){
+    return {
+      x: x, y: y, r: BALL_R, vx: vx || 0, vy: vy || 0,
+      stuck: !!stuck, off: 0, catchT: 0, dead: false, trail: [], color: '#ffffff'
+    };
+  }
+
   function resetBall(stuck){
-    ball.x = paddle.x;
-    ball.y = (stuck ? paddle.y - ball.r - 1 : H * 0.62);
-    ball.vx = 0; ball.vy = 0;
-    ball.stuck = !!stuck;
-    ball.trail.length = 0;
+    balls = [newBall(paddle.x, 0, 0, 0, true)];
+    balls[0].y = stuck ? paddle.y - BALL_R - 1 : H * 0.62;
     sinceBreak = 0;
   }
 
   function startLevel(n, keepScore){
     level = n; cfg = levelCfg(n);
     applySpeed();
-    if(!keepScore) score = 0;
+    if(!keepScore){ score = 0; parts = { brick:0, bonus:0, capsule:0 }; }
     lives = 3;
     bricks = makeBricks(); alive = bricks.length;
-    paddle = {x: W / 2, y: H - PADDLE_Y_OFF, w: cfg.paddleW, h: PADDLE_H, vx: 0, target: W / 2};
-    ball = {x: W / 2, y: 0, r: BALL_R, vx: 0, vy: 0, stuck: true, trail: []};
+    paddle = { x: W / 2, y: H - PADDLE_Y_OFF, w: cfg.paddleW, h: PADDLE_H, vx: 0, target: W / 2 };
+    paddleScale = 1; expandT = 0; shrinkT = 0;
     particles = []; shakeT = 0; flashT = 0;
+    capsules = []; bolts = []; floats = [];
+    shieldT = 0; slowT = 0; catchT = 0; lasers = 0; laserCd = 0;
+    combo = 0; bestCombo = 0; sinceCapsule = 0; capsulesGot = 0;
     state = 'ready';                       // ready -> play -> pause -> lost/clear/over
     resetBall(true);
     syncHud();
@@ -360,7 +605,8 @@
     $('hScore').textContent = score;
     $('hLevel').textContent = level + (state === 'over' ? '' : ' / ' + MAX_LEVEL);
     const lv = $('lives');
-    lv.textContent = '●'.repeat(Math.max(0, lives)) + '○'.repeat(Math.max(0, 3 - lives));
+    const slots = Math.max(3, lives);
+    lv.textContent = '●'.repeat(Math.max(0, lives)) + '○'.repeat(Math.max(0, slots - lives));
     lv.classList.toggle('low', lives <= 1);
   }
 
@@ -369,6 +615,13 @@
     t.textContent = msg; t.classList.add('on');
     clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), 1600);
   }
+
+  /* ================= 计分 ================= */
+  function addScore(kind, n){ parts[kind] = (parts[kind] || 0) + n; score += n; }
+
+  /* 连击倍率：连打 4 块升一级，最高 ×5。碰一下挡板就清零 —— 逼你「一直不落地」。 */
+  const COMBO_STEP = 4, COMBO_SHIELD = 12;
+  function comboMult(){ return Math.min(5, 1 + Math.floor(combo / COMBO_STEP)); }
 
   /* ================= 诊断信息：一键复制（用户不必念数字，粘贴即可） =================
      为什么不用 navigator.clipboard 就完事：http://192.168.x.x 属非安全上下文，
@@ -394,7 +647,7 @@
     const dvhOK = !!(window.CSS && window.CSS.supports && window.CSS.supports('height', '100dvh'));
     return [
       '【打砖块·诊断】' + new Date().toLocaleString('zh-CN'),
-      '版本=默认版（列数随屏宽自适应 + 几何按场地高度等比）',
+      '版本=街机版（10 关图案 + 6 种砖 + 7 种道具 + 连击倍率 + 多球/激光/护盾）',
       '视口=' + window.innerWidth + '×' + window.innerHeight + '  朝向=' + ori
         + '  dpr=' + dpr + '  屏幕=' + scr,
       '高度探针: 100vh=' + vh100 + '  与可视差=' + (vh100 === '?' ? '?' : (vh100 - window.innerHeight)) + 'px  dvh支持=' + dvhOK + ',',
@@ -402,7 +655,7 @@
         + pct(ch, window.innerHeight) + '%高  左右留白=' + Math.round((window.innerWidth - cw) / 2) + 'px',
       '画布物理=' + cv.width + '×' + cv.height + '  逻辑=' + W + '×' + H + '  scale=' + scale.toFixed(3),
       '砖=' + Math.round(BRICK_W * scale) + '×' + Math.round(BRICK_H * scale) + 'px  '
-        + COLS + '列' + (cfg ? cfg.rows : '?') + '行  砖墙边距=' + Math.round(M * scale) + 'px',
+        + COLS + '列' + (cfg ? cfg.art.length : '?') + '行  砖墙边距=' + Math.round(M * scale) + 'px',
       '挡板=' + Math.round((cfg ? cfg.paddleW : 0) * scale) + '×' + Math.round(PADDLE_H * scale)
         + 'px  球r=' + Math.round(BALL_R * scale) + 'px',
       'stage高=' + Math.round((st && st.clientHeight) || 0) + '  页面总高='
@@ -501,7 +754,15 @@
   }
   let scale = 1;
 
-  /* ================= 输入 ================= */
+  /* ================= 输入 =================
+     ★ 「拖动挡板」和「发球」必须分开，否则手指一落下去就发球：
+     原来 touchstart 里直接调 launch()，玩家想把挡板拖到位、手指刚碰到屏幕球就飞出去了
+     —— 画面上写着「拖动挡板 · 点一下发球」，实际根本没法先拖再发（真机反馈）。
+     现在改成「轻点 = 发球，拖动 = 只移动挡板」：
+       touchstart 只记录起点，不动球；
+       touchmove  移动挡板，并标记「这次是拖动」；
+       touchend   若既没移动够远、也没按够久，才算一次轻点 → 发球。
+     拖动之后再发球，抬手轻点一下即可。 */
   function stageX(clientX){
     const r = cv.getBoundingClientRect();
     return clamp((clientX - r.left) / (r.width || 1) * W, 0, W);
@@ -510,74 +771,307 @@
     paddle.target = clamp(x, paddle.w / 2, W - paddle.w / 2);
   }
 
+  const TAP_PX = 12;              // 移动超过这么多像素就算拖动，不再触发发球
+  const TAP_MS = 400;             // 按住超过这么久算长按，不触发发球
+  let press = null;               // { x, y, t, moved }
+
+  function beginPress(clientX, clientY){
+    press = { x: clientX, y: clientY, t: Date.now(), moved: false };
+  }
+  function movePress(clientX, clientY){
+    if(press && !press.moved &&
+       (Math.abs(clientX - press.x) > TAP_PX || Math.abs(clientY - press.y) > TAP_PX)) press.moved = true;
+  }
+  /* 抬手：返回 true 表示这次是一次「轻点」，应该发球 */
+  function endPress(clientX, clientY){
+    if(!press) return false;
+    const wasTap = !press.moved && (Date.now() - press.t) < TAP_MS;
+    press = null;
+    return wasTap;
+  }
+
+  function onTap(){
+    if(state === 'ready') launch();
+    else if(state === 'play') launchStuck();     // 接球道具：轻点把吸住的球放出去
+  }
+
   cv.addEventListener('touchstart', e => {
     e.preventDefault();
     ac();
-    movePaddleTo(stageX(e.touches[0].clientX));
-    if(state === 'ready') launch();
+    const t = e.touches[0];
+    movePaddleTo(stageX(t.clientX));
+    beginPress(t.clientX, t.clientY);
   }, {passive:false});
   cv.addEventListener('touchmove', e => {
     e.preventDefault();
-    movePaddleTo(stageX(e.touches[0].clientX));
+    const t = e.touches[0];
+    movePress(t.clientX, t.clientY);
+    movePaddleTo(stageX(t.clientX));
   }, {passive:false});
+  cv.addEventListener('touchend', e => {
+    e.preventDefault();
+    // changedTouches 才是「抬起来的那根手指」；用 touches[0] 会拿错手指
+    const t = (e.changedTouches && e.changedTouches[0]) || null;
+    const x = t ? t.clientX : (press ? press.x : 0);
+    const y = t ? t.clientY : (press ? press.y : 0);
+    if(endPress(x, y)) onTap();
+  }, {passive:false});
+  cv.addEventListener('touchcancel', () => { press = null; });
 
-  cv.addEventListener('mousemove', e => { if(state !== 'over') movePaddleTo(stageX(e.clientX)); });
-  cv.addEventListener('mousedown', e => { ac(); if(state === 'ready') launch(); });
+  cv.addEventListener('mousemove', e => {
+    if(state === 'over') return;
+    movePress(e.clientX, e.clientY);
+    movePaddleTo(stageX(e.clientX));
+  });
+  cv.addEventListener('mousedown', e => { ac(); beginPress(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', e => { if(endPress(e.clientX, e.clientY)) onTap(); });
 
   document.addEventListener('keydown', e => {
     if(e.key === 'ArrowLeft' || e.key === 'a'){ e.preventDefault(); movePaddleTo(paddle.target - 26); }
     else if(e.key === 'ArrowRight' || e.key === 'd'){ e.preventDefault(); movePaddleTo(paddle.target + 26); }
-    else if(e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); if(state === 'ready') launch(); else if(state === 'play') pause(); }
+    else if(e.key === ' ' || e.key === 'Enter'){ e.preventDefault(); if(state === 'ready') launch(); else if(state === 'play') launchStuck(); }
     else if(e.key === 'p'){ e.preventDefault(); state === 'play' ? pause() : resume(); }
     else if(e.key === 'r'){ e.preventDefault(); startLevel(1, false); }
   });
 
   function launch(){
-    if(state !== 'ready' || !ball.stuck) return;
-    const sp = cfg.speed;
-    const ang = (Math.random() * 0.9 - 0.45);          // ±26°，别一上来就是死角度
-    ball.vx = Math.sin(ang) * sp;
-    ball.vy = -Math.cos(ang) * sp;
-    ball.stuck = false;
+    if(state !== 'ready') return;
+    let any = false;
+    for(const b of balls){
+      if(!b.stuck) continue;
+      const sp = cfg.speed;
+      const ang = (Math.random() * 0.9 - 0.45);          // ±26°，别一上来就是死角度
+      b.vx = Math.sin(ang) * sp;
+      b.vy = -Math.cos(ang) * sp;
+      b.stuck = false; b.catchT = 0;
+      any = true;
+    }
+    if(!any) return;
     state = 'play';
     sndLaunch();
+  }
+
+  /* 接球道具吸住的球：点一下重新发出去（时间到也会自动放，见 releaseBall） */
+  function launchStuck(){
+    let any = false;
+    for(const b of balls){
+      if(!b.stuck || b.catchT <= 0) continue;
+      releaseBall(b);
+      any = true;
+    }
+    if(any) sndLaunch();
+    return any;
+  }
+
+  /* 把一个吸住的球按「挡板上的落点」算个角度放出去 */
+  function releaseBall(b){
+    const sp = cfg.speed * 0.92;
+    const rel = clamp((b.x - paddle.x) / (paddle.w / 2), -1, 1);
+    const ang = rel * (Math.PI / 3);
+    b.vx = Math.sin(ang) * sp;
+    b.vy = -Math.abs(Math.cos(ang) * sp);
+    b.stuck = false; b.catchT = 0;
+    b.trail.length = 0;          // 放出去时也清一次：拖尾从挡板位置重新长，不拉长线
+    enforceAngles(b, sp, paddle.vx);
+    return b;
   }
 
   function pause(){ if(state !== 'play') return; state = 'pause'; $('btnPause').textContent = '继续'; toast('已暂停'); }
   function resume(){ if(state !== 'pause') return; state = 'play'; $('btnPause').textContent = '暂停'; toast('继续'); }
 
-  /* ================= 物理 ================= */
-  function step(dt){
-    if(state !== 'play') return;
+  /* ================= 道具生效 ================= */
+  function applyCapsule(kind){
+    const meta = CAPS[kind];
+    if(!meta) return;
+    capsulesGot++;
+    addScore('capsule', 20);
+    switch(kind){
+      case 'E': paddleScale = 1.45; expandT = meta.dur; shrinkT = 0; break;
+      case 'S': slowT = meta.dur; break;
+      case 'M': splitBalls(); break;
+      case 'L': lasers += 8; laserCd = 0; break;
+      case 'C': catchT = meta.dur; break;
+      case 'P': paddleScale = 0.72; shrinkT = meta.dur; expandT = 0; break;
+      case 'U': lives = Math.min(5, lives + 1); syncHud(); break;
+    }
+    floats.push({ x: paddle.x, y: paddle.y - 16, text: meta.text, life: 1.1, max: 1.1, c: meta.c });
+    sndCapsule();
+    syncHud();
+  }
 
-    // 挡板：向手指/按键目标位平滑靠拢（直接瞬移会有生硬的撕裂感）
+  /* 多球：每个在场上的球再各生一个（总共最多 6 个），方向左右各偏 35° */
+  function splitBalls(){
+    const src = balls.filter(b => !b.dead && !b.stuck);
+    if(!src.length) return 0;
+    let added = 0;
+    for(const b of src){
+      if(balls.length >= 6) break;
+      for(const sign of [-1, 1]){
+        if(balls.length >= 6) break;
+        const sp = Math.hypot(b.vx, b.vy) || cfg.speed;
+        const a = Math.atan2(b.vy, b.vx) + sign * 0.62;
+        const nb = newBall(b.x, b.y, Math.cos(a) * sp, Math.sin(a) * sp, false);
+        nb.color = BALL_COLORS[balls.length % BALL_COLORS.length];
+        balls.push(nb); added++;
+      }
+    }
+    return added;
+  }
+
+  const BALL_COLORS = ['#ffffff', '#8fd0ff', '#ffd54a', '#8affc1', '#ffa8d0', '#c8a8ff'];
+
+  /* ================= 物理 ================= */
+  function enforceAngles(b, sp, px){
+    let vx = b.vx, vy = b.vy;
+    const s = Math.hypot(vx, vy) || sp || 1;
+    if(Math.abs(vy) < s * MIN_VY) vy = (vy <= 0 ? -1 : 1) * s * MIN_VY;
+    if(Math.abs(vx) < s * MIN_VX){
+      const dir = Math.abs(px || 0) > 1 ? Math.sign(px) : (Math.random() < 0.5 ? -1 : 1);
+      vx = dir * s * MIN_VX;
+    }
+    const k = s / (Math.hypot(vx, vy) || 1);
+    b.vx = vx * k; b.vy = vy * k;
+  }
+
+  /* 挡板跟随 + 吸球跟随：play 和 ready 都要跑（ready 时玩家要能先把挡板摆好再发球） */
+  function stepPaddle(dt){
     const prevX = paddle.x;
+    // 加宽/变窄：宽度每帧按目标缩放重算，并在原位保持（不然会「跳一下」）
+    const wantW = clamp(cfg.paddleW * paddleScale, 40, 150);
+    if(Math.abs(wantW - paddle.w) > 0.01){
+      paddle.w += (wantW - paddle.w) * Math.min(1, dt * 14);
+    }
     paddle.x += (paddle.target - paddle.x) * Math.min(1, dt * 22);
     paddle.x = clamp(paddle.x, paddle.w / 2, W - paddle.w / 2);
     paddle.vx = dt > 0 ? (paddle.x - prevX) / dt : 0;
 
-    if(ball.stuck){ ball.x = paddle.x; ball.y = paddle.y - ball.r - 1; return; }
+    /* 吸在挡板上的球要跟着挡板走 —— 这段必须放在 step 的最前面，
+       不能放在后面那个 `if(b.stuck) continue` 的分支里：那个循环在球全部 stuck 时
+       会被后面的「场上没有球了」判断误当成丢球，直接把球重置到挡板上，
+       连 catchT 一起清掉 —— 表现就是「接球道具一吸住，球就再也不动了」。
+       （真机现象：拿到 C 之后球粘住、挡板怎么拖它都不发，只能等时间到。
+         原因是 stuck 球带着 catchT 被 resetBall 换成了 catchT=0 的新球。） */
+    for(const b of balls){
+      if(!b.stuck || b.dead) continue;
+      b.x = clamp(paddle.x + b.off, b.r, W - b.r);
+      b.y = paddle.y - b.r - 1;
+      /* ★ 吸住的球必须清空拖尾，否则残影会永久留在屏幕上：
+         step() 的球循环里 `if(b.stuck) continue;` 在「往 trail 里 push 位置」之前，
+         球一被 C 道具吸住，trail 就再也不会更新 —— 最后 9 个点被永久冻结，
+         而 draw() 照样把 trail 画出来，于是屏幕上挂着一条不动的残影
+         （玩家反馈：吃到 C 之后球移动的残影留在屏幕上）。
+         每帧都清一次最稳妥：既清掉吸住瞬间留下的旧拖尾，
+         也保证 releaseBall 之后拖尾是从挡板位置重新长出来的，不会拉出一条长线。 */
+      b.trail.length = 0;
+      if(b.catchT > 0){
+        b.catchT -= dt;
+        if(b.catchT <= 0){ b.catchT = 0; releaseBall(b); }   // 吸住最多 2.5 秒，免得一直卡着不动
+      }
+    }
+  }
 
-    sinceBreak += dt;
-    const speed = Math.hypot(ball.vx, ball.vy);
-    const steps = clamp(Math.ceil(speed * dt / (ball.r * 0.7)), 1, 10);   // 子步进，防穿砖
-    for(let i = 0; i < steps && state === 'play'; i++) substep(dt / steps);
+  function step(dt){
+    /* ★ 挡板跟随必须放在 `state !== 'play'` 的提前返回**之前**：
+       等发球（ready）时玩家也要能把挡板拖到想发球的位置 —— 否则「先拖再发」根本做不到，
+       而画面提示恰恰写着「拖动摆挡板 · 轻点发球」（真机反馈的第二个问题）。
+       暂停（pause）时不跟手，避免暂停期间挡板乱跑。 */
+    if(state === 'play' || state === 'ready') stepPaddle(dt);
+    if(state !== 'play') return;
+
+    /* ---- 计时器 ---- */
+    if(expandT > 0){ expandT -= dt; if(expandT <= 0){ expandT = 0; paddleScale = 1; } }
+    if(shrinkT > 0){ shrinkT -= dt; if(shrinkT <= 0){ shrinkT = 0; paddleScale = 1; } }
+    if(slowT > 0) slowT = Math.max(0, slowT - dt);
+    if(catchT > 0) catchT = Math.max(0, catchT - dt);
+    if(shieldT > 0) shieldT = Math.max(0, shieldT - dt);
+
+    /* ---- 移动砖 ---- */
+    for(const b of bricks){
+      if(b.dead || b.kind !== 'm') continue;
+      b.x = clamp(b.baseX + Math.sin(now * 0.0016 + b.phase) * MOVE_AMP, M, W - M - b.w);
+    }
+
+    /* ---- 激光 ---- */
+    if(lasers > 0){
+      laserCd -= dt;
+      if(laserCd <= 0){
+        laserCd = 0.22;
+        lasers--;
+        const y = paddle.y - 2;
+        bolts.push({ x: paddle.x - paddle.w / 2 + 4, y: y, vy: -560, dead: false });
+        bolts.push({ x: paddle.x + paddle.w / 2 - 4, y: y, vy: -560, dead: false });
+        sndLaser();
+      }
+    }
+    for(const bo of bolts){
+      bo.y += bo.vy * dt;
+      if(bo.y < -6) bo.dead = true;
+    }
+    bolts = bolts.filter(bo => !bo.dead);
+
+    /* ---- 球 ---- */
+    const bdt = slowT > 0 ? dt * 0.6 : dt;          // 慢速道具：只放慢球，挡板照样跟手
+    for(const b of balls){
+      if(state !== 'play') break;                   // 掉球/过关会重置 balls，别再动旧数组里的球
+      if(b.dead) continue;
+      if(b.stuck) continue;                          // 吸住的球已经在 step 开头处理过了
+      sinceBreak += dt;
+      const speed = Math.hypot(b.vx, b.vy);
+      const steps = clamp(Math.ceil(speed * bdt / (b.r * 0.7)), 1, 10);   // 子步进，防穿砖
+      for(let i = 0; i < steps && state === 'play' && !b.dead; i++) substep(b, bdt / steps);
+
+      // 拖尾：★ 球被吸住的那一帧不能再 push —— substep 里刚设 stuck，这行还会跑到，
+      //   于是吸住的球会带着 1 个「冻结点」，下一帧才被 stepPaddle 清掉，
+      //   屏幕上就闪一下残影。这里直接跳过。
+      if(!b.stuck){
+        b.trail.push({x: b.x, y: b.y});
+        if(b.trail.length > 9) b.trail.shift();
+      }
+    }
+    balls = balls.filter(b => !b.dead);
+    if(!balls.length && state === 'play'){ state = 'ready'; resetBall(true); }
 
     // 兜底：太久没碰到砖 = 多半进了角度刚好闭合的周期轨道，微调一下方向打破它
     if(state === 'play' && sinceBreak > STALL_S){
       sinceBreak = 0;
-      const s = Math.hypot(ball.vx, ball.vy) || 1;
-      const a = Math.atan2(ball.vy, ball.vx) + (Math.random() * 0.9 - 0.45);
-      ball.vx = Math.cos(a) * s; ball.vy = Math.sin(a) * s;
-      enforceAngles(s, 0);
+      for(const b of balls){
+        if(b.stuck) continue;
+        const s = Math.hypot(b.vx, b.vy) || 1;
+        const a = Math.atan2(b.vy, b.vx) + (Math.random() * 0.9 - 0.45);
+        b.vx = Math.cos(a) * s; b.vy = Math.sin(a) * s;
+        enforceAngles(b, s, 0);
+      }
     }
 
-    // 拖尾
-    ball.trail.push({x: ball.x, y: ball.y});
-    if(ball.trail.length > 9) ball.trail.shift();
+    /* ---- 激光打砖 ---- */
+    for(const bo of bolts) boltHit(bo);
 
+    /* ---- 道具胶囊下落 ---- */
+    for(const c of capsules){
+      c.y += c.vy * dt;
+      c.rot += dt * 3;
+      if(c.y > H + 12){ c.dead = true; continue; }
+      // 接道具判定：挡板本身 + 左右各留一点余量（手指没那么准）
+      if(c.y + 5 >= paddle.y && c.y - 5 <= paddle.y + paddle.h &&
+         c.x >= paddle.x - paddle.w / 2 - 6 && c.x <= paddle.x + paddle.w / 2 + 6){
+        c.dead = true;
+        applyCapsule(c.kind);
+      }
+    }
+    capsules = capsules.filter(c => !c.dead);
+  }
+
+  /* ================= 动效衰减 =================
+     ★ 必须放在 step() 外面。step() 第一行是 `if(state !== 'play') return;`，
+     而丢命后状态会变成 'ready'（等玩家发球），于是 shakeT 的衰减永远不执行 ——
+     shakeT 停在 0.25，draw() 里每帧 `if(shakeT > 0)` 就随机平移画布，
+     **屏幕会一直抖到下一次发球**（真机反馈：死一条命后不发球，画面抖个不停）。
+     所以动效衰减改成跟帧率走，任何状态（ready / pause / clear / over）都照常衰减。 */
+  function tickFx(dt){
     if(shakeT > 0) shakeT = Math.max(0, shakeT - dt);
     if(flashT > 0) flashT = Math.max(0, flashT - dt);
+    for(const f of floats) f.life -= dt;
+    floats = floats.filter(f => f.life > 0);
     for(let i = particles.length - 1; i >= 0; i--){
       const p = particles[i];
       p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 210 * dt; p.life -= dt;
@@ -585,46 +1079,54 @@
     }
   }
 
-  function substep(dt){
-    ball.x += ball.vx * dt;
-    ball.y += ball.vy * dt;
+  function substep(b, dt){
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
 
     // 左右墙 / 顶墙
     let bounced = false;
-    if(ball.x - ball.r < 0){ ball.x = ball.r; ball.vx = Math.abs(ball.vx); sndWall(); bounced = true; }
-    if(ball.x + ball.r > W){ ball.x = W - ball.r; ball.vx = -Math.abs(ball.vx); sndWall(); bounced = true; }
-    if(ball.y - ball.r < 0){ ball.y = ball.r; ball.vy = Math.abs(ball.vy); sndWall(); bounced = true; }
-    if(bounced) enforceAngles(Math.hypot(ball.vx, ball.vy), paddle.vx);
+    if(b.x - b.r < 0){ b.x = b.r; b.vx = Math.abs(b.vx); sndWall(); bounced = true; }
+    if(b.x + b.r > W){ b.x = W - b.r; b.vx = -Math.abs(b.vx); sndWall(); bounced = true; }
+    if(b.y - b.r < 0){ b.y = b.r; b.vy = Math.abs(b.vy); sndWall(); bounced = true; }
+    if(bounced) enforceAngles(b, Math.hypot(b.vx, b.vy), paddle.vx);
 
     // 挡板
     const py = paddle.y, half = paddle.w / 2;
-    if(ball.vy > 0 && ball.y + ball.r >= py && ball.y - ball.r <= py + paddle.h &&
-       ball.x >= paddle.x - half - ball.r && ball.x <= paddle.x + half + ball.r){
-      const rel = clamp((ball.x - paddle.x) / half, -1, 1);
+    if(b.vy > 0 && b.y + b.r >= py && b.y - b.r <= py + paddle.h &&
+       b.x >= paddle.x - half - b.r && b.x <= paddle.x + half + b.r){
+      combo = 0;                                            // 碰到挡板，连击断
+      const rel = clamp((b.x - paddle.x) / half, -1, 1);
       const ang = rel * (Math.PI / 3);                       // 命中点越靠边，反弹角越大（±60°）
-      let sp = Math.hypot(ball.vx, ball.vy);
+      let sp = Math.hypot(b.vx, b.vy);
       sp = clamp(sp + Math.abs(paddle.vx) * 0.06, 0, 430);    // 挡板甩动带一点加速
-      ball.vx = Math.sin(ang) * sp + paddle.vx * 0.12;        // 「搓球」：挡板横向速度带一点侧旋
-      ball.vy = -Math.abs(Math.cos(ang) * sp);
-      enforceAngles(sp, paddle.vx);                           // 夹掉「贴地横飞」和「纯竖直死循环」两种退化
-      ball.y = py - ball.r - 0.01;
+      b.vx = Math.sin(ang) * sp + paddle.vx * 0.12;           // 「搓球」：挡板横向速度带一点侧旋
+      b.vy = -Math.abs(Math.cos(ang) * sp);
+      enforceAngles(b, sp, paddle.vx);                        // 夹掉「贴地横飞」和「纯竖直死循环」两种退化
+      b.y = py - b.r - 0.01;
       sndPaddle();
+      if(catchT > 0 && balls.length < 6){                     // 接球道具：粘在挡板上
+        b.stuck = true;
+        b.off = clamp(b.x - paddle.x, -half + 2, half - 2);
+        b.catchT = 2.5;
+        b.vx = 0; b.vy = 0;
+        b.trail.length = 0;      // 吸住瞬间清拖尾，否则这条残影会留在屏幕上（见 stepPaddle 注释）
+      }
     }
 
     // 砖块：圆 vs 矩形，取最近点求法线
     for(let i = 0; i < bricks.length; i++){
-      const b = bricks[i];
-      if(b.hp <= 0) continue;
-      const nx = clamp(ball.x, b.x, b.x + b.w);
-      const ny = clamp(ball.y, b.y, b.y + b.h);
-      let dx = ball.x - nx, dy = ball.y - ny;
+      const br = bricks[i];
+      if(br.dead) continue;
+      const nx = clamp(b.x, br.x, br.x + br.w);
+      const ny = clamp(b.y, br.y, br.y + br.h);
+      let dx = b.x - nx, dy = b.y - ny;
       let d2 = dx * dx + dy * dy;
-      if(d2 > ball.r * ball.r) continue;
+      if(d2 > b.r * b.r) continue;
 
       let d = Math.sqrt(d2);
       if(d < 1e-6){                       // 球心陷在砖里：按最浅穿透轴推出
-        const l = ball.x - b.x, r2 = b.x + b.w - ball.x;
-        const t = ball.y - b.y, bo = b.y + b.h - ball.y;
+        const l = b.x - br.x, r2 = br.x + br.w - b.x;
+        const t = b.y - br.y, bo = br.y + br.h - b.y;
         const m = Math.min(l, r2, t, bo);
         dx = (m === l) ? -1 : (m === r2 ? 1 : 0);
         dy = (m === t) ? -1 : (m === bo ? 1 : 0);
@@ -632,72 +1134,194 @@
       }
       const ux = dx / d, uy = dy / d;
       // 推出重叠
-      ball.x = nx + ux * (ball.r + 0.01);
-      ball.y = ny + uy * (ball.r + 0.01);
+      b.x = nx + ux * (b.r + 0.01);
+      b.y = ny + uy * (b.r + 0.01);
       // 反射
-      const dot = ball.vx * ux + ball.vy * uy;
-      if(dot < 0){ ball.vx -= 2 * dot * ux; ball.vy -= 2 * dot * uy; }
+      const dot = b.vx * ux + b.vy * uy;
+      if(dot < 0){ b.vx -= 2 * dot * ux; b.vy -= 2 * dot * uy; }
 
-      b.hp -= 1; b.hit = 0.16;
-      sinceBreak = 0;
-      if(b.hp <= 0){
-        alive--;
-        score += (b.max > 1 ? 25 : 10);
-        spawnParticles(nx, ny, b.row);
-        shakeT = Math.max(shakeT, 0.10);
-        sndBrick(b.row);
-      }else{
-        sndHard(b.row);
-      }
+      hitBrick(br, nx, ny, false);
       flashT = 0.06;
-      syncHud();
       break;                              // 一步只处理一块，避免同帧反复反射
     }
 
     // ★ 不变量兜底：砖块碰撞沿法线把球推出重叠，可能把它顶到墙外（砖离墙太近时就会）。
     //   「球永不越界」是回归测试盯着的不变量，这里在子步进收尾处再夹一次保证它成立。
-    ball.x = clamp(ball.x, ball.r, W - ball.r);
+    b.x = clamp(b.x, b.r, W - b.r);
 
     // 掉出底部
-    if(ball.y - ball.r > H){
-      lives--;
-      syncHud();
-      sndLost();
-      shakeT = 0.25;
-      if(lives <= 0){
-        state = 'over';
-        if(score > best){ best = score; try{ localStorage.setItem(BKEY, String(best)); }catch(e){} }
-        sndOver();
-        showPanel('gameover');
+    if(b.y - b.r > H){
+      // 护盾：第一次掉下去会被弹回来（道具「护盾」不是胶囊，是连击/护盾机制，见下）
+      if(shieldT > 0){
+        shieldT = 0;
+        b.y = H - b.r - 1;
+        b.vy = -Math.abs(b.vy);
+        enforceAngles(b, Math.hypot(b.vx, b.vy), paddle.vx);
+        sndShield();
+        floats.push({ x: b.x, y: H - 24, text: '护盾救球', life: 1.0, max: 1.0, c: '#4fd1ff' });
         return;
       }
-      state = 'ready';
-      resetBall(true);
-      toast('还剩 ' + lives + ' 个球');
+      b.dead = true;
+      loseBall();
+    }
+  }
+
+  /* 所有球都掉了才扣命 */
+  function loseBall(){
+    const left = balls.filter(x => !x.dead).length;
+    if(left > 0) return;
+    combo = 0;
+    lives--;
+    syncHud();
+    sndLost();
+    shakeT = 0.25;
+    if(lives <= 0){ gameOver(); return; }
+    state = 'ready';
+    resetBall(true);
+    toast('还剩 ' + lives + ' 个球');
+  }
+
+  function gameOver(){
+    state = 'over';
+    if(score > best){ best = score; try{ localStorage.setItem(BKEY, String(best)); }catch(e){} }
+    sndOver();
+    showPanel('gameover');
+  }
+
+  /* ================= 打砖 ================= */
+  function hitBrick(br, hx, hy, byBolt){
+    if(br.dead) return;
+    if(br.kind === 's'){
+      sndSteel();
+      br.hit = 0.12;
+      shakeT = Math.max(shakeT, 0.05);
       return;
     }
+    br.hp -= 1;
+    br.hit = 0.16;
+    sinceBreak = 0;
+    if(br.hp > 0){ sndHard(br.row); return; }
 
-    // 过关
-    if(alive <= 0){
-      const bonus = 100 + lives * 50;
-      score += bonus;
-      syncHud();
-      sndClear();
-      if(level >= MAX_LEVEL){
-        state = 'over';
-        if(score > best){ best = score; try{ localStorage.setItem(BKEY, String(best)); }catch(e){} }
-        sndWin();
-        showPanel('win', bonus);
-      }else{
-        state = 'clear';
-        showPanel('clear', bonus);
+    br.dead = true;
+    alive--;
+
+    combo++;
+    if(combo > bestCombo) bestCombo = combo;
+    const mult = comboMult();
+    const gain = BT[br.kind].pts * mult;
+    addScore('brick', gain);
+    if(mult > 1) sndCombo(combo);
+    // ★ 连击奖励护盾：连到 12 块给 6 秒护盾（掉底能弹回来一次）。
+    //   这样「连击」不只是加分，还直接换来一次容错 —— 玩家才有动力去追。
+    if(combo === COMBO_SHIELD && shieldT <= 0){
+      shieldT = 6;
+      floats.push({ x: W / 2, y: H * 0.55, text: '连击护盾！', life: 1.4, max: 1.4, c: '#4fd1ff' });
+      sndShield();
+    }    spawnParticles(hx, hy, br.row);
+    if(br.kind === 'b') spawnParticles(br.x + br.w / 2, br.y + br.h / 2, 2, '#ffd54a', 14);
+    shakeT = Math.max(shakeT, byBolt ? 0.06 : 0.10);
+    sndBrick(br.row);
+    if(mult >= 2) floats.push({ x: br.x + br.w / 2, y: br.y, text: '×' + mult, life: 0.8, max: 0.8, c: '#ffd54a' });
+
+    if(br.kind === 'e') explode(br);
+    maybeDropCapsule(br);
+    syncHud();
+    checkLevelClear();
+  }
+
+  /* 爆炸砖：把周围一圈（曼哈顿距离 ≤1 圈）都炸掉，炸到别的爆炸砖会连环炸 */
+  function explode(src, depth){
+    const d0 = depth || 0;
+    if(d0 > 6) return;
+    sndBoom();
+    shakeT = Math.max(shakeT, 0.34);
+    flashT = 0.14;
+    const cx = src.x + src.w / 2, cy = src.y + src.h / 2;
+    const R = Math.max(src.w, src.h) * 1.55;
+    for(let i = 0; i < 16; i++){
+      const a = Math.PI * 2 * i / 16;
+      particles.push({
+        x: cx, y: cy,
+        vx: Math.cos(a) * (120 + Math.random() * 90),
+        vy: Math.sin(a) * (120 + Math.random() * 90) - 30,
+        life: 0.45 + Math.random() * 0.3, max: 0.75, c: i % 2 ? '#ffb347' : '#ff6b3d'
+      });
+    }
+    const victims = bricks.filter(b => !b.dead && b !== src && b.kind !== 's' &&
+      Math.abs((b.x + b.w / 2) - cx) < R && Math.abs((b.y + b.h / 2) - cy) < R * 0.85);
+    for(const v of victims){
+      if(v.dead) continue;
+      v.dead = true;
+      alive--;
+      const gain = BT[v.kind].pts * comboMult();
+      addScore('brick', gain);
+      spawnParticles(v.x + v.w / 2, v.y + v.h / 2, v.row);
+      maybeDropCapsule(v);                  // 被炸掉的砖同样可能掉道具
+      if(v.kind === 'e') explode(v, d0 + 1);
+    }
+    checkLevelClear();                      // 爆炸可能一次性清空整关
+    if(particles.length > 220) particles.splice(0, particles.length - 220);
+  }
+
+  function maybeDropCapsule(br){
+    sinceCapsule++;
+    const forced = sinceCapsule >= CAPSULE_PITY;
+    if(!forced && Math.random() >= CAPSULE_P) return;
+    if(capsules.length >= CAPSULE_MAX) return;
+    sinceCapsule = 0;
+    capsules.push({ x: br.x + br.w / 2, y: br.y + br.h / 2, vy: 92, kind: rollCapsule(), rot: 0, dead: false });
+  }
+
+  /* 激光弹打砖：一颗弹只打一块（打不动钢砖） */
+  function boltHit(bo){
+    if(bo.dead) return;
+    for(const br of bricks){
+      if(br.dead) continue;
+      if(bo.x >= br.x && bo.x <= br.x + br.w && bo.y <= br.y + br.h && bo.y >= br.y){
+        bo.dead = true;
+        hitBrick(br, bo.x, bo.y, true);
+        return;
       }
     }
   }
 
-  function spawnParticles(x, y, row){
-    const hue = [ '#5b8cff', '#38d39f', '#ffd54a', '#ff8a5b', '#c37bff', '#4fd1ff', '#ff6b9d' ][row % 7];
-    for(let i = 0; i < 7; i++){
+  /* 过关判定。★ 钢砖打不碎，所以「只剩钢砖」时必须把它们松动掉，
+     否则玩家永远打不完这一关 —— 这是回归测试盯着的不变量。 */
+  function checkLevelClear(){
+    const left = bricks.filter(b => !b.dead);
+    if(!left.length){ clearLevel(); return; }
+    if(left.some(b => b.kind !== 's')) return;
+    // 只剩钢砖：全部松动成 1 血普通砖，让玩家能把这一关收掉
+    for(const s of left){ s.kind = 'n'; s.hp = 1; s.max = 1; }
+    toast('钢砖松动了！');
+  }
+
+  function clearLevel(){
+    if(state !== 'play') return;
+    // ★ 难度递增：每关 +25%，清完 10 关的裸分应该在 4000 上下，
+    //   不能出现「越打越不值钱」（关卡多、砖多、分值却不变，最后几关白打）。
+    const lvMul = 1 + (level - 1) * 0.25;
+    const bonus = 100 + lives * 50 + Math.min(bestCombo, 20) * 5;
+    const base = Math.round((bricks.reduce((s, b) => s + BT[b.kind].pts, 0)) * lvMul);
+    addScore('bonus', bonus + base);
+    capsules = []; bolts = [];
+    syncHud();
+    sndClear();
+    if(level >= MAX_LEVEL){
+      state = 'over';
+      if(score > best){ best = score; try{ localStorage.setItem(BKEY, String(best)); }catch(e){} }
+      sndWin();
+      showPanel('win', bonus);
+    }else{
+      state = 'clear';
+      showPanel('clear', bonus);
+    }
+  }
+
+  function spawnParticles(x, y, row, color, n){
+    const hue = color || [ '#5b8cff', '#38d39f', '#ffd54a', '#ff8a5b', '#c37bff', '#4fd1ff', '#ff6b9d' ][row % 7];
+    const count = n || 7;
+    for(let i = 0; i < count; i++){
       particles.push({
         x: x, y: y,
         vx: (Math.random() - 0.5) * 150,
@@ -706,7 +1330,7 @@
         max: 0.54, c: hue
       });
     }
-    if(particles.length > 160) particles.splice(0, particles.length - 160);
+    if(particles.length > 200) particles.splice(0, particles.length - 200);
   }
 
   /* ================= 绘制 ================= */
@@ -721,6 +1345,17 @@
     ctx.arcTo(x, y + h, x, y, r);
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
+  }
+
+  function brickFill(b){
+    switch(b.kind){
+      case 's': return ['#8d97a8', '#4a5262'];          // 钢：冷灰
+      case 'h': return ['#a78bfa', '#4c3a86'];          // 硬：紫
+      case 'e': return ['#ff7a45', '#8a2b12'];          // 爆：橙红
+      case 'b': return ['#ffd54a', '#9a6b00'];          // 金：金
+      case 'm': return ['#2ee6c5', '#0d6b5c'];          // 移动：青
+      default:  return [ROW_C[b.row % 7], 'rgba(0,0,0,.35)'];
+    }
   }
 
   function draw(){
@@ -750,26 +1385,58 @@
         ctx.fillStyle = 'rgba(160,180,210,.5)';
         ctx.font = '10px -apple-system,"PingFang SC",sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('手指放这一带 · 拖动控制挡板', W / 2, (thumbTop + H) / 2 + 3);
-        ctx.textAlign = 'left';
+        ctx.fillText('手指放这一带 · 拖动控制挡板', W / 2, (thumbTop + H) / 2 + 3);        ctx.textAlign = 'left';
       }
     }
 
     // 砖块
     for(const b of bricks){
-      if(b.hp <= 0) continue;
-      const col = ROW_C[b.row % 7];
-      const a = b.max > 1 && b.hp < b.max ? 0.55 : 1;      // 硬砖裂开后变暗
+      if(b.dead) continue;
+      const [c0, c1] = brickFill(b);
+      const a = b.max > 1 && b.hp < b.max ? 0.62 : 1;      // 硬砖裂开后变暗
       ctx.globalAlpha = a;
       const g = ctx.createLinearGradient(0, b.y, 0, b.y + b.h);
-      g.addColorStop(0, col);
-      g.addColorStop(1, 'rgba(0,0,0,.35)');
+      g.addColorStop(0, c0);
+      g.addColorStop(1, c1);
       ctx.fillStyle = g;
       rr(b.x, b.y, b.w, b.h, 3.5); ctx.fill();
       ctx.globalAlpha = 1;
       // 高光
       ctx.fillStyle = 'rgba(255,255,255,.18)';
       rr(b.x + 2, b.y + 1.5, b.w - 4, 2.5, 1.2); ctx.fill();
+      // 类型记号
+      const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+      if(b.kind === 's'){
+        ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1;
+        for(let i = -1; i <= 1; i++){
+          ctx.beginPath(); ctx.moveTo(b.x + 3, cy + i * 4); ctx.lineTo(b.x + b.w - 3, cy + i * 4); ctx.stroke();
+        }
+      }else if(b.kind === 'e'){
+        ctx.fillStyle = 'rgba(20,10,6,.75)';
+        ctx.beginPath(); ctx.arc(cx, cy, Math.min(b.w, b.h) * 0.22, 0, 7); ctx.fill();
+        ctx.fillStyle = '#ffd54a';
+        ctx.beginPath(); ctx.arc(cx, cy, Math.min(b.w, b.h) * 0.10, 0, 7); ctx.fill();
+      }else if(b.kind === 'b'){
+        ctx.fillStyle = 'rgba(90,60,0,.85)';
+        ctx.font = 'bold ' + Math.round(Math.min(b.w, b.h) * 0.55) + 'px -apple-system,sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('★', cx, cy + 1);
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      }else if(b.kind === 'm'){
+        ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.2;
+        const s = Math.min(b.w, b.h) * 0.16;
+        ctx.beginPath(); ctx.moveTo(cx - s * 1.6, cy); ctx.lineTo(cx + s * 1.6, cy); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx - s * 1.6, cy); ctx.lineTo(cx - s * 0.7, cy - s * 0.7); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx + s * 1.6, cy); ctx.lineTo(cx + s * 0.7, cy - s * 0.7); ctx.stroke();
+      }
+      // 硬砖：右上角血量小点
+      if(b.max > 1 && b.max !== Infinity){
+        for(let i = 0; i < b.hp; i++){
+          ctx.fillStyle = 'rgba(255,255,255,.7)';
+          ctx.beginPath();
+          ctx.arc(b.x + b.w - 4 - i * 4, b.y + 4, 1.5, 0, 7); ctx.fill();
+        }
+      }
       // 命中闪白
       if(b.hit > 0){
         ctx.globalAlpha = b.hit / 0.16 * 0.75;
@@ -777,15 +1444,31 @@
         rr(b.x, b.y, b.w, b.h, 3.5); ctx.fill();
         ctx.globalAlpha = 1;
       }
-      // 硬砖（2 血）右上角一个小三角标记
-      if(b.max > 1){
-        ctx.fillStyle = 'rgba(255,255,255,.55)';
-        ctx.beginPath();
-        ctx.moveTo(b.x + b.w - 5, b.y + 2.5);
-        ctx.lineTo(b.x + b.w - 2, b.y + 2.5);
-        ctx.lineTo(b.x + b.w - 2, b.y + 5.5);
-        ctx.closePath(); ctx.fill();
-      }
+    }
+
+    // 激光弹
+    for(const bo of bolts){
+      ctx.fillStyle = '#ff8a5b';
+      ctx.shadowColor = '#ff8a5b'; ctx.shadowBlur = 6;
+      ctx.fillRect(bo.x - 1, bo.y - 7, 2, 9);
+      ctx.shadowBlur = 0;
+    }
+
+    // 道具胶囊
+    for(const c of capsules){
+      const meta = CAPS[c.kind] || { c:'#fff' };
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.fillStyle = meta.c;
+      ctx.shadowColor = meta.c; ctx.shadowBlur = 8;
+      rr(-10, -6, 20, 12, 6); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(0,0,0,.72)';
+      ctx.font = 'bold 8px -apple-system,sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(c.kind, 0, 0.5);
+      ctx.restore();
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     }
 
     // 粒子
@@ -798,43 +1481,105 @@
 
     // 挡板
     const pg = ctx.createLinearGradient(0, paddle.y, 0, paddle.y + paddle.h);
-    pg.addColorStop(0, '#8fb0ff'); pg.addColorStop(1, '#3f63c9');
+    if(catchT > 0){ pg.addColorStop(0, '#ffe38a'); pg.addColorStop(1, '#c08a1a'); }
+    else if(lasers > 0){ pg.addColorStop(0, '#ffb08a'); pg.addColorStop(1, '#c04a1a'); }
+    else if(expandT > 0){ pg.addColorStop(0, '#8affc1'); pg.addColorStop(1, '#1f8f63'); }
+    else if(shrinkT > 0){ pg.addColorStop(0, '#d8a8ff'); pg.addColorStop(1, '#6b3fa0'); }
+    else { pg.addColorStop(0, '#8fb0ff'); pg.addColorStop(1, '#3f63c9'); }
     ctx.fillStyle = pg;
     rr(paddle.x - paddle.w / 2, paddle.y, paddle.w, paddle.h, paddle.h / 2); ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,.35)';
     rr(paddle.x - paddle.w / 2 + 3, paddle.y + 1.5, paddle.w - 6, 2, 1); ctx.fill();
-
-    // 球拖尾
-    for(let i = 0; i < ball.trail.length; i++){
-      const t = ball.trail[i], k = (i + 1) / ball.trail.length;
-      ctx.globalAlpha = k * 0.30;
-      ctx.fillStyle = '#e8ecf3';
-      ctx.beginPath(); ctx.arc(t.x, t.y, ball.r * k * 0.85, 0, 7); ctx.fill();
+    // 激光炮口
+    if(lasers > 0){
+      ctx.fillStyle = '#ff8a5b';
+      ctx.fillRect(paddle.x - paddle.w / 2 + 3, paddle.y - 2, 3, 4);
+      ctx.fillRect(paddle.x + paddle.w / 2 - 6, paddle.y - 2, 3, 4);
     }
-    ctx.globalAlpha = 1;
+
+    // 护盾线
+    if(shieldT > 0){
+      const a = 0.35 + 0.25 * Math.sin(now * 0.012);
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = '#4fd1ff'; ctx.lineWidth = 2;
+      ctx.setLineDash([7, 5]);
+      ctx.beginPath(); ctx.moveTo(0, H - 4); ctx.lineTo(W, H - 4); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
 
     // 球
-    ctx.shadowColor = 'rgba(232,236,243,.85)';
-    ctx.shadowBlur = 12;
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, 7); ctx.fill();
-    ctx.shadowBlur = 0;
+    for(const b of balls){
+      /* 拖尾：吸住的球一律不画（它停在挡板上不动，画拖尾就是一条假残影）。
+         这是第二道防线 —— 第一道在 stepPaddle 里每帧清 trail，见那段注释。 */
+      if(!b.stuck){
+        for(let i = 0; i < b.trail.length; i++){
+          const t = b.trail[i], k = (i + 1) / b.trail.length;
+          ctx.globalAlpha = k * 0.30;
+          ctx.fillStyle = b.color;
+          ctx.beginPath(); ctx.arc(t.x, t.y, b.r * k * 0.85, 0, 7); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+      ctx.shadowColor = 'rgba(232,236,243,.85)';
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = b.color;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill();
+      ctx.shadowBlur = 0;
+    }
 
     // 发球提示
-    if(ball.stuck && (state === 'ready' || state === 'pause')){
+    const anyStuck = balls.some(b => b.stuck);
+    if(anyStuck && (state === 'ready' || state === 'pause' || catchT > 0)){
+      const b0 = balls.find(b => b.stuck) || balls[0];
       ctx.globalAlpha = 0.55 + 0.35 * Math.sin(now * 0.005);
       ctx.strokeStyle = '#ffd54a'; ctx.lineWidth = 1.4;
       ctx.setLineDash([4, 4]);
-      ctx.beginPath(); ctx.moveTo(ball.x, ball.y - 10); ctx.lineTo(ball.x, ball.y - 26); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(b0.x, b0.y - 10); ctx.lineTo(b0.x, b0.y - 26); ctx.stroke();
       ctx.setLineDash([]);
       ctx.beginPath();
-      ctx.moveTo(ball.x - 4, ball.y - 26); ctx.lineTo(ball.x + 4, ball.y - 26); ctx.lineTo(ball.x, ball.y - 32);
+      ctx.moveTo(b0.x - 4, b0.y - 26); ctx.lineTo(b0.x + 4, b0.y - 26); ctx.lineTo(b0.x, b0.y - 32);
       ctx.closePath(); ctx.fillStyle = '#ffd54a'; ctx.fill();
       ctx.globalAlpha = 1;
-      ctx.fillStyle = 'rgba(255,213,74,.9)';
-      ctx.font = '600 11px -apple-system,"PingFang SC",sans-serif';
+      // ★ 提示文字必须落在「砖墙下沿 ~ 挡板上沿」这段空白里：
+      //   原来写死 H-58，横屏（H≈125）时直接压到砖墙上，字和砖糊在一起（截图可见）。
+      const lastRowY = bricks.reduce((m, b) => Math.max(m, b.y + b.h), 0);
+      const room = (paddle.y - 14) - (lastRowY + 8);
+      const tipY = room > 16 ? (lastRowY + 8 + paddle.y - 14) / 2 : paddle.y - 16;
+      if(room > 16){
+        // 文案要跟真实操作一致：现在「拖」和「点」是分开的两件事（拖动不发球）
+        const catchMode = state === 'play' && catchT > 0;
+        ctx.fillStyle = 'rgba(255,213,74,.9)';
+        ctx.font = '600 11px -apple-system,"PingFang SC",sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(catchMode ? '轻点一下放出球' : '拖动摆挡板 · 轻点发球', W / 2, tipY);
+        ctx.textAlign = 'left';
+      }
+    }
+
+    // 飘字
+    for(const f of floats){
+      ctx.globalAlpha = clamp(f.life / f.max, 0, 1);
+      ctx.fillStyle = f.c;
+      ctx.font = '700 11px -apple-system,"PingFang SC",sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('拖动挡板 · 点一下发球', W / 2, H - 58);
+      ctx.fillText(f.text, f.x, f.y - (1 - f.life / f.max) * 14);
+    }
+    ctx.textAlign = 'left';
+    ctx.globalAlpha = 1;
+
+    // 关名 + 连击（横屏时场地只有 ~125 高，这两行字要缩，否则压住第一排砖）
+    const hudScale = clamp(H / 420, 0.7, 1);
+    ctx.font = '600 ' + (10 * hudScale).toFixed(1) + 'px -apple-system,"PingFang SC",sans-serif';
+    ctx.fillStyle = 'rgba(160,180,210,.55)';
+    ctx.fillText('第 ' + level + ' 关 · ' + (cfg ? cfg.name : ''), 6, 12 * hudScale);
+    if(combo >= 2){
+      const mult = comboMult();
+      ctx.textAlign = 'right';
+      ctx.fillStyle = mult > 1 ? '#ffd54a' : '#8b95a7';
+      ctx.font = '700 ' + (11 * hudScale).toFixed(1) + 'px -apple-system,"PingFang SC",sans-serif';
+      ctx.fillText((mult > 1 ? '×' + mult + '  ' : '') + '连击 ' + combo, W - 6, 12 * hudScale);
+      ctx.textAlign = 'left';
     }
 
     // 命中时全屏轻闪
@@ -856,11 +1601,11 @@
       ctx.font = '400 12px -apple-system,"PingFang SC",sans-serif';
       ctx.fillStyle = '#8b95a7';
       ctx.fillText('点「继续」回到游戏', W / 2, H / 2 + 24);
+      ctx.textAlign = 'left';
     }
   }
 
   /* ================= 主循环 ================= */
-  let now = 0;
   function frame(ts){
     if(!lastT) lastT = ts;
     let dt = (ts - lastT) / 1000;
@@ -869,6 +1614,7 @@
     if(dt > 0.05) dt = 0.05;              // 切回前台/卡顿时别让球瞬移穿墙
     if(dt < 0) dt = 0;
     step(dt);
+    tickFx(dt);                            // 动效衰减跟帧走，暂停/等发球时也要继续（见 tickFx 注释）
     // 命中动效衰减
     for(const b of bricks) if(b.hit > 0) b.hit = Math.max(0, b.hit - dt);
     draw();
@@ -881,7 +1627,8 @@
     const t = $('overTitle'), p = $('overText'), next = $('overNext');
     if(kind === 'clear'){
       t.textContent = '第 ' + level + ' 关通过！';
-      p.textContent = '过关奖励 +' + bonus + '\n剩余球 ' + lives + ' 个（每个 +50）\n总分 ' + score;
+      p.textContent = '过关奖励 +' + bonus + '\n剩余球 ' + lives + ' 个（每个 +50）\n最高连击 ' + bestCombo
+        + ' · 接到道具 ' + capsulesGot + ' 个\n总分 ' + score;
       next.textContent = '进入第 ' + (level + 1) + ' 关';
       next.onclick = () => { $('over').classList.remove('on'); startLevel(level + 1, true); };
     }else if(kind === 'win'){
@@ -889,9 +1636,11 @@
       p.textContent = '最终得分 ' + score + '\n历史最高 ' + best;
       next.textContent = '再玩一次';
       next.onclick = () => { $('over').classList.remove('on'); startLevel(1, false); };
+      $('overRetry').textContent = '重开本关';
     }else{
       t.textContent = '游戏结束';
-      p.textContent = '到了第 ' + level + ' 关　本次得分 ' + score + '\n历史最高 ' + best;
+      p.textContent = '到了第 ' + level + ' 关（' + (cfg ? cfg.name : '') + '）\n本次得分 ' + score
+        + '\n历史最高 ' + best;
       next.textContent = '重试第 ' + level + ' 关';          // 别打回第 1 关，一关一分钟，重头来太挫败
       next.onclick = () => { $('over').classList.remove('on'); startLevel(level, true); };
       $('overRetry').textContent = '从第 1 关重来';
@@ -947,12 +1696,51 @@
      注意 browser_console 里读 localStorage 会被当敏感原语拦截，所以状态要从这里拿。 */
   window.__breakout = () => ({
     W, H, level, score, lives, state, alive, best, soundOn, sounds: soundCount,
-    rows: cfg.rows, hard: cfg.hard, speed: cfg.speed, paddleW: cfg.paddleW,
-    ball: {x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, r: ball.r, stuck: ball.stuck},
-    paddle: {x: paddle.x, w: paddle.w, y: paddle.y},
-    bricks: bricks.map(b => b.hp),
-    particles: particles.length, panel: $('over').classList.contains('on')
+    levelName: cfg ? cfg.name : '', rows: cfg ? cfg.art.length : 0,
+    speed: cfg ? cfg.speed : 0, paddleW: cfg ? cfg.paddleW : 0,
+    combo, comboMult: comboMult(), bestCombo,
+    balls: balls.map(b => ({ x:b.x, y:b.y, vx:b.vx, vy:b.vy, r:b.r, stuck:b.stuck, color:b.color,
+                             trail: b.trail.length, catchT: b.catchT })),
+    ball: balls.length ? {x: balls[0].x, y: balls[0].y, vx: balls[0].vx, vy: balls[0].vy, r: balls[0].r, stuck: balls[0].stuck} : null,
+    paddle: { x: paddle.x, w: paddle.w, y: paddle.y },
+    bricks: bricks.map(b => ({ hp: b.hp, kind: b.kind, dead: b.dead, x: b.x, y: b.y })),
+    kinds: bricks.filter(b => !b.dead).map(b => b.kind),
+    capsules: capsules.map(c => ({ kind: c.kind, x: c.x, y: c.y })),
+    bolts: bolts.length, particles: particles.length,
+    shieldT, slowT, catchT, lasers, expandT, shrinkT, paddleScale,
+    shakeT, flashT,
+    capsulesGot, sinceCapsule,
+    parts: { brick: parts.brick, bonus: parts.bonus, capsule: parts.capsule },
+    panel: $('over').classList.contains('on')
   });
+
+  /* 测试专用写入口（游戏自身不调用） */
+  window.__breakoutDrop = (kind, x, y) => {
+    capsules.push({ x: x === undefined ? W / 2 : x, y: y === undefined ? 40 : y, vy: 92,
+      kind: kind || 'E', rot: 0, dead: false });
+    return capsules.length;
+  };
+  window.__breakoutApply = kind => { applyCapsule(kind); return true; };
+  window.__breakoutSplit = () => splitBalls();
+  window.__breakoutSetShield = v => { shieldT = v; return shieldT; };
+  window.__breakoutSetPaddle = x => { paddle.x = x; paddle.target = x; return paddle.x; };
+  window.__breakoutSetBall = o => {
+    const b = balls[0]; if(!b) return false;
+    for(const k of ['x','y','vx','vy','stuck']) if(k in o) b[k] = o[k];
+    if('y' in o || 'x' in o) b.trail.length = 0;
+    return true;
+  };
+  window.__breakoutGoto = n => { startLevel(n, true); return level; };
+  /* 测试沙盒：把砖全清掉但不触发过关判定，球就只能在墙和挡板之间来回弹 —— 
+     用来测「计时器到点失效」「护盾」这类需要一段干净时间流过的东西。 */
+  window.__breakoutEmpty = () => { for(const b of bricks) b.dead = true; alive = 0; return true; };
+  window.__breakoutHit = i => { const b = bricks[i]; if(b) hitBrick(b, b.x + b.w / 2, b.y + b.h / 2, false); return true; };
+  window.__breakoutExplode = i => { const b = bricks[i]; if(b) explode(b); return true; };
+  /* 测试用：推进一帧（和 frame() 一样同时跑 step + tickFx），
+     只调 step() 的话动效（震动/闪光/粒子）永远不衰减，测出来的 shakeT 是假的。 */
+  window.__breakoutStep = dt => { step(dt); tickFx(dt); return true; };
+  window.__breakoutConst = { MAX_LEVEL, LEVELS: LEVELS.map(l => l.name), CAPS: Object.keys(CAPS),
+    BT: Object.keys(BT), CAPSULE_MAX, COMBO_STEP, COMBO_SHIELD };
 })();
 </script>
 </body>
