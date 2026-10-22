@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#FFF7EC">
+<title>加法沙盘 · 想法原型</title>
+<style>
+  :root{
+    --bg:#FFF7EC; --ink:#2B2118; --dim:#A08D79;
+    --coral:#E4593F; --teal:#1E9E90; --gold:#E9A93B; --blue:#4A6FE3;
+    --line:#EADCC8; --card:#FFFDF8;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    display:flex; flex-direction:column; overflow:hidden;
+    user-select:none; -webkit-user-select:none; touch-action:manipulation;
+    padding:calc(env(safe-area-inset-top) + 8px) 10px calc(env(safe-area-inset-bottom) + 8px);
+  }
+
+  .tabs{display:flex; gap:6px; flex:0 0 auto; margin-bottom:6px}
+  .tabs button{
+    flex:1; font:inherit; font-size:12.5px; font-weight:700; color:var(--dim);
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:9px 2px; cursor:pointer; transition:all .18s;
+  }
+  .tabs button.on{color:#fff; background:var(--ink); border-color:var(--ink)}
+  #hint{flex:0 0 auto; text-align:center; font-size:11.5px; color:var(--dim); height:17px; line-height:17px; letter-spacing:.4px}
+
+  #stage{flex:1 1 auto; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative}
+
+  .board{position:relative; width:100%; flex:1 1 auto; min-height:0}
+  .dot{
+    position:absolute; left:50%; top:50%; border-radius:50%;
+    background:radial-gradient(circle at 32% 26%, rgba(255,255,255,.65), rgba(255,255,255,0) 58%), var(--c);
+    box-shadow:0 6px 14px rgba(120,90,60,.18), inset 0 -3px 7px rgba(0,0,0,.10);
+    will-change:transform;
+  }
+  .dot.slot{border:2px dashed var(--line); background:transparent; box-shadow:none}
+  .lbl{
+    position:absolute; left:50%; top:50%; font-weight:900; line-height:1;
+    font-variant-numeric:tabular-nums; pointer-events:none;
+    transform:translate(-50%,-50%);
+  }
+  .lbl.small{font-size:12px; font-weight:700; color:var(--dim)}
+  .crack{
+    position:absolute; left:50%; top:50%; width:0; height:0;
+    border-left:3px dashed #E3D2BC; opacity:0; transition:opacity .45s, height .45s;
+  }
+
+  .eq{
+    flex:0 0 auto; display:flex; align-items:center; justify-content:center; gap:9px;
+    font-weight:900; font-variant-numeric:tabular-nums;
+    font-size:clamp(26px,8.6vw,40px); padding:8px 0 2px; letter-spacing:.5px;
+  }
+  .eq i{font-style:normal; color:var(--dim); font-weight:700; font-size:.66em; padding-top:.12em}
+  .eq .res{color:var(--gold); transition:color .25s, transform .25s; display:inline-block}
+  .eq .res.warm{color:var(--coral)}
+  .eq .res.pop{transform:scale(1.16)}
+
+  /* ---------- 十格阵 ---------- */
+  .frame{
+    position:absolute; left:50%; top:50%; border:3px solid var(--line); border-radius:14px;
+    background:rgba(255,255,255,.6);
+    transition:border-color .35s, box-shadow .35s, background .35s;
+  }
+  .frame.full{border-color:var(--gold); background:rgba(233,169,59,.12);
+    box-shadow:0 0 0 7px rgba(233,169,59,.16)}
+  .frame.extra{border-color:var(--teal); background:rgba(30,158,144,.09);
+    box-shadow:0 0 0 7px rgba(30,158,144,.12)}
+  .badge{
+    position:absolute; left:50%; top:50%; background:var(--gold); color:#fff;
+    font-weight:900; font-size:14px; padding:3px 10px; border-radius:99px;
+    box-shadow:0 6px 14px rgba(233,169,59,.42);
+    transform:translate(-50%,-50%) scale(0); transition:transform .4s cubic-bezier(.2,1.6,.4,1);
+  }
+  .badge.soft{background:var(--teal); box-shadow:0 6px 14px rgba(30,158,144,.38)}
+  .badge.on{transform:translate(-50%,-50%) scale(1)}
+
+  /* ---------- 数轴 ---------- */
+  .axis{position:absolute; height:3px; border-radius:2px; background:var(--line)}
+  .tick{position:absolute; width:2px; height:9px; background:var(--line); margin-left:-1px}
+  .tnum{position:absolute; font-size:11px; color:var(--dim); font-variant-numeric:tabular-nums; margin-left:-8px; width:16px; text-align:center}
+  .fp{position:absolute; width:8px; height:8px; border-radius:50%; background:var(--teal);
+      margin:-4px 0 0 -4px; opacity:0; transform:scale(.3); transition:opacity .28s, transform .28s}
+  .fp.on{opacity:.8; transform:scale(1)}
+  .bwrap{position:absolute; left:0; top:0; width:0; height:0; will-change:transform}
+  .buddy{
+    position:absolute; left:-19px; top:-19px; width:38px; height:38px;
+    border-radius:50% 50% 44% 44%;
+    background:radial-gradient(circle at 34% 26%, rgba(255,255,255,.55), rgba(255,255,255,0) 60%), var(--c);
+    box-shadow:0 7px 14px rgba(120,90,60,.24), inset 0 -3px 7px rgba(0,0,0,.10);
+  }
+  .buddy .eye{position:absolute; top:12px; width:5px; height:7px; border-radius:3px; background:#3A2A1E}
+  .buddy .eye.l{left:11px}
+  .buddy .eye.r{left:22px}
+  .bwrap.ghost{opacity:.42}
+
+  #tail{
+    flex:0 0 auto; text-align:center; font-size:12px; color:var(--dim);
+    height:17px; line-height:17px; font-variant-numeric:tabular-nums;
+    letter-spacing:.3px;
+  }
+  #foot{
+    flex:0 0 auto; display:flex; align-items:center; justify-content:center; gap:8px;
+    padding-top:5px;
+  }
+  #foot button{
+    font:inherit; font-size:12.5px; font-weight:700; color:var(--ink); white-space:nowrap;
+    background:var(--card); border:1px solid var(--line); border-radius:11px;
+    padding:8px 16px; cursor:pointer; transition:all .16s;
+  }
+  #foot button:active{transform:scale(.96)}
+  .flash{animation:flash .55s ease-out 1}
+  @keyframes flash{
+    0%{filter:brightness(1)}
+    35%{filter:brightness(1.25)}
+    100%{filter:brightness(1)}
+  }
+</style>
+</head>
+<body>
+
+<div class="tabs" id="tabs">
+  <button data-k="union" class="on">合起来</button>
+  <button data-k="split">分与合</button>
+  <button data-k="ten">十格阵</button>
+  <button data-k="line">数轴跳</button>
+</div>
+<div id="hint"></div>
+<div id="stage"></div>
+<div id="tail"></div>
+<div id="foot">
+  <button id="replay">换一组</button>
+</div>
+
+<script>
+"use strict";
+
+/* ==================== 声音：音高 = 数量 ==================== */
+const Snd = (() => {
+  let ctx = null;
+  const PENTA = [0, 2, 4, 7, 9];
+  function ac(){
+    if(!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if(ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+  function blip(n, dur, gain, type){
+    n = Math.max(1, Math.round(n));
+    dur = dur || 0.17; gain = gain || 0.13; type = type || "triangle";
+    const c = ac();
+    const i = n - 1;
+    const oct = Math.floor(i / 5);
+    const deg = ((i % 5) + 5) % 5;
+    const f = 261.63 * Math.pow(2, oct + PENTA[deg] / 12);
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.value = f;
+    const t = c.currentTime;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(c.destination);
+    o.start(t); o.stop(t + dur + 0.03);
+  }
+  function chord(list, gap){
+    gap = gap || 55;
+    list.forEach((n, i) => setTimeout(() => blip(n, 0.34, 0.10), i * gap));
+  }
+  function thud(){
+    const c = ac();
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = "sine"; o.frequency.setValueAtTime(150, c.currentTime);
+    o.frequency.exponentialRampToValueAtTime(80, c.currentTime + 0.15);
+    g.gain.setValueAtTime(0.14, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.18);
+    o.connect(g).connect(c.destination);
+    o.start(); o.stop(c.currentTime + 0.2);
+  }
+  return { blip, chord, thud };
+})();
+
+/* ==================== 小工具 ==================== */
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+
+// 在「簇内」的坐标：以簇中心为原点，逐行居中
+function gridCells(n, cols, S, G){
+  const rows = Math.ceil(n / cols);
+  const out = [];
+  for(let r = 0; r < rows; r++){
+    const inRow = Math.min(cols, n - r * cols);
+    const rowW = inRow * S + (inRow - 1) * G;
+    for(let c = 0; c < inRow; c++){
+      out.push({
+        x: -rowW / 2 + S / 2 + c * (S + G),
+        y: (r - (rows - 1) / 2) * (S + G)
+      });
+    }
+  }
+  return out;
+}
+
+// 元素按 board 中心定位（left:50% top:50%）
+function put(el, x, y, ms){
+  if(ms === undefined) ms = 0;
+  el.style.transition = ms ? "transform " + ms + "ms cubic-bezier(.22,.9,.24,1)" : "none";
+  el.style.transform = "translate(calc(-50% + " + x + "px), calc(-50% + " + y + "px))";
+}
+function putRaw(el, x, y){
+  el.style.transform = "translate(" + x + "px," + y + "px)";
+}
+
+function mkDot(color, S, cls){
+  const d = document.createElement("div");
+  d.className = "dot" + (cls ? " " + cls : "");
+  d.style.width = d.style.height = S + "px";
+  d.style.setProperty("--c", color);
+  return d;
+}
+function mkLbl(text, size, color, cls){
+  const l = document.createElement("div");
+  l.className = "lbl" + (cls ? " " + cls : "");
+  l.textContent = text;
+  if(size) l.style.fontSize = size + "px";
+  if(color) l.style.color = color;
+  return l;
+}
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const clear = node => { while(node.firstChild) node.removeChild(node.firstChild); };
+
+/* ==================== 1. 合起来（并集） ==================== */
+function buildUnion(root){
+  clear(root);
+  const board = document.createElement("div"); board.className = "board";
+  const eq = document.createElement("div"); eq.className = "eq";
+  root.appendChild(board); root.appendChild(eq);
+
+  const W = root.clientWidth || 340;
+  const S = Math.max(28, Math.min(54, (W - 26) / 5.9));
+  const G = Math.round(S * 0.22);
+
+  const a = rnd(2, 5), b = rnd(2, 5);
+  const total = a + b;
+
+  const dotsA = [], dotsB = [];
+  for(let i = 0; i < a; i++){ const d = mkDot("#E4593F", S); dotsA.push(d); board.appendChild(d); }
+  for(let i = 0; i < b; i++){ const d = mkDot("#1E9E90", S); dotsB.push(d); board.appendChild(d); }
+
+  const labA = mkLbl(String(a), Math.round(S * 0.62), "#E4593F");
+  const labB = mkLbl(String(b), Math.round(S * 0.62), "#1E9E90");
+  board.appendChild(labA); board.appendChild(labB);
+
+  const off = (2 * S + G) / 2 + S * 0.22;
+
+  function layHome(ms){
+    const ca = gridCells(a, 2, S, G), cb = gridCells(b, 2, S, G);
+    dotsA.forEach((d, i) => put(d, ca[i].x - off, ca[i].y, ms));
+    dotsB.forEach((d, i) => put(d, cb[i].x + off, cb[i].y, ms));
+    const h = Math.max(
+      Math.ceil(a / 2) * S + (Math.ceil(a / 2) - 1) * G,
+      Math.ceil(b / 2) * S + (Math.ceil(b / 2) - 1) * G
+    );
+    put(labA, -off, h / 2 + S * 0.42, ms);
+    put(labB, off, h / 2 + S * 0.42, ms);
+  }
+
+  eq.innerHTML = "";
+  const nA = document.createElement("b"); nA.textContent = String(a); nA.style.color = "#E4593F";
+  const p1 = document.createElement("i"); p1.textContent = "+";
+  const nB = document.createElement("b"); nB.textContent = String(b); nB.style.color = "#1E9E90";
+  const p2 = document.createElement("i"); p2.textContent = "=";
+  const res = document.createElement("b"); res.className = "res"; res.textContent = "?";
+  [nA, p1, nB, p2, res].forEach(e => eq.appendChild(e));
+  labA.style.transition = labB.style.transition = "opacity .25s";
+
+  layHome(0);
+
+  let busy = false;
+  async function play(){
+    if(busy) return;
+    busy = true;
+
+    // 先整齐归位，再开始
+    layHome(420);
+    res.textContent = "?";
+    res.classList.remove("warm");
+    labA.style.opacity = 1; labB.style.opacity = 1;
+    await wait(450);
+
+    // 两堆的标签"化"进算式
+    labA.style.opacity = 0; labB.style.opacity = 0;
+
+    const cols = Math.min(total, 5);
+    const cells = gridCells(total, cols, S, G);
+    const seq = dotsA.concat(dotsB);
+
+    // 一次只飞一个：落稳了再飞下一个
+    const fly = 320, gap = 70;
+    let landed = 0;
+    for(let i = 0; i < seq.length; i++){
+      put(seq[i], cells[i].x, cells[i].y, fly);
+      await wait(fly);
+      landed++;
+      Snd.blip(landed);
+      res.textContent = String(landed);
+      res.classList.remove("pop"); void res.offsetWidth; res.classList.add("pop");
+      await wait(gap);
+    }
+
+    const endAt = 260;
+    await wait(endAt);
+
+    res.classList.add("warm");
+    Snd.chord([Math.min(total, 5), Math.min(total + 2, 7), Math.min(total + 4, 9)]);
+    board.classList.remove("flash"); void board.offsetWidth; board.classList.add("flash");
+    document.getElementById("tail").textContent = a + " + " + b + " 一共 " + total;
+    busy = false;
+  }
+
+  board.addEventListener("click", play);
+  setTimeout(play, 420);
+  board.style.cursor = "pointer";
+  return { replay: null };
+}
+
+/* ==================== 2. 分与合 ==================== */
+function buildSplit(root){
+  clear(root);
+  const board = document.createElement("div"); board.className = "board";
+  root.appendChild(board);
+
+  const W = root.clientWidth || 340;
+  const S = Math.max(26, Math.min(46, (W - 74) / 4.6));
+  const G = Math.round(S * 0.2);
+
+  const N = rnd(5, 8);
+  const side = new Array(N).fill(0);   // 0 左 1 右
+  let opened = false;
+
+  const dots = [];
+  for(let i = 0; i < N; i++){
+    const d = mkDot(i % 2 ? "#1E9E90" : "#E4593F", S);
+    d.dataset.i = String(i);
+    dots.push(d); board.appendChild(d);
+  }
+
+  const labL = mkLbl("0", Math.round(S * 0.66), "#2B2118");
+  const labR = mkLbl("0", Math.round(S * 0.66), "#2B2118");
+  const labT = mkLbl(String(N), Math.round(S * 0.95), "#E9A93B");
+  const crack = document.createElement("div"); crack.className = "crack";
+  board.appendChild(crack);
+  board.appendChild(labL); board.appendChild(labR); board.appendChild(labT);
+  labL.style.opacity = 0; labR.style.opacity = 0;
+  put(crack, 0, 0);
+
+  const off = (2 * S + G) / 2 + S * 0.5;
+  const tail = () => document.getElementById("tail");
+
+  function relayout(ms){
+    let L = 0, R = 0;
+    dots.forEach(d => { side[+d.dataset.i] ? R++ : L++; });
+
+    if(!opened){
+      const cells = gridCells(N, 3, S, G);
+      dots.forEach((d, i) => put(d, cells[i].x, cells[i].y, ms));
+      const rows = Math.ceil(N / 3);
+      const h = rows * S + (rows - 1) * G;
+      put(labT, 0, -h / 2 - S * 0.52, ms);
+      labL.style.opacity = 0; labR.style.opacity = 0;
+      labT.style.opacity = 1;
+      crack.style.opacity = 0;
+      return;
+    }
+
+    const cl = gridCells(L, 2, S, G), cr = gridCells(R, 2, S, G);
+    let li = 0, ri = 0;
+    dots.forEach((d, i) => {
+      if(side[i]) { put(d, cr[ri].x + off, cr[ri].y, ms); ri++; }
+      else { put(d, cl[li].x - off, cl[li].y, ms); li++; }
+    });
+    const rows = Math.max(Math.ceil(L / 2), Math.ceil(R / 2), 1);
+    const h = rows * S + (rows - 1) * G;
+    put(labL, -off, h / 2 + S * 0.44, ms);
+    put(labR, off, h / 2 + S * 0.44, ms);
+    put(labT, 0, -h / 2 - S * 0.9, ms);
+    crack.style.height = (h + S * 0.1) + "px";
+    labL.textContent = String(L);
+    labR.textContent = String(R);
+    labL.style.opacity = 1; labR.style.opacity = 1; labT.style.opacity = 1;
+    crack.style.opacity = 0.9;
+  }
+
+  board.addEventListener("click", ev => {
+    if(!opened) return;
+    const t = ev.target;
+    if(!t.classList || !t.classList.contains("dot")) return;
+    const i = +t.dataset.i;
+    side[i] = side[i] ? 0 : 1;
+    relayout(360);
+    const c = side.reduce((s, v) => s + v, 0);
+    Snd.blip(c || 1);
+  });
+
+  let busy = false;
+  async function open(){
+    if(busy) return;
+    busy = true;
+    opened = true;
+    // 从中间附近劈开，两边都不空
+    const cut = rnd(2, N - 2);
+    for(let i = 0; i < N; i++) side[i] = i >= cut ? 1 : 0;
+    relayout(620);
+    await wait(340);
+    Snd.thud();
+    await wait(400);
+    Snd.chord([cut, cut + 2]);
+    tail().textContent = "还是 " + N + " 个 —— 只是分成了两堆";
+    busy = false;
+  }
+
+  async function merge(){
+    if(busy) return;
+    busy = true;
+    opened = false;
+    for(let i = 0; i < N; i++) side[i] = 0;
+    relayout(560);
+    await wait(340);
+    Snd.chord([N, N + 2, N + 4]);
+    document.getElementById("tail").textContent = "合回来又是 " + N;
+    busy = false;
+  }
+
+  setTimeout(open, 460);
+
+  return {
+    replay: null,
+    actions: [
+      { text: "拆开", run: open },
+      { text: "合起来", run: merge }
+    ]
+  };
+}
+
+/* ==================== 3. 十格阵 / 凑十 ==================== */
+function buildTen(root){
+  clear(root);
+  const board = document.createElement("div"); board.className = "board";
+  const eq = document.createElement("div"); eq.className = "eq";
+  root.appendChild(board); root.appendChild(eq);
+
+  const W = root.clientWidth || 340;
+  const S = Math.max(24, Math.min(46, (W - 34) / 5.7));
+  const G = Math.round(S * 0.16);
+  const frameW = 5 * S + 4 * G;
+  const frameH = 2 * S + G;
+  const gapY = S * 0.5;
+
+  const n = rnd(6, 9);
+  const m = rnd(Math.max(2, 11 - n), Math.min(6, 18 - n));
+  const total = n + m;
+
+  const yTop = -(frameH / 2 + gapY / 2);
+  const yBot =  (frameH / 2 + gapY / 2);
+
+  const f1 = document.createElement("div"); f1.className = "frame";
+  f1.style.width = frameW + 2 * 10 + "px";
+  f1.style.height = frameH + 2 * 10 + "px";
+  f1.style.transform = "translate(-50%,-50%) translate(0px," + yTop + "px)";
+  board.appendChild(f1);
+
+  const f2 = f1.cloneNode();
+  f2.className = "frame";
+  f2.style.transform = "translate(-50%,-50%) translate(0px," + yBot + "px)";
+  board.appendChild(f2);
+
+  const badge10 = document.createElement("div"); badge10.className = "badge"; badge10.textContent = "10";
+  board.appendChild(badge10);
+  const pos10 = "translate(calc(-50% + " + (frameW / 2 - 4) + "px), calc(-50% + " + (yTop - frameH / 2 - 6) + "px))";
+  badge10.style.transform = pos10 + " scale(0)";
+
+  const badge3 = document.createElement("div"); badge3.className = "badge soft"; badge3.textContent = String(m);
+  board.appendChild(badge3);
+  const pos3 = "translate(calc(-50% + " + (frameW / 2 - 4) + "px), calc(-50% + " + (yBot - frameH / 2 - 6) + "px))";
+  badge3.style.transform = pos3 + " scale(0)";
+
+  function slotPos(frameIdx, i){
+    const col = i % 5, row = Math.floor(i / 5);
+    const yc = frameIdx === 0 ? yTop : yBot;
+    return {
+      x: -frameW / 2 + S / 2 + col * (S + G),
+      y: yc - frameH / 2 + S / 2 + row * (S + G)
+    };
+  }
+
+  // 空格子
+  for(let f = 0; f < 2; f++){
+    for(let i = 0; i < 10; i++){
+      const p = slotPos(f, i);
+      const s = mkDot("#000", S * 0.78, "slot");
+      put(s, p.x, p.y);
+      board.appendChild(s);
+    }
+  }
+
+  // 已有的 n 个
+  const hist = [];
+  for(let i = 0; i < n; i++){
+    const p = slotPos(0, i);
+    const d = mkDot(i % 3 === 2 ? "#E9A93B" : "#E4593F", S * 0.78);
+    put(d, p.x, p.y);
+    board.appendChild(d);
+    hist.push(d);
+  }
+
+  // 待加入的 m 个
+  const incoming = [];
+  for(let i = 0; i < m; i++){
+    const d = mkDot("#1E9E90", S * 0.78);
+    put(d, frameW / 2 + S * 0.9, (i - (m - 1) / 2) * (S * 0.82));
+    board.appendChild(d);
+    incoming.push(d);
+  }
+
+  eq.innerHTML = "";
+  const eA = document.createElement("b"); eA.textContent = String(n); eA.style.color = "#E4593F";
+  const eP = document.createElement("i"); eP.textContent = "+";
+  const eB = document.createElement("b"); eB.textContent = String(m); eB.style.color = "#1E9E90";
+  const eQ = document.createElement("i"); eQ.textContent = "=";
+  const res = document.createElement("b"); res.className = "res"; res.textContent = "?";
+  [eA, eP, eB, eQ, res].forEach(e => eq.appendChild(e));
+
+  let busy = false;
+  async function play(){
+    if(busy) return;
+    busy = true;
+    let count = n;
+    const fly = 380, step = fly + 90;
+
+    for(let i = 0; i < m; i++){
+      const slotIdx = n + i;
+      const frameIdx = slotIdx >= 10 ? 1 : 0;
+      const p = slotPos(frameIdx, slotIdx % 10);
+      setTimeout(() => put(incoming[i], p.x, p.y, fly), i * step);
+      setTimeout(() => {
+        count++;
+        Snd.blip(count > 10 ? count - 10 : count);
+        res.textContent = String(count);
+        res.classList.add("pop");
+        setTimeout(() => res.classList.remove("pop"), 150);
+
+        if(count === 10){
+          f1.classList.add("full");
+          badge10.style.transform = pos10 + " scale(1)";
+          Snd.chord([1, 3, 5, 8]);
+          board.classList.remove("flash"); void board.offsetWidth; board.classList.add("flash");
+          res.classList.add("warm");
+          document.getElementById("tail").textContent = "满十了 —— 十个抱成一堆";
+        }
+      }, i * step + fly);
+    }
+
+    await wait(m * step + fly + 300);
+    f2.classList.add("extra");
+    badge3.textContent = String(total - 10);
+    badge3.style.transform = pos3 + " scale(1)";
+    Snd.chord([3, 5, 8]);
+    document.getElementById("tail").textContent = "10 加 " + (total - 10) + " 就是 " + total;
+    busy = false;
+  }
+
+  board.addEventListener("click", play);
+  setTimeout(play, 520);
+  board.style.cursor = "pointer";
+  return { replay: null };
+}
+
+/* ==================== 4. 数轴跳（接着数） ==================== */
+function buildLine(root){
+  clear(root);
+  const board = document.createElement("div"); board.className = "board";
+  const eq = document.createElement("div"); eq.className = "eq";
+  root.appendChild(board); root.appendChild(eq);
+
+  const W = root.clientWidth || 340;
+  const H = board.clientHeight || 300;
+  const margin = 30;
+  const steps = 10;
+  const step = (W - margin * 2) / steps;
+  const axisY = Math.round(H * 0.52);
+  const xOf = i => margin + i * step;
+
+  const axis = document.createElement("div"); axis.className = "axis";
+  axis.style.left = (xOf(0) - 12) + "px";
+  axis.style.top = axisY + "px";
+  axis.style.width = (xOf(steps) - xOf(0) + 24) + "px";
+  board.appendChild(axis);
+
+  for(let i = 0; i <= steps; i++){
+    const t = document.createElement("div"); t.className = "tick";
+    t.style.left = xOf(i) + "px"; t.style.top = (axisY - 4) + "px";
+    board.appendChild(t);
+    const n = document.createElement("div"); n.className = "tnum";
+    n.textContent = String(i);
+    n.style.left = xOf(i) + "px"; n.style.top = (axisY + 12) + "px";
+    board.appendChild(n);
+  }
+
+  const a = rnd(2, 4);
+  const b = rnd(2, 4);
+
+  const fp = [];
+  for(let i = 0; i <= steps; i++){
+    const d = document.createElement("div"); d.className = "fp";
+    d.style.left = xOf(i) + "px"; d.style.top = (axisY - 14) + "px";
+    board.appendChild(d);
+    fp.push(d);
+  }
+
+  function mkBuddy(color, ghost){
+    const wrap = document.createElement("div");
+    wrap.className = "bwrap" + (ghost ? " ghost" : "");
+    const body = document.createElement("div");
+    body.className = "buddy";
+    body.style.setProperty("--c", color);
+    body.innerHTML = '<span class="eye l"></span><span class="eye r"></span>';
+    wrap.appendChild(body);
+    board.appendChild(wrap);
+    return wrap;
+  }
+
+  const me = mkBuddy("#E4593F", false);
+  const ghost = mkBuddy("#1E9E90", true);
+  ghost.style.opacity = 0;
+  const restY = axisY - 34;
+  putRaw(me, xOf(a), restY);
+
+  eq.innerHTML = "";
+  const tA = document.createElement("b"); tA.textContent = String(a); tA.style.color = "#E4593F";
+  const tP = document.createElement("i"); tP.textContent = "+";
+  const tB = document.createElement("b"); tB.textContent = String(b); tB.style.color = "#1E9E90";
+  const tQ = document.createElement("i"); tQ.textContent = "=";
+  const res = document.createElement("b"); res.className = "res"; res.textContent = "?";
+  [tA, tP, tB, tQ, res].forEach(e => eq.appendChild(e));
+
+  // 横向平移（CSS transition）+ 身体上下弹（CSS transition）= 跳跃感
+  function resetTo(wrap, i, y){
+    wrap.style.transition = "none";
+    putRaw(wrap, xOf(i), y);
+    const body = wrap.querySelector(".buddy");
+    body.style.transition = "none";
+    body.style.transform = "translateY(0)";
+  }
+  function hop(wrap, to, dur, y){
+    return new Promise(done => {
+      const body = wrap.querySelector(".buddy");
+      wrap.style.transition = "transform " + dur + "ms cubic-bezier(.28,.62,.34,1)";
+      putRaw(wrap, xOf(to), y);
+      body.style.transition = "transform " + Math.round(dur * 0.44) + "ms ease-out";
+      body.style.transform = "translateY(-20px)";
+      setTimeout(() => {
+        body.style.transition = "transform " + Math.round(dur * 0.52) + "ms cubic-bezier(.6,0,.8,.4)";
+        body.style.transform = "translateY(0)";
+      }, Math.round(dur * 0.44));
+      setTimeout(done, dur + 30);
+    });
+  }
+
+  let busy = false;
+  async function play(){
+    if(busy) return;
+    busy = true;
+    ghost.style.opacity = 0;
+    fp.forEach(f => f.classList.remove("on"));
+    resetTo(me, a, restY);
+    res.textContent = "?"; res.classList.remove("warm");
+    await wait(300);
+
+    let cur = a;
+    for(let k = 0; k < b; k++){
+      await hop(me, cur + 1, 340, restY);
+      cur++;
+      Snd.blip(cur);
+      fp[cur].classList.add("on");
+      await wait(80);
+    }
+    res.textContent = String(a + b);
+    res.classList.add("warm", "pop");
+    setTimeout(() => res.classList.remove("pop"), 220);
+    Snd.chord([Math.min(a + b, 5), Math.min(a + b + 2, 7)]);
+    document.getElementById("tail").textContent = "从 " + a + " 往前走 " + b + " 步，到 " + (a + b);
+    await wait(900);
+
+    // 换个顺序再走一次：落到同一个点
+    ghost.style.opacity = 1;
+    resetTo(ghost, b, restY - 42);
+    await wait(420);
+    const tmp = document.getElementById("tail");
+    tmp.textContent = "换个顺序：" + b + " 往前走 " + a + " 步";
+    let c2 = b;
+    for(let k = 0; k < a; k++){
+      await hop(ghost, c2 + 1, 330, restY - 42);
+      c2++;
+      Snd.blip(c2, 0.14, 0.09, "sine");
+      fp[c2].classList.add("on");
+      await wait(70);
+    }
+    await wait(260);
+    res.classList.add("flash");
+    board.classList.remove("flash"); void board.offsetWidth; board.classList.add("flash");
+    Snd.chord([3, 5, 8, 5, 3]);
+    tmp.textContent = "两条路，落在同一个数上 —— " + (a + b);
+    busy = false;
+  }
+
+  board.addEventListener("click", play);
+  setTimeout(play, 560);
+  board.style.cursor = "pointer";
+  return { replay: null };
+}
+
+/* ==================== 路由器 ==================== */
+const HINTS = {
+  union: "两堆推到一起 —— 一个一个落进去，边落边数",
+  split: "拆开再合上 —— 点一个圆，它就会跑到另一边",
+  ten:   "先装满十个 —— 满十就变成「一堆十」",
+  line:  "往前走几步 —— 加法就是「接着数」"
+};
+const BUILD = { union: buildUnion, split: buildSplit, ten: buildTen, line: buildLine };
+
+const stage = document.getElementById("stage");
+const foot = document.getElementById("foot");
+const replayBtn = document.getElementById("replay");
+let key = "union";
+
+function mount(k){
+  key = k;
+  if(history.replaceState) history.replaceState(null, "", "#" + k);
+  document.getElementById("hint").textContent = HINTS[k];
+  document.getElementById("tail").textContent = "";
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.k === k));
+  clear(stage);
+  // 清掉上一组的额外按钮
+  foot.querySelectorAll(".extra").forEach(b => b.remove());
+  const inst = BUILD[k](stage);
+  if(inst && inst.actions){
+    inst.actions.forEach(act => {
+      const btn = document.createElement("button");
+      btn.className = "extra";
+      btn.textContent = act.text;
+      btn.addEventListener("click", act.run);
+      foot.insertBefore(btn, replayBtn.nextSibling);
+    });
+  }
+  window.__inst = inst;
+}
+
+document.getElementById("tabs").addEventListener("click", ev => {
+  const b = ev.target.closest("button");
+  if(b && b.dataset.k) mount(b.dataset.k);
+});
+replayBtn.addEventListener("click", () => mount(key));
+
+let rt = null;
+window.addEventListener("resize", () => {
+  clearTimeout(rt);
+  rt = setTimeout(() => mount(key), 260);
+});
+
+mount(BUILD[location.hash.slice(1)] ? location.hash.slice(1) : "union");
+</script>
+</body>
+</html>
