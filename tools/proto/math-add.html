@@ -33,7 +33,7 @@
 
   /* ---------- 算式 ---------- */
   #stage{flex:1 1 auto; min-height:0; display:flex; flex-direction:column;
-    align-items:center; justify-content:center; gap:14px}
+    align-items:center; justify-content:center; gap:8px}
   #eq{display:flex; align-items:center; justify-content:center; gap:9px;
       position:relative; padding:10px 0}
   #eq.win{animation:winpulse .62s ease-out 2}
@@ -84,15 +84,15 @@
 
   /* ---------- 底部托盘 ---------- */
   #tray{
-    flex:0 0 auto; height:152px; display:flex; flex-wrap:wrap;
-    align-items:center; justify-content:center; align-content:center;
-    gap:11px; padding:8px 2px; transition:opacity .25s, transform .25s;
+    flex:0 0 auto; width:100%; height:156px;
+    display:grid; justify-content:center; align-content:center;
+    gap:9px; padding:6px 2px; transition:opacity .25s, transform .25s;
   }
   #tray.out{opacity:0; transform:translateY(10px); pointer-events:none}
   #tray.gone{opacity:0; pointer-events:none}
 
   .chip{
-    width:66px; height:66px; border-radius:19px; display:flex;
+    width:64px; height:64px; border-radius:18px; display:flex;
     align-items:center; justify-content:center;
     font-size:29px; font-weight:900; font-variant-numeric:tabular-nums;
     background:var(--card); color:var(--ink);
@@ -216,9 +216,9 @@
     <div class="cell ans hideq" id="ca" data-kind="answer">?</div>
   </div>
   <div id="tbar"><i></i></div>
+  <div id="tray"></div>
 </div>
 
-<div id="tray"></div>
 <div id="ov"></div>
 
 <script>
@@ -238,16 +238,16 @@ const CFG = {
   // 每 5 关一档：m = 加数上限，n = 候选数字个数，opt = 答案选项个数，mix = 混合小数字
   STAGES: [
     { name: "第一区", bands: [
-      { m: 9,  n: 4, opt: 3 },
-      { m: 20, n: 4, opt: 3 },
-      { m: 30, n: 5, opt: 3 },
-      { m: 45, n: 5, opt: 4 }
+      { m: 9,  n: 5, opt: 4 },
+      { m: 20, n: 5, opt: 4 },
+      { m: 30, n: 6, opt: 4 },
+      { m: 45, n: 6, opt: 5 }
     ]},
     { name: "第二区", bands: [
       { m: 20, n: 5, opt: 4, mix: true },
-      { m: 30, n: 5, opt: 4 },
-      { m: 45, n: 6, opt: 4 },
-      { m: 65, n: 6, opt: 4 }
+      { m: 30, n: 6, opt: 5 },
+      { m: 45, n: 6, opt: 5 },
+      { m: 65, n: 7, opt: 5 }
     ]}
   ]
 };
@@ -320,13 +320,19 @@ function bandOf(level){
   return CFG.STAGES[S.stage].bands[Math.min(3, Math.floor(level / 5))];
 }
 function makePool(band){
-  const set = new Set();
+  // 允许重复：这样 5+5、3+3 这类也能摆出来
+  const out = [];
   let guard = 0;
-  while(set.size < band.n && guard++ < 800){
-    const v = (band.mix && Math.random() < 0.5) ? rnd(1, 10) : rnd(1, band.m);
-    set.add(v);
+  while(out.length < band.n && guard++ < 600){
+    out.push((band.mix && Math.random() < 0.5) ? rnd(1, 10) : rnd(1, band.m));
   }
-  return shuffle([...set]);
+  if(new Set(out).size < 2 && out.length > 1){
+    let v = rnd(1, band.m);
+    let g2 = 0;
+    while(out.includes(v) && g2++ < 50) v = rnd(1, band.m);
+    out[0] = v;
+  }
+  return shuffle(out);
 }
 function makeOptions(a, b, count){
   const s = a + b;
@@ -370,6 +376,9 @@ function resetEq(){
 function renderTray(values, mode){
   tray.classList.remove("gone", "out");
   tray.innerHTML = "";
+  // 5 个以内排一行，多了就匀成两行（6→3+3，7→4+3），别出现"5 个加 1 个"
+  const cols = values.length <= 5 ? Math.max(1, values.length) : Math.ceil(values.length / 2);
+  tray.style.gridTemplateColumns = "repeat(" + cols + ", 64px)";
   values.forEach((v, i) => {
     const d = document.createElement("div");
     d.className = "chip live in" + (mode === "options" ? " optset" : "");
@@ -393,11 +402,19 @@ function startLevel(){
   $("#mLv").textContent = CFG.STAGES[S.stage].name + " · 第 " + (S.level + 1) + " / " + CFG.levels + " 题";
   $("#mSt").textContent = starTotalThisStage() ? ("本区 " + starTotalThisStage() + " 星") : "";
   $("#prog i").style.width = (S.level / CFG.levels * 100) + "%";
-  startTimer();
+  resetTimer();
 }
 
 function starTotalThisStage(){
   return S.results.reduce((s, v) => s + v, 0);
+}
+
+function resetTimer(){
+  clearInterval(tickId); tickId = null;
+  S.t0 = 0;
+  tbar.classList.remove("on");
+  tbari.style.width = "100%";
+  tbari.style.background = "var(--teal)";
 }
 
 function startTimer(){
@@ -429,6 +446,7 @@ function fillAddend(slot, v){
 
 function afterBoth(){
   S.phase = "answer";
+  startTimer();               // 两个加数都摆好了，这时候才开始计时
   tray.classList.add("out");
   setTimeout(() => { tray.classList.add("gone"); tray.innerHTML = ""; }, 250);
   setTimeout(revealTail, 230);
@@ -458,7 +476,7 @@ function revealOptions(){
   S.optsShown = true;
   ca.classList.remove("wob");
   const band = bandOf(S.level);
-  const n = Math.max(2, band.opt);
+  const n = Math.max(4, band.opt);
   const opts = makeOptions(S.a, S.b, n);
   tray.classList.remove("gone", "out");
   tray.innerHTML = "";
@@ -633,12 +651,13 @@ const FLOWER_PTS = '<circle cx="50" cy="21" r="21"/><circle cx="79" cy="42" r="2
 function cellsOf(n, S, G){
   const per = 5, rows = Math.ceil(n / per), out = [];
   const blockH = rows * S + (rows - 1) * G;
+  // 每行都从同一条左边界开始（左对齐），整块再整体居中
+  const fullCols = Math.min(per, n);
+  const blockW = fullCols * S + (fullCols - 1) * G;
   for(let i = 0; i < n; i++){
     const r = Math.floor(i / per), c = i % per;
-    const inRow = Math.min(per, n - r * per);
-    const rowW = inRow * S + (inRow - 1) * G;
     out.push({
-      x: -rowW / 2 + S / 2 + c * (S + G),
+      x: -blockW / 2 + S / 2 + c * (S + G),
       y: -blockH / 2 + S / 2 + r * (S + G)
     });
   }
@@ -722,7 +741,7 @@ async function runDemo(a, b){
 
   const cA = cellsOf(a, S1, G1), cB = cellsOf(b, S1, G1);
   const maxW = 5 * S1 + 4 * G1;
-  const off = maxW / 2 + Math.max(10, S1 * 0.42);
+  const off = maxW / 2 + Math.max(16, S1 * 0.62);
 
   const X0 = rA.left + rA.width / 2, Y0 = rA.top + rA.height / 2;
   const X1 = rB.left + rB.width / 2, Y1 = rB.top + rB.height / 2;
