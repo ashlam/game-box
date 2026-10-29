@@ -19,9 +19,22 @@
     padding:calc(env(safe-area-inset-top) + 26px) 18px calc(env(safe-area-inset-bottom) + 26px);
     display:flex;flex-direction:column;align-items:center;min-height:100%;
   }
-  header{text-align:center;margin-bottom:26px}
+  header{text-align:center;margin-bottom:22px;width:100%;max-width:460px}
   h1{font-size:26px;margin:0 0 8px;letter-spacing:1px}
   .sub{color:var(--dim);font-size:13px}
+  /* ===== 首屏说明：第一次来的人 10 秒内要知道「这是什么、从哪开始」 =====
+     全部内联、无外链、无图片（离线 APK 与在线版共用同一份） */
+  .intro{margin:16px 0 0;font-size:13.5px;line-height:1.7;color:#b9c2d1;text-align:left}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:13px 0 0;text-align:left}
+  .chips span{
+    font-size:12px;color:var(--dim);border:1px solid var(--line);background:rgba(255,255,255,.04);
+    border-radius:99px;padding:5px 11px;white-space:nowrap;
+  }
+  .chips b{color:var(--txt);font-weight:600}
+  .start{
+    margin:15px 0 0;font-size:12.5px;color:var(--acc2);line-height:1.6;
+    border:1px dashed rgba(56,211,159,.35);border-radius:11px;padding:9px 12px;background:rgba(56,211,159,.06);
+  }
   .grid{width:100%;max-width:460px;display:grid;gap:14px}
   a.card{
     display:flex;align-items:center;gap:16px;text-decoration:none;color:var(--txt);
@@ -87,7 +100,17 @@
 <body>
 <header>
   <h1>🎲 小游戏盒子</h1>
-  <div class="sub" id="sub">手机浏览器直接玩 · 无需安装</div>
+  <div class="sub" id="sub">18 个游戏 · 做给小孩路上玩 · 断网也能玩</div>
+
+  <p class="intro">候车室、饭前十分钟、飞机上没网的那两小时 —— 孩子伸手要手机的时候，随手塞给他一个能玩的东西。<b>这里面没有一个网络请求</b>，所以弹不出广告、推不了充值，也不会突然跳出个说不清的东西。</p>
+  <div class="chips">
+    <span><b>18</b> 个游戏</span>
+    <span><b>0</b> 个外部请求</span>
+    <span><b>1.7 MB</b> 整站</span>
+    <span><b>2</b> 个不识字也能玩</span>
+  </div>
+  <div class="start">第一次来：从前三张挑一个，都是 30 秒一局 ↓</div>
+
   <div class="tools">
     <button id="manageBtn" class="manage" type="button" aria-pressed="false">⚙️ 管理游戏</button>
     <button id="showAllBtn" class="manage" type="button" hidden>↺ 全部显示</button>
@@ -95,23 +118,34 @@
 </header>
 
 <div class="grid" id="grid">
-  <div class="cell" data-game="mathadd">
-    <a class="card" href="mathadd/index.html">
-      <div class="icon">🧮</div>
-      <div class="meta">
-        <div class="name">加法闯关 <span class="tag">3 岁起 · 动画演示原理</span></div>
-        <div class="desc">把候选数字拖进 x 和 y —— <b>加多少由孩子自己定</b> · 两个数都摆好才开始计时，等号和问号才出现 · 点问号出候选答案，拖对了金闪撒花，拖错了划掉重选 · 每关结束都有动画复盘：两个加数化成小球和星星飞出来，分成两堆排好、合并、逐个点亮变数字，从 0 一直数到答案 · 一局 20 题，按用时和错误数评 1~3 星（分数界面上不显示）</div>
-      </div>
-    </a>
-    <button class="pick" type="button" aria-pressed="true" aria-label="隐藏 / 显示这个游戏"><span>✓</span></button>
-  </div>
-
   <div class="cell" data-game="pairs">
     <a class="card" href="pairs/index.html">
       <div class="icon">🎴</div>
       <div class="meta">
         <div class="name">记忆配对 <span class="tag">不用认字 · 十关</span></div>
         <div class="desc">满桌扣着的扑克牌，翻两张找点数一样的配对 · <b>界面上一个字都没有</b>，不识字也能直接玩：关卡按钮画的是牌桌形状，进度和成绩全是图标 + 数字 · 十关（6~36 张）· 按步数评 1~3 星 · 单关得分累加成总分，总分决定<b>十档奖品</b>（糖果→饼干→冰淇淋→气球→礼物→星星→宝石→小汽车→皇冠→金杯）</div>
+      </div>
+    </a>
+    <button class="pick" type="button" aria-pressed="true" aria-label="隐藏 / 显示这个游戏"><span>✓</span></button>
+  </div>
+
+  <div class="cell" data-game="breakout">
+    <a class="card" href="breakout/index.html">
+      <div class="icon">🧱</div>
+      <div class="meta">
+        <div class="name">打砖块 <span class="tag">10 关图案 · 6 种砖 · 7 种道具</span></div>
+        <div class="desc">街机版打砖块：10 关手绘图案（热身/双塔/炸弹阵/金库/漩涡/铁壁/蜂巢/要塞/终局）· 砖有六种——硬砖敲三下、钢砖打不碎（只剩钢砖时会松动）、爆炸砖连坐周围一圈、金砖高分、会左右跑的移动砖 · 打碎砖块掉道具，挡板接住才生效：加宽/变窄/球变慢/分裂多球/激光/接球/加命 · 不碰挡板连打能叠连击倍率（最高 ×5）· 拖挡板搓球变向</div>
+      </div>
+    </a>
+    <button class="pick" type="button" aria-pressed="true" aria-label="隐藏 / 显示这个游戏"><span>✓</span></button>
+  </div>
+
+  <div class="cell" data-game="mathadd">
+    <a class="card" href="mathadd/index.html">
+      <div class="icon">🧮</div>
+      <div class="meta">
+        <div class="name">加法闯关 <span class="tag">3 岁起 · 动画演示原理</span></div>
+        <div class="desc">把候选数字拖进 x 和 y —— <b>加多少由孩子自己定</b> · 两个数都摆好才开始计时，等号和问号才出现 · 点问号出候选答案，拖对了金闪撒花，拖错了划掉重选 · 每关结束都有动画复盘：两个加数化成小球和星星飞出来，分成两堆排好、合并、逐个点亮变数字，从 0 一直数到答案 · 一局 20 题，按用时和错误数评 1~3 星（分数界面上不显示）</div>
       </div>
     </a>
     <button class="pick" type="button" aria-pressed="true" aria-label="隐藏 / 显示这个游戏"><span>✓</span></button>
@@ -172,17 +206,6 @@
     <button class="pick" type="button" aria-pressed="true" aria-label="隐藏 / 显示这个游戏"><span>✓</span></button>
   </div>
 
-  <div class="cell" data-game="breakout">
-    <a class="card" href="breakout/index.html">
-      <div class="icon">🧱</div>
-      <div class="meta">
-        <div class="name">打砖块 <span class="tag">10 关图案 · 6 种砖 · 7 种道具</span></div>
-        <div class="desc">街机版打砖块：10 关手绘图案（热身/双塔/炸弹阵/金库/漩涡/铁壁/蜂巢/要塞/终局）· 砖有六种——硬砖敲三下、钢砖打不碎（只剩钢砖时会松动）、爆炸砖连坐周围一圈、金砖高分、会左右跑的移动砖 · 打碎砖块掉道具，挡板接住才生效：加宽/变窄/球变慢/分裂多球/激光/接球/加命 · 不碰挡板连打能叠连击倍率（最高 ×5）· 拖挡板搓球变向</div>
-      </div>
-    </a>
-    <button class="pick" type="button" aria-pressed="true" aria-label="隐藏 / 显示这个游戏"><span>✓</span></button>
-  </div>
-
   <div class="cell" data-game="frog">
     <a class="card" href="frog/index.html">
       <div class="icon">🐸</div>
@@ -222,6 +245,17 @@
       <div class="meta">
         <div class="name">华容道 · 车阵 <span class="tag">滑块解谜</span></div>
         <div class="desc">经典「横刀立马」布局，棋子全是各种造型的车：把红色大客车「曹操」挪到底部出口 · 记录最少步数</div>
+      </div>
+    </a>
+    <button class="pick" type="button" aria-pressed="true" aria-label="隐藏 / 显示这个游戏"><span>✓</span></button>
+  </div>
+
+  <div class="cell" data-game="slidepuzzle">
+    <a class="card" href="slidepuzzle/index.html">
+      <div class="icon">🔳</div>
+      <div class="meta">
+        <div class="name">数字华容道 <span class="tag">3×3 ~ 5×5 · 滑块拼图</span></div>
+        <div class="desc">1 到 15 打乱，靠那一个空格把数字推回 <b>1 2 3 …</b> 的顺序 · 点空格旁边的块它就滑过去，点同一行/列<b>更远</b>的块则整排一起滑 · 打乱是从拼好的状态倒着走出来的，所以<b>保证解得开</b>，不会遇到死局 · 已经归位的块会变绿，一眼看出还剩几块 · 记最少步数和最快用时</div>
       </div>
     </a>
     <button class="pick" type="button" aria-pressed="true" aria-label="隐藏 / 显示这个游戏"><span>✓</span></button>

@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>数字华容道 · 小游戏盒子</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#191d26; --card2:#202632; --line:#2b3242;
+    --txt:#e8ecf3; --dim:#8b95a7; --acc:#5b8cff; --acc2:#38d39f; --hot:#ffd45e;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  html{height:100%}
+  html,body{margin:0}
+  body{
+    height:100%;overflow:hidden;
+    display:flex;flex-direction:column;align-items:center;
+    background:radial-gradient(1200px 600px at 50% -10%,#1b2233 0%,var(--bg) 60%);
+    color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    padding:calc(env(safe-area-inset-top) + 8px) 10px calc(env(safe-area-inset-bottom) + 10px);
+  }
+
+  /* ===== 顶栏：返回 / 标题 / 尺寸切换 ===== */
+  .top{width:100%;max-width:460px;display:flex;align-items:center;gap:8px;flex:0 0 auto;margin-bottom:8px}
+  .top a{color:var(--dim);text-decoration:none;font-size:18px;padding:6px 10px;border-radius:9px;
+         background:var(--card);border:1px solid var(--line);line-height:1}
+  .top h1{font-size:15px;margin:0;font-weight:600;white-space:nowrap}
+  .sizes{margin-left:auto;display:flex;background:var(--card);border:1px solid var(--line);
+         border-radius:11px;padding:2px;gap:2px}
+  .sizes button{
+    font:inherit;font-size:11.5px;padding:7px 9px;border-radius:9px;border:0;
+    background:transparent;color:var(--dim);line-height:1;white-space:nowrap;
+  }
+  .sizes button.on{background:var(--acc);color:#fff;font-weight:700}
+
+  /* ===== 数据条 ===== */
+  .stats{width:100%;max-width:460px;display:flex;gap:8px;flex:0 0 auto;margin-bottom:8px}
+  .stat{flex:1;background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);
+        border-radius:12px;padding:7px 4px;text-align:center;min-width:0}
+  .stat b{display:block;font-size:16px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:.3px;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stat span{display:block;font-size:10.5px;color:var(--dim);margin-top:2px}
+  .stat b.fresh{color:var(--hot)}
+
+  /* ===== 棋盘 =====
+     定位方案：每块绝对定位在左上角，尺寸 = 100%/N，位移用 transform 的百分比
+     （百分比相对自身尺寸，正好等于「挪几格」），JS 只改 --r / --c 两个变量。
+     好处：不做像素运算，改尺寸时不用重排逻辑；transition 也是浏览器原生插值。 */
+  #wrap{flex:1 1 auto;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
+  #board{
+    position:relative;flex:0 0 auto;
+    --n:3; --cell:100px;
+    border-radius:18px;border:1px solid var(--line);
+    background:linear-gradient(180deg,#141924,#0f131b);
+    box-shadow:0 14px 34px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.02);
+    touch-action:none;
+  }
+  /* 每格的凹槽：空格子看起来是「一个洞」，而不是「页面漏了一块」。
+     光靠背景色的话，3×3 的空格和棋盘底色几乎一样，孩子会以为卡住了。 */
+  .slot{position:absolute;left:0;top:0;z-index:0;
+        width:calc(100% / var(--n));height:calc(100% / var(--n));
+        padding:calc(var(--cell) * .03);
+        transform:translate3d(calc(var(--c,0) * 100%),calc(var(--r,0) * 100%),0)}
+  .slot i{display:block;width:100%;height:100%;border-radius:calc(var(--cell) * .13);
+          background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05)}
+  .tile{
+    position:absolute;left:0;top:0;z-index:1;
+    width:calc(100% / var(--n));height:calc(100% / var(--n));
+    padding:calc(var(--cell) * .03);
+    transform:translate3d(calc(var(--c,0) * 100%),calc(var(--r,0) * 100%),0);
+    transition:transform .13s cubic-bezier(.25,1.2,.5,1);
+  }
+  .tile .face{
+    width:100%;height:100%;border-radius:calc(var(--cell) * .13);
+    display:flex;align-items:center;justify-content:center;
+    font-size:calc(var(--cell) * .40);font-weight:800;font-variant-numeric:tabular-nums;
+    letter-spacing:-.5px;color:#dfe7f5;
+    background:linear-gradient(180deg,#35435f,#26314a);
+    border:1px solid rgba(255,255,255,.10);
+    box-shadow:0 2px 0 rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.10);
+    transition:background .2s ease,border-color .2s ease,color .2s ease,box-shadow .2s ease;
+  }
+  /* 两位数窄一点（5×5 里最多到 24） */
+  .tile.d2 .face{font-size:calc(var(--cell) * .33)}
+  /* ★ 已归位：换成安静的绿。孩子不用记「哪些对了」，一眼就能看出还剩几块 ——
+     这是本游戏唯一「比原版多给」的东西，为的是别让 5 岁的人卡在中途放弃。 */
+  .tile.ok .face{
+    background:linear-gradient(180deg,#1f5a4a,#16433a);
+    border-color:rgba(56,211,159,.42);color:#8ff3cb;
+    box-shadow:0 2px 0 rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  /* 拼完：整盘金光闪两下 */
+  #board.won .face{animation:wonGlow .85s ease-in-out 2}
+  @keyframes wonGlow{
+    0%,100%{filter:none}
+    50%{background:linear-gradient(180deg,#d8b23c,#a8861c);border-color:#ffe089;
+         color:#1a1405;box-shadow:0 0 18px rgba(255,212,94,.55)}
+  }
+
+  /* ===== 看目标：叠一层虚线占位，1.4 秒后自己淡掉 ===== */
+  /* z-index 必须显式抬起来：tile 是后插进 DOM 的，同层级下会盖住这层 */
+  .ghost{position:absolute;inset:0;display:none;border-radius:18px;z-index:5;
+         background:rgba(10,14,20,.93)}
+  .ghost.on{display:block;animation:ghostIn .18s ease}
+  @keyframes ghostIn{from{opacity:0}to{opacity:1}}
+  .gtile{position:absolute;left:0;top:0;
+         width:calc(100% / var(--n));height:calc(100% / var(--n));
+         padding:calc(var(--cell) * .03);
+         transform:translate3d(calc(var(--c,0) * 100%),calc(var(--r,0) * 100%),0)}
+  .gtile i{
+    width:100%;height:100%;border-radius:calc(var(--cell) * .13);
+    display:flex;align-items:center;justify-content:center;font-style:normal;
+    font-size:calc(var(--cell) * .34);font-weight:800;color:#93a3bd;
+    border:1px dashed rgba(139,149,167,.4);
+  }
+
+  /* ===== 底部操作 ===== */
+  .bar{width:100%;max-width:460px;display:flex;gap:8px;flex:0 0 auto;margin-top:9px}
+  .bar button{
+    flex:1;font:inherit;font-size:13px;padding:11px 6px;border-radius:12px;
+    border:1px solid var(--line);background:var(--card2);color:var(--txt);white-space:nowrap;
+  }
+  .bar button:active{background:var(--acc);border-color:var(--acc);color:#fff}
+  .bar button#btnSound{flex:0 0 46px;font-size:15px;padding:11px 0}
+
+  /* ===== 结算 ===== */
+  /* 不用 backdrop-filter：部分 WebView / 无 GPU 环境下它会把整层遮罩渲染成白色，
+     结算面板后面白花花一片。纯色遮罩效果一样，还更省电。 */
+  .over{position:fixed;inset:0;background:rgba(8,12,18,.82);display:none;
+        align-items:center;justify-content:center;padding:22px;z-index:20}
+  .over.on{display:flex}
+  .panel{
+    width:100%;max-width:330px;text-align:center;
+    background:linear-gradient(180deg,#1d2534,#161c26);
+    border:1px solid var(--line);border-radius:20px;padding:22px 18px 14px;
+    box-shadow:0 22px 60px rgba(0,0,0,.6);animation:panelIn .26s cubic-bezier(.2,1.3,.5,1);
+  }
+  @keyframes panelIn{from{transform:translateY(14px) scale(.96);opacity:0}to{transform:none;opacity:1}}
+  .panel h2{margin:0 0 4px;font-size:20px;letter-spacing:1px}
+  .panel .sub2{font-size:12px;color:var(--dim);margin-bottom:14px}
+  .panel .big{font-size:42px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums;
+              color:var(--hot);text-shadow:0 0 22px rgba(255,212,94,.35)}
+  .panel .unit{font-size:11px;color:var(--dim);letter-spacing:3px;margin:2px 0 14px}
+  .rows{display:flex;gap:8px;margin-bottom:14px}
+  .rows div{flex:1;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:11px;padding:8px 4px}
+  .rows b{display:block;font-size:15px;font-variant-numeric:tabular-nums}
+  .rows span{display:block;font-size:10px;color:var(--dim);margin-top:2px}
+  .rows div.rec{border-color:rgba(255,212,94,.45);background:rgba(255,212,94,.08)}
+  .rows div.rec b{color:var(--hot)}
+  .panel .rule{background:rgba(91,140,255,.07);border:1px dashed rgba(91,140,255,.32);
+               border-radius:10px;padding:8px 10px;font-size:11.5px;color:#a9bbe0;line-height:1.7;margin:0 0 14px}
+  .panel .rule b{color:#cfdcff}
+  .panel button{width:100%;font:inherit;font-size:15px;padding:13px;border-radius:12px;
+                border:1px solid var(--line);background:var(--card2);color:var(--txt);margin-bottom:8px}
+  .panel button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+  .panel button:active{filter:brightness(.94)}
+
+  /* ===== 撒花 / 提示条 ===== */
+  #confetti{position:fixed;inset:0;pointer-events:none;z-index:15;overflow:hidden}
+  .cf{position:absolute;top:0;width:9px;height:13px;border-radius:2px;opacity:0;
+      animation:fall 1.7s cubic-bezier(.22,.52,.5,1) forwards}
+  @keyframes fall{
+    0%{transform:translate3d(0,-14vh,0) rotate(0deg);opacity:1}
+    100%{transform:translate3d(var(--dx,0),108vh,0) rotate(var(--rot,540deg));opacity:.15}
+  }
+  /* 提示条放在棋盘下方：压在数据条上会挡住「步数 / 用时」，看着像出错了 */
+  #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 78px);
+         transform:translate(-50%,10px);
+         background:#20262fee;border:1px solid var(--line);padding:10px 16px;border-radius:11px;
+         font-size:13px;opacity:0;transition:opacity .2s ease,transform .2s ease;pointer-events:none;
+         z-index:30;max-width:86vw;text-align:center}
+  #toast.on{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="/" aria-label="返回">‹</a>
+  <h1>数字华容道</h1>
+  <div class="sizes" id="sizes">
+    <button type="button" data-n="3">3×3</button>
+    <button type="button" data-n="4">4×4</button>
+    <button type="button" data-n="5">5×5</button>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><b id="stTime">0:00</b><span>用时</span></div>
+  <div class="stat"><b id="stMoves">0</b><span>步数</span></div>
+  <div class="stat"><b id="stBest">—</b><span>最少步数</span></div>
+</div>
+
+<div id="wrap">
+  <div id="board">
+    <div class="ghost" id="ghost"></div>
+  </div>
+</div>
+
+<div class="bar">
+  <button type="button" id="btnNew">🔄 重新打乱</button>
+  <button type="button" id="btnPeek">👁 看目标</button>
+  <button type="button" id="btnSound" aria-label="音效开关">🔊</button>
+</div>
+
+<div class="over" id="over"><div class="panel">
+  <h2>拼好啦！</h2>
+  <div class="sub2" id="overSub">3×3 · 8 块</div>
+  <div class="big" id="overTime">0:00</div>
+  <div class="unit">用 时</div>
+  <div class="rows">
+    <div id="rowMoves"><b id="overMoves">0</b><span>本局步数</span></div>
+    <div id="rowBest"><b id="overBest">—</b><span>最少步数</span></div>
+    <div id="rowFast"><b id="overFast">—</b><span>最快用时</span></div>
+  </div>
+  <div class="rule">玩法：把数字按 <b>1 2 3 …</b> 从上到下、从左到右排好<br>
+    点空格旁边的块，它就滑进空格 · 点同一行/列<b>更远</b>的块，中间那排会一起滑过去</div>
+  <button class="pri" type="button" id="overAgain">再来一局</button>
+  <button type="button" id="overSize">换个尺寸 ›</button>
+</div></div>
+
+<div id="confetti"></div>
+<div id="toast"></div>
+
+<script>
+(function(){
+  'use strict';
+  /* ============================================================================
+     数字华容道（15-puzzle / 滑块拼图）
+
+     玩法（经典规则，不自行加机制）：
+       · N×N 格，放 1 ~ N²-1，剩一格是空的
+       · 点与空格同行 / 同列的块 → 整段滑向空格（中间那几块一起走，每块算 1 步）
+       · 排成 1 2 3 … 顺序（最后一个是空格）即完成
+       · 打乱方式：从「已完成」状态倒着随机走合法步 → **保证一定能解开**
+         （不用随机排列，那种有一半概率无解，玩家会玩到怀疑人生）
+
+     ★ 本项目已知的坑（见 tools/shot.sh 注释）：
+       · 不用 WAAPI（element.animate）—— 无头 Chrome 的虚拟时间不推进合成动画
+       · CSS transition 在虚拟时间下也不推进，截图验证时要注入 `*{transition:none!important}`
+       · 所以这里的状态推进全靠「改 CSS 变量让过渡自己播」，没有一处依赖 rAF
+     ========================================================================== */
+
+  var $ = function(id){ return document.getElementById(id); };
+
+  /* ---------- 存档 ---------- */
+  var BEST_KEY = 'gslide_best_v1';   // {"3":{moves,time},"4":…} —— 名字改了就丢玩家记录，锁死
+  var SND_KEY  = 'gslide_sound';
+  var N_KEY    = 'gslide_n';
+
+  function loadJSON(k, dflt){
+    try{
+      var raw = localStorage.getItem(k);
+      if(!raw) return dflt;
+      var v = JSON.parse(raw);
+      return (v && typeof v === 'object') ? v : dflt;
+    }catch(e){ return dflt; }
+  }
+  function saveJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+
+  var best = loadJSON(BEST_KEY, {});
+
+  /* ---------- 状态 ---------- */
+  var N = 3;                 // 当前边长（默认 3×3：给小孩的第一档）
+  var vals = [];             // 长度 N*N；值是 1..N²-1，0 表示空格
+  var emptyR = 0, emptyC = 0;
+  var tiles = {};            // 值 → DOM 元素（数字唯一，直接拿值当 key 最省事）
+  var moves = 0;
+  var t0 = 0;                // 第一次移动的时刻（0 = 还没开始）
+  var elapsed = 0;
+  var clockId = 0, running = false, done = false;
+  var soundOn = true, fieldSeed = 1, rng = Math.random;
+
+  var boardEl = $('board'), ghostEl = $('ghost'), wrapEl = $('wrap');
+
+  try{
+    var nRaw = parseInt(localStorage.getItem(N_KEY) || '', 10);
+    if(nRaw === 3 || nRaw === 4 || nRaw === 5) N = nRaw;
+  }catch(e){}
+  try{ soundOn = localStorage.getItem(SND_KEY) !== '0'; }catch(e){}
+
+  /* ============================================================
+     随机（可复现：种子相同 → 局面相同，测试才有意义）
+     ============================================================ */
+  function mulberry32(a){
+    return function(){
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  /* ============================================================
+     棋盘
+     ============================================================ */
+  function idx(r, c){ return r * N + c; }
+  function isHome(v, r, c){ return v > 0 && (idx(r, c) === v - 1); }
+
+  /** 目标排列：1..N²-1 顺序铺开，右下角是空格 */
+  function solvedVals(){
+    var a = [];
+    for(var i = 1; i < N * N; i++) a.push(i);
+    a.push(0);
+    return a;
+  }
+  function isSolved(){
+    for(var i = 0; i < N * N - 1; i++){ if(vals[i] !== i + 1) return false; }
+    return vals[N * N - 1] === 0;
+  }
+
+  /** 走一步「把 (r,c) 的块搬进空格」（只有相邻时合法）—— 不记步数、不触发判定 */
+  function shift(r1, c1, r2, c2){
+    var a = idx(r1, c1), b = idx(r2, c2);
+    var v = vals[a];
+    vals[b] = v; vals[a] = 0;
+    if(tiles[v]) place(tiles[v], r2, c2);
+  }
+
+  /**
+   * 打乱：从已完成状态倒着随机走。
+   * · 排除「立刻原路退回」——否则外圈来回蹭，看起来像没打乱
+   * · 走完检查曼哈顿距离，太近就再走一轮（3×3 至少要看起来乱）
+   */
+  function scramble(seed){
+    fieldSeed = (seed === undefined) ? ((Math.random() * 1e9) | 0) : seed;
+    rng = mulberry32(fieldSeed);
+    vals = solvedVals();
+    emptyR = N - 1; emptyC = N - 1;
+
+    var lastPos = -1;                       // 上一步被搬的块现在待的位置（防止原地来回）
+    var steps = N * N * 16 + 40;
+    var guard = 0;
+    do{
+      for(var i = 0; i < steps; i++){
+        var cand = [];
+        if(emptyR > 0)     cand.push([emptyR - 1, emptyC]);
+        if(emptyR < N - 1) cand.push([emptyR + 1, emptyC]);
+        if(emptyC > 0)     cand.push([emptyR, emptyC - 1]);
+        if(emptyC < N - 1) cand.push([emptyR, emptyC + 1]);
+        cand = cand.filter(function(p){ return idx(p[0], p[1]) !== lastPos; });
+        var p = cand[Math.floor(rng() * cand.length)];
+        lastPos = idx(emptyR, emptyC);      // 被搬的块将落到当前空格处
+        shift(p[0], p[1], emptyR, emptyC);
+        emptyR = p[0]; emptyC = p[1];
+      }
+      guard++;
+    }while((isSolved() || manhattan() < N * N * 0.9) && guard < 12);
+  }
+
+  /** 每个块离自己家还有几格（打乱是否够乱的度量） */
+  function manhattan(){
+    var d = 0;
+    for(var r = 0; r < N; r++) for(var c = 0; c < N; c++){
+      var v = vals[idx(r, c)];
+      if(!v) continue;
+      d += Math.abs(r - Math.floor((v - 1) / N)) + Math.abs(c - (v - 1) % N);
+    }
+    return d;
+  }
+
+  /** 元素位置 → CSS 变量（只动 transform，过渡自己播） */
+  function place(el, r, c){
+    el.dataset.r = r; el.dataset.c = c;
+    el.style.setProperty('--r', r);
+    el.style.setProperty('--c', c);
+    el.classList.toggle('ok', isHome(+el.dataset.v, r, c));
+  }
+
+  function buildTiles(){
+    var old = boardEl.querySelectorAll('.tile');
+    for(var i = 0; i < old.length; i++) boardEl.removeChild(old[i]);
+    tiles = {};
+    boardEl.style.setProperty('--n', N);
+    for(var v = 1; v < N * N; v++){
+      var el = document.createElement('div');
+      el.className = 'tile' + (v >= 10 ? ' d2' : '');
+      el.dataset.v = v;
+      var face = document.createElement('div');
+      face.className = 'face';
+      face.textContent = String(v);
+      el.appendChild(face);
+      /* ★ 先摆好位置再插进 DOM：反过来写的话元素会先以 (0,0) 渲染一帧，
+         再「从左上角飞过去」，开局像撒了一把牌。 */
+      var i0 = vals.indexOf(v);
+      place(el, Math.floor(i0 / N), i0 % N);
+      boardEl.appendChild(el);
+      tiles[v] = el;
+    }
+    buildSlots();
+    buildGhost();
+  }
+
+  /** 凹槽层：N² 个暗格，空格那个就是「洞」（纯装饰，不接事件） */
+  function buildSlots(){
+    var old = boardEl.querySelectorAll('.slot');
+    for(var i = 0; i < old.length; i++) boardEl.removeChild(old[i]);
+    boardEl.style.setProperty('--n', N);
+    for(var j = 0; j < N * N; j++){
+      var el = document.createElement('div');
+      el.className = 'slot';
+      el.style.setProperty('--r', Math.floor(j / N));
+      el.style.setProperty('--c', j % N);
+      el.appendChild(document.createElement('i'));
+      boardEl.appendChild(el);
+    }
+  }
+
+  /** 看目标用的虚线层（固定摆成目标排列，纯展示，不参与交互） */
+  function buildGhost(){
+    while(ghostEl.firstChild) ghostEl.removeChild(ghostEl.firstChild);
+    ghostEl.style.setProperty('--n', N);
+    for(var i = 0; i < N * N - 1; i++){
+      var g = document.createElement('div');
+      g.className = 'gtile';
+      g.style.setProperty('--r', Math.floor(i / N));
+      g.style.setProperty('--c', i % N);
+      var s = document.createElement('i');
+      s.textContent = String(i + 1);
+      g.appendChild(s);
+      ghostEl.appendChild(g);
+    }
+  }
+
+  /* ============================================================
+     移动
+     ============================================================ */
+  /**
+   * 点 (r,c) 的块：与空格同行 / 同列就整段滑过去，返回移动的块数（0 = 没动）。
+   * 为什么支持「整段滑」：手机上点 15 次才能把一个块挪到底很难受；
+   * 而一推一排本来就是华容道实体玩具的手感。
+   */
+  function tryMove(r, c){
+    if(done) return 0;
+    if(r < 0 || r >= N || c < 0 || c >= N) return 0;
+    if(r === emptyR && c === emptyC) return 0;
+
+    var before = homeCount();
+    var cnt = 0, x, y;
+
+    if(r === emptyR){
+      if(c < emptyC){ for(x = emptyC - 1; x >= c; x--){ shift(r, x, r, x + 1); cnt++; } }
+      else          { for(x = emptyC + 1; x <= c; x++){ shift(r, x, r, x - 1); cnt++; } }
+    }else if(c === emptyC){
+      if(r < emptyR){ for(y = emptyR - 1; y >= r; y--){ shift(y, c, y + 1, c); cnt++; } }
+      else          { for(y = emptyR + 1; y <= r; y++){ shift(y, c, y - 1, c); cnt++; } }
+    }else{
+      sndBlocked();                        // 不在同一行/列，推不动 —— 给个闷响，别让人以为没点中
+      return 0;
+    }
+
+    if(!cnt) return 0;
+    emptyR = r; emptyC = c;
+    moves += cnt;
+
+    if(!t0){ t0 = Date.now(); startClock(); }     // ★ 第一次有效移动才开始计时
+    var after = homeCount();
+    if(after > before) sndHome(); else sndSlide();
+    updateHUD();
+
+    if(isSolved()) finish();
+    return cnt;
+  }
+
+  function homeCount(){
+    var n = 0;
+    for(var r = 0; r < N; r++) for(var c = 0; c < N; c++){
+      var v = vals[idx(r, c)];
+      if(v && isHome(v, r, c)) n++;
+    }
+    return n;
+  }
+
+  /** 手势方向 → 把「空格反方向的那块」推过来（整盘滑动，像 2048 一样不用瞄准） */
+  function swipe(dir){
+    if(dir === 'up')         return tryMove(emptyR + 1, emptyC);
+    if(dir === 'down')       return tryMove(emptyR - 1, emptyC);
+    if(dir === 'left')       return tryMove(emptyR, emptyC + 1);
+    if(dir === 'right')      return tryMove(emptyR, emptyC - 1);
+    return 0;
+  }
+
+  /* ============================================================
+     计时 / 面板
+     ============================================================ */
+  function fmt(ms){
+    var s = Math.max(0, Math.floor(ms / 1000));
+    var m = Math.floor(s / 60);
+    var ss = s % 60;
+    return m + ':' + (ss < 10 ? '0' : '') + ss;
+  }
+  function startClock(){
+    if(clockId) return;
+    running = true;
+    clockId = setInterval(function(){
+      if(!t0) return;
+      elapsed = Date.now() - t0;
+      updateHUD();
+    }, 200);
+  }
+  function stopClock(){
+    if(clockId){ clearInterval(clockId); clockId = 0; }
+    running = false;
+  }
+
+  function updateHUD(){
+    $('stTime').textContent = fmt(elapsed);
+    $('stMoves').textContent = String(moves);
+    var b = best[N];
+    $('stBest').textContent = (b && b.moves) ? (b.moves + ' 步') : '—';
+  }
+
+  function finish(){
+    done = true;
+    if(t0) elapsed = Date.now() - t0;
+    stopClock();
+    updateHUD();
+
+    var b = best[N] || {};
+    var newMoves = !b.moves || moves < b.moves;
+    /* 0 秒不算记录（理论上玩不出 0 秒，除非整局只差一步；别让它把「最快用时」占成 0:00） */
+    var newTime  = elapsed > 0 && (!b.time || elapsed < b.time);
+    if(newMoves) b.moves = moves;
+    if(newTime)  b.time  = elapsed;
+    best[N] = b;
+    saveJSON(BEST_KEY, best);
+    updateHUD();
+
+    boardEl.classList.add('won');
+    confetti();
+    sndWin();
+    // 先让孩子看 0.9 秒的金闪，再盖面板
+    setTimeout(function(){ showPanel(newMoves, newTime); }, 900);
+  }
+
+  function showPanel(newMoves, newTime){
+    $('overSub').textContent = N + '×' + N + ' · ' + (N * N - 1) + ' 块';
+    $('overTime').textContent = fmt(elapsed);
+    $('overMoves').textContent = String(moves);
+    var b = best[N] || {};
+    $('overBest').textContent = b.moves ? (b.moves + ' 步') : '—';
+    $('overFast').textContent = b.time ? fmt(b.time) : '—';
+    $('rowMoves').classList.toggle('rec', !!newMoves);
+    $('rowFast').classList.toggle('rec', !!newTime);
+    $('over').classList.add('on');
+  }
+
+  function confetti(){
+    var box = $('confetti');
+    var colors = ['#ffd45e','#38d39f','#5b8cff','#ff7a8a','#ffa653','#a78bfa'];
+    for(var i = 0; i < 36; i++){
+      var s = document.createElement('span');
+      s.className = 'cf';
+      s.style.left = (Math.random() * 100).toFixed(1) + '%';
+      s.style.background = colors[i % colors.length];
+      s.style.setProperty('--dx', (Math.random() * 120 - 60).toFixed(0) + 'px');
+      s.style.setProperty('--rot', (Math.random() * 900 - 450).toFixed(0) + 'deg');
+      s.style.animationDelay = (Math.random() * 0.35).toFixed(2) + 's';
+      box.appendChild(s);
+    }
+    setTimeout(function(){ while(box.firstChild) box.removeChild(box.firstChild); }, 2400);
+  }
+
+  /* ============================================================
+     音效（现场合成，不带任何音频文件）
+     ============================================================ */
+  var ac = null;
+  function audio(){
+    if(ac === null){
+      var C = window.AudioContext || window.webkitAudioContext;
+      try{ ac = C ? new C() : false; }catch(e){ ac = false; }
+    }
+    if(ac && ac.state === 'suspended'){ try{ ac.resume(); }catch(e){} }
+    return ac || null;
+  }
+  function tone(freq, dur, opt){
+    var o = opt || {};
+    if(!soundOn) return;
+    try{
+      var c = audio(); if(!c) return;
+      var t = c.currentTime + (o.at || 0);
+      var osc = c.createOscillator(), g = c.createGain();
+      osc.type = o.type || 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+      if(o.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, o.to), t + dur);
+      var vol = (o.gain === undefined) ? 0.09 : o.gain;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(g); g.connect(c.destination);
+      osc.start(t); osc.stop(t + dur + 0.03);
+    }catch(e){}
+  }
+  function sndSlide(){ tone(340, 0.07, { type:'triangle', gain:0.055, to:520 }); }
+  function sndHome(){ tone(880, 0.11, { type:'sine', gain:0.05 }); }
+  function sndBlocked(){ tone(112, 0.12, { type:'sine', gain:0.05, to:78 }); }
+  function sndClick(){ tone(660, 0.06, { type:'sine', gain:0.05 }); }
+  function sndWin(){
+    var notes = [523, 659, 784, 1047, 1319];
+    for(var i = 0; i < notes.length; i++) tone(notes[i], 0.28, { type:'triangle', gain:0.1, at:i * 0.1 });
+  }
+
+  /* ============================================================
+     布局：棋盘永远是正方形，边长取舞台的短边
+     ============================================================ */
+  function layout(){
+    var w = wrapEl.clientWidth, h = wrapEl.clientHeight;
+    if(!w || !h) return;
+    var side = Math.floor(Math.min(w, h));
+    if(side < 120) side = Math.min(w, h);
+    boardEl.style.width = side + 'px';
+    boardEl.style.height = side + 'px';
+    boardEl.style.setProperty('--cell', (side / N).toFixed(2) + 'px');
+  }
+
+  /* ============================================================
+     新局
+     ============================================================ */
+  function newGame(n, seed){
+    if(n && n !== N){ N = n; try{ localStorage.setItem(N_KEY, String(N)); }catch(e){} }
+    moves = 0; elapsed = 0; t0 = 0; done = false;
+    stopClock();
+    $('over').classList.remove('on');
+    boardEl.classList.remove('won');
+    ghostEl.classList.remove('on');
+    scramble(seed);
+    buildTiles();
+    layout();
+    updateHUD();
+    paintSizes();
+  }
+
+  function paintSizes(){
+    var btns = $('sizes').querySelectorAll('button');
+    for(var i = 0; i < btns.length; i++){
+      btns[i].classList.toggle('on', parseInt(btns[i].dataset.n, 10) === N);
+    }
+  }
+
+  /* ============================================================
+     输入
+     ============================================================ */
+  var active = new Map();
+  var SWIPE_MIN = 22;
+
+  /** 从点击目标往上找 .tile。老 WebView 没有 closest，所以自己爬 parentNode ——
+      直接 return null 的话「点一下就滑」在旧机型上会整个失效，只剩滑动能用。 */
+  function closestTile(t){
+    var n = t;
+    for(var guard = 0; n && guard < 8; guard++){
+      if(n.classList && n.classList.contains('tile')) return n;
+      if(n.dataset && n.dataset.v) return n;
+      n = n.parentNode;
+    }
+    return null;
+  }
+  function onDown(id, x, y, target){
+    active.set(id, { x:x, y:y, tile:closestTile(target) });
+  }
+  function onUp(id, x, y){
+    var s = active.get(id);
+    if(!s) return;
+    active.delete(id);
+    var dx = x - s.x, dy = y - s.y;
+    if(Math.max(Math.abs(dx), Math.abs(dy)) >= SWIPE_MIN){
+      swipe(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+      return;
+    }
+    if(s.tile){
+      var r = parseInt(s.tile.dataset.r, 10), c = parseInt(s.tile.dataset.c, 10);
+      if(isNaN(r) || isNaN(c)){
+        var v = parseInt(s.tile.dataset.v, 10);
+        var i = vals.indexOf(v);
+        r = Math.floor(i / N); c = i % N;
+      }
+      tryMove(r, c);
+    }
+  }
+
+  function bindInput(){
+    boardEl.addEventListener('pointerdown', function(e){
+      e.preventDefault();
+      onDown(e.pointerId, e.clientX, e.clientY, e.target);
+    }, { passive:false });
+    window.addEventListener('pointerup', function(e){
+      onUp(e.pointerId, e.clientX, e.clientY);
+    });
+    window.addEventListener('pointercancel', function(e){
+      onUp(e.pointerId, e.clientX, e.clientY);
+    });
+
+    /* ★ 只有「没有 PointerEvent」的老 WebView 才绑 Touch —— 两套一起绑会重复触发：
+       touchstart 和 pointerdown 各存一条起点，抬手时各判一次，等于一次点击滑两步。
+       （支持 Pointer 的浏览器上 touch 事件照样会来，光靠 preventDefault 拦不住。） */
+    if(!window.PointerEvent){
+      boardEl.addEventListener('touchstart', function(e){
+        e.preventDefault();
+        for(var i = 0; i < e.changedTouches.length; i++){
+          var q = e.changedTouches[i];
+          onDown(q.identifier, q.clientX, q.clientY, q.target || e.target);
+        }
+      }, { passive:false });
+      window.addEventListener('touchend', function(e){
+        for(var i = 0; i < e.changedTouches.length; i++){
+          var q = e.changedTouches[i];
+          onUp(q.identifier, q.clientX, q.clientY);
+        }
+      });
+      window.addEventListener('touchcancel', function(e){
+        for(var i = 0; i < e.changedTouches.length; i++){
+          var q = e.changedTouches[i];
+          onUp(q.identifier, q.clientX, q.clientY);
+        }
+      });
+    }
+
+    document.addEventListener('keydown', function(e){
+      var k = e.key;
+      if(k === 'ArrowUp' || k === 'w' || k === 'W'){ tryMove(emptyR + 1, emptyC); e.preventDefault(); }
+      else if(k === 'ArrowDown' || k === 's' || k === 'S'){ tryMove(emptyR - 1, emptyC); e.preventDefault(); }
+      else if(k === 'ArrowLeft' || k === 'a' || k === 'A'){ tryMove(emptyR, emptyC + 1); e.preventDefault(); }
+      else if(k === 'ArrowRight' || k === 'd' || k === 'D'){ tryMove(emptyR, emptyC - 1); e.preventDefault(); }
+      else if(k === 'r' || k === 'R'){ sndClick(); newGame(N); }
+    });
+  }
+
+  /* ============================================================
+     按钮
+     ============================================================ */
+  $('btnNew').addEventListener('click', function(){ sndClick(); newGame(N); });
+  $('btnPeek').addEventListener('click', function(){
+    sndClick();
+    ghostEl.classList.add('on');
+    clearTimeout(peekTimer);
+    peekTimer = setTimeout(function(){ ghostEl.classList.remove('on'); }, 1400);
+    toast('把数字排成这样 ↑');
+  });
+  var peekTimer = 0;
+
+  $('btnSound').addEventListener('click', function(){
+    soundOn = !soundOn;
+    try{ localStorage.setItem(SND_KEY, soundOn ? '1' : '0'); }catch(e){}
+    paintSound();
+    if(soundOn) sndClick();
+    toast(soundOn ? '音效已开' : '音效已关');
+  });
+  function paintSound(){ $('btnSound').textContent = soundOn ? '🔊' : '🔇'; }
+
+  $('sizes').addEventListener('click', function(e){
+    var b = e.target;
+    if(!b || !b.dataset || !b.dataset.n) return;
+    var n = parseInt(b.dataset.n, 10);
+    if(n === N) return;
+    sndClick();
+    newGame(n);
+    toast(n + '×' + n + ' · ' + (n * n - 1) + ' 块，重新打乱');
+  });
+
+  $('overAgain').addEventListener('click', function(){
+    sndClick();
+    $('over').classList.remove('on');
+    newGame(N);
+  });
+  $('overSize').addEventListener('click', function(){
+    sndClick();
+    $('over').classList.remove('on');
+    var order = [3, 4, 5];
+    var next = order[(order.indexOf(N) + 1) % order.length];
+    newGame(next);
+    toast('换成 ' + next + '×' + next);
+  });
+
+  var toastTimer = 0;
+  function toast(msg){
+    var t = $('toast');
+    t.textContent = msg;
+    t.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ t.classList.remove('on'); }, 1600);
+  }
+
+  /* ============================================================
+     启动
+     ============================================================ */
+  bindInput();
+  paintSound();
+  newGame(N);
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', function(){ setTimeout(layout, 250); });
+
+  /* 第一次来的人不知道「点哪」—— 只提示一次，之后不再打扰 */
+  try{
+    if(!localStorage.getItem('gslide_hint')){
+      localStorage.setItem('gslide_hint', '1');
+      setTimeout(function(){ toast('点空格旁边的数字，它就滑过去'); }, 700);
+    }
+  }catch(e){}
+
+  /* ============================================================
+     测试钩子（tools/test_slidepuzzle.js 靠这些跑逻辑，不模拟点击）
+     ============================================================ */
+  window.__gs = function(){
+    return {
+      N: N, vals: vals.slice(), empty: { r: emptyR, c: emptyC },
+      moves: moves, elapsed: elapsed, running: running, done: done,
+      t0: t0, seed: fieldSeed, soundOn: soundOn,
+      homes: homeCount(), solved: isSolved(), manhattan: manhattan(),
+      best: JSON.parse(JSON.stringify(best)),
+      boardW: boardEl.style.width, cell: boardEl.style.getPropertyValue('--cell'),
+      tileCount: boardEl.querySelectorAll('.tile').length,
+    };
+  };
+  window.__gsNew = function(n, seed){ newGame(n, seed); return window.__gs(); };
+  window.__gsMove = function(r, c){ return tryMove(r, c); };
+  window.__gsSwipe = function(dir){ return swipe(dir); };
+  window.__gsTap = function(v){
+    var el = tiles[v];
+    if(!el) return 0;
+    return tryMove(parseInt(el.dataset.r, 10), parseInt(el.dataset.c, 10));
+  };
+  window.__gsSolved = isSolved;
+  window.__gsHome = homeCount;
+  /**
+   * 测试用：直接摆一个局面（arr 按行铺开，0 = 空格）。
+   * keepClock=true 时保留计时起点（构造「已经玩了一会儿、再拼完」的场景），否则当新局从头算。
+   * ★ done 一定要跟着清：不清的话摆完局面还是「已结束」，怎么点都不动。
+   */
+  window.__gsSet = function(arr, keepClock){
+    done = false;
+    moves = 0;
+    boardEl.classList.remove('won');
+    if(!keepClock){ t0 = 0; elapsed = 0; stopClock(); }
+    vals = arr.slice();
+    for(var i = 0; i < vals.length; i++){
+      if(vals[i] === 0){ emptyR = Math.floor(i / N); emptyC = i % N; }
+    }
+    for(var r = 0; r < N; r++) for(var c = 0; c < N; c++){
+      var v = vals[idx(r, c)];
+      if(v && tiles[v]) place(tiles[v], r, c);
+    }
+    updateHUD();
+    return true;
+  };
+  window.__gsTick = function(ms){ elapsed = ms; updateHUD(); return elapsed; };
+  window.__gsConst = function(){ return { SWIPE_MIN: SWIPE_MIN, N_KEY: N_KEY, BEST_KEY: BEST_KEY, SND_KEY: SND_KEY }; };
+})();
+</script>
+</body>
+</html>
