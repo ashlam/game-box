@@ -56,6 +56,8 @@
   #table{
     position:relative;flex:0 0 auto;
     --cw:50px; --ch:74px;
+    /* 牌角上的点数：列被压得很紧时 render() 会把它调小，保证整颗数字露在外面 */
+    --rfs:calc(var(--cw) * .42);
     border-radius:15px;
     background:
       radial-gradient(120% 80% at 50% 0%,rgba(255,255,255,.05),transparent 60%),
@@ -100,12 +102,12 @@
   }
   .card .face .r{
     position:absolute;left:7%;top:2%;font-weight:800;line-height:1;
-    font-size:calc(var(--cw) * .42);letter-spacing:-.5px;
+    font-size:var(--rfs);letter-spacing:-.5px;
     font-variant-numeric:tabular-nums;
   }
   .card .face .s{
     position:absolute;right:6%;top:3%;line-height:1;
-    font-size:calc(var(--cw) * .33);
+    font-size:calc(var(--rfs) * .78);
   }
   .card .face .big{
     position:absolute;left:50%;top:54%;transform:translate(-50%,-50%);
@@ -1429,9 +1431,26 @@ function layout(){
   if(CW > 62) CW = 62;
   if(CW < 24) CW = 24;
   CH = Math.round(CW * 1.48);
-  COL_TOP = TOPPAD + CH + GAP * 2;
-
   AVAIL_H = Math.max(CH * 2 + 40, table.parentNode.clientHeight || 520);
+
+  /* 竖向真的放不下时（手机横过来那种扁窗口），把牌整张等比缩小 ——
+     最坏的一列是 19 张（6 张扣着 + K 到 A 一整套）。竖屏不会走到这条分支。 */
+  function worstAt(ch){
+    var g2 = GAP * 2;
+    var d = Math.max(4, Math.round(ch * 0.075));
+    var u = Math.max(8, Math.round(ch * 0.145));
+    return (TOPPAD + ch + g2) + ch + 6 * d + 12 * u + g2 + TOPPAD;
+  }
+  if(worstAt(CH) > AVAIL_H){
+    var lo = 30, hi = CH, mid;
+    while(lo < hi){                       /* 二分：找还塞得下的最大牌高 */
+      mid = Math.ceil((lo + hi) / 2);
+      if(worstAt(mid) <= AVAIL_H) lo = mid; else hi = mid - 1;
+    }
+    CH = Math.max(30, lo);
+    CW = Math.max(18, Math.round(CH / 1.48));
+  }
+  COL_TOP = TOPPAD + CH + GAP * 2;
 
   table.style.width = (CW * 7 + GAP * 6 + PAD * 2) + 'px';
   table.style.setProperty('--cw', CW + 'px');
@@ -1443,34 +1462,60 @@ function layout(){
   });
 }
 
-/* 叠放间距：明牌要留出角上的点数（否则一压就看不见是什么牌），
- * 列太长时整体压缩，保证最长的那列能全塞进屏幕。 */
+/* 一列占多高：顶上那张整张露出来，下面每张只露一条。
+ * up 可能等于 len（整列扣着，一张明牌都没有），这时不该再算明牌那条缝。 */
+function colHeight(i, d, u){
+  var len = G.tab[i].length;
+  if(!len) return 0;
+  var down = G.up[i] < len ? G.up[i] : len;
+  var face = len - down;
+  return CH + down * d + (face > 0 ? (face - 1) * u : 0);
+}
+
+/* 叠放间距：明牌要留出角上的点数（否则一压就看不见是什么牌），暗牌只要露道边能数清张数。
+ * 列太长时按「先压暗牌、再压明牌」的顺序让步 —— 暗牌被盖住不损失信息，明牌压一分就少看一分。
+ * 硬指标是**最长的那列必须塞进牌桌**：19 张（初始 6 张扣着的 + K 到 A 一整套）是上限。
+ * 竖屏够高，光靠压缝就能放下；真压不下的扁窗口，layout() 会先把整张牌缩小。 */
 function calcOffsets(){
-  var d = Math.round(CH * 0.20);
-  var u = Math.round(CH * 0.31);
-  var room = AVAIL_H - COL_TOP - GAP * 2;
-  var need = 0, i, n, h;
+  var dMax = Math.round(CH * 0.20);
+  var uMax = Math.round(CH * 0.31);
+  var dMin = Math.max(4, Math.round(CH * 0.075));
+  var uMin = Math.max(8, Math.round(CH * 0.145));
+  var room = AVAIL_H - COL_TOP - GAP * 2 - TOPPAD;
+
+  /* t 从 0 走到 1：0 是最松的间距，1 是压到极限。暗牌两倍速先到底 */
+  function at(t){
+    var td = Math.min(1, t * 2);
+    return {
+      d: Math.round(dMax - (dMax - dMin) * td),
+      u: Math.round(uMax - (uMax - uMin) * t),
+    };
+  }
 
   function tallest(dd, uu){
-    var m = 0;
+    var m = CH;
     for(var k = 0; k < 7; k++){
-      var len = G.tab[k].length;
-      if(!len) continue;
-      var hh = CH + G.up[k] * dd + (len - G.up[k] - 1) * uu;
+      var hh = colHeight(k, dd, uu);
       if(hh > m) m = hh;
     }
     return m;
   }
 
-  need = tallest(d, u);
-  if(need > room && need > CH){
-    var f = (room - CH) / (need - CH);
-    if(f < 0) f = 0;
-    if(f > 1) f = 1;
-    d = Math.max(5, Math.round(d * f));
-    u = Math.max(Math.round(CH * 0.16), Math.round(u * f));
+  var o = at(0);
+  if(tallest(o.d, o.u) <= room) return o;
+
+  var tightest = at(1);
+  if(tallest(tightest.d, tightest.u) > room) return tightest;   /* 压到底也放不下，只能这样 */
+
+  /* 二分找个最松的可行间距：能松一点就松一点，别一上来就压死 */
+  var lo = 0, hi = 1, mid, best = tightest;
+  for(var n = 0; n < 14; n++){
+    mid = (lo + hi) / 2;
+    o = at(mid);
+    if(tallest(o.d, o.u) <= room){ hi = mid; best = o; }
+    else lo = mid;
   }
-  return { d:d, u:u };
+  return best;
 }
 
 function render(){
@@ -1479,13 +1524,17 @@ function render(){
   DOFF = dOff; UOFF = uOff;
 
   /* 最长那列的落脚点 */
-  var tallest = CH, i, k, n;
+  var tallest = CH, i, k;
   for(i = 0; i < 7; i++){
-    n = G.tab[i].length;
-    if(!n) continue;
-    var hh = CH + G.up[i] * dOff + (n - G.up[i] - 1) * uOff;
+    var hh = colHeight(i, dOff, uOff);
     if(hh > tallest) tallest = hh;
   }
+  /* 明牌被压得很紧时，角上的点数也跟着缩：露出 10px 却用 20px 的字，
+     等于只能看到字的上半截。字号不超过「明牌露出的那条」的高度就好。 */
+  var rfs = Math.round(CW * 0.42);
+  if(Math.round(uOff * 1.15) < rfs) rfs = Math.max(10, Math.round(uOff * 1.15));
+  table.style.setProperty('--rfs', rfs + 'px');
+
   /* 牌桌高度：内容高 + 一圈余量，再和可用高度的 62% 取大。
      太贴合会像在纯黑背景上漂着一块牌子，铺满又会在下面留一大片空绿布 */
   var needH = COL_TOP + tallest + GAP * 2 + TOPPAD;
@@ -2074,6 +2123,7 @@ window.__kl = {
   abortDrag: abortDrag,
   geom: function(){ return { CW:CW, CH:CH, GAP:GAP, PAD:PAD, TOPPAD:TOPPAD,
                             COL_TOP:COL_TOP, TABLE_H:TABLE_H, DOFF:DOFF, UOFF:UOFF }; },
+  colHeight: colHeight,
   setState: function(o){
     G.tab = o.tab || [[],[],[],[],[],[],[]];
     while(G.tab.length < 7) G.tab.push([]);
