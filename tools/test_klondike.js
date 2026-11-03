@@ -1089,15 +1089,17 @@ section('16) 收牌堆从左到右是 ♦ ♣ ♥ ♠');
 }
 
 /* ================= 17) 扣分确认 ================= */
-section('17) 扣分确认：牌桌底部的小卡片，不是全屏不透明弹窗');
+section('17) 扣分确认：屏幕中间的半透明小卡片，不是全屏不透明弹窗');
 {
   ok(/<div class="ask" id="askPanel">/.test(html), '★ 有自己的确认卡片，没去复用全屏弹窗 .over');
   ok(/\.ask\.on\{display:flex\}/.test(html), '显示 / 隐藏靠 .on 切换');
   const m = /\.ask\{[^}]*?background:rgba\(8,12,18,\.(\d+)\)/.exec(html);
   const alpha = m ? Number('0.' + m[1]) : 1;
   ok(!!m && alpha <= 0.45, '★ 遮罩是半透明的（alpha ' + alpha + ' ≤ 0.45），牌桌还看得见');
-  ok(/align-items:flex-end/.test(html.slice(html.indexOf('.ask{'), html.indexOf('.ask{') + 400)),
-     '卡片贴在底部滑出来（不是糊在整个屏幕上）');
+  const askCss = html.slice(html.indexOf('.ask{'), html.indexOf('.ask{') + 400);
+  ok(/align-items:center/.test(askCss) && /justify-content:center/.test(askCss),
+     '★ 卡片在屏幕正中（横竖都居中），不是贴着底边');
+  ok(!/align-items:flex-end/.test(askCss), '没有贴着底边那种滑出式定位');
 
   /* 从收牌堆拿回来：−15 */
   kl.setState({ found: [1, 0, 0, 0], tab: [[C(2, HEART)]], score: 100 });
