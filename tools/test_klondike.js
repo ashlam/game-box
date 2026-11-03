@@ -773,105 +773,126 @@ section('13b) 端到端：一张张翻着把 52 张全收完');
 }
 
 /* ================= 14) 自动完成 ================= */
-section('14) 自动完成：先认出「只剩时间问题」，再一张张收完');
+section('14) 自动完成：桌上全翻开才给按钮，然后一张张收光');
 {
-  const suitRun = s => { const a = []; for(let r = 13; r >= 1; r--) a.push(C(r, s)); return a; };
+  /* 四条 13 张的合法长龙（点数降序 + 红黑交替），正好用掉 52 张。
+     全翻开以后列里天然是合法的，不用额外摆 */
+  const dragons = [[SPADE, HEART], [HEART, SPADE], [DIAMOND, CLUB], [CLUB, DIAMOND]]
+    .map(([odd, even]) => {
+      const a = [];
+      for(let r = 13; r >= 1; r--) a.push(C(r, r % 2 ? odd : even));
+      return a;
+    });
+  const allUp = () => dragons.map(d => d.slice());
 
-  /* 一局刚开始：一半的牌还扣着，怎么也算不上「只剩收牌」 */
+  /* ---- 判定：只看「桌上还有没有扣着的牌」 ---- */
   kl.newGame(7, true);
-  ok(kl.simFinish() === false, '刚发完牌不会误判成「只剩收牌」');
+  ok(kl.noFaceDown() === false, '刚发完牌，桌上有扣着的牌');
+  ok(kl.updateAuto() === false, '这时候不给「自动完成」');
+  ok(byId.autoBtn.hidden === true, '按钮藏着');
 
-  /* 收牌堆收到 Q，桌上只剩 4 张 K —— 老纸牌里最典型的收尾 */
+  kl.setState({ tab: allUp(), up: [0, 0, 0, 0], stock: [], waste: [], found: [0, 0, 0, 0], score: 0, moves: 0 });
+  ok(kl.noFaceDown() === true, '52 张全翻开，没有扣着的');
+  ok(kl.simFinish() === true, '内层试打：确实能收完');
+  ok(kl.updateAuto() === true, '★ 全翻开 → 允许自动完成');
+  ok(byId.autoBtn.hidden === false, '★ 牌桌右下角的「自动完成」按钮露出来了');
+  ok(/自动完成/.test(String(byId.tip.innerHTML)), '顶部提示改成指向按钮（“' + byId.tip.innerHTML.replace(/<[^>]+>/g, '') + '”）');
+  ok(byId.tip.className === 'tip hot', '★ 提示行高亮，不弹窗也不浮窗（浮窗会正好压在按钮上）');
+
+  /* 全翻开但顺序不对（K♠ 压在自己的 A♠ 上，两张互相等对方）—— 正常玩到不了这种局面，
+     这条防的是「试打说能收、真收却卡住」 */
+  const broken = allUp();
+  broken[0].push(broken[0].shift());           /* 把 K♠ 挪到列末，正好压住 A♠ */
+  kl.setState({ tab: broken, up: [0, 0, 0, 0], stock: [], waste: [], found: [0, 0, 0, 0], score: 0, moves: 0 });
+  ok(kl.noFaceDown() === true, '这种局面也是全翻开的');
+  ok(kl.simFinish() === false, '但内层试打收不完（K♠ 和 A♠ 互相卡着）');
+  ok(kl.updateAuto() === false && byId.autoBtn.hidden === true, '★ 试打收不完就不给按钮，绝不空口承诺');
+
+  /* ---- 规则：扣着没翻开就不给，哪怕内层算得出来 ---- */
+  kl.setState({
+    found: [12, 12, 12, 12],
+    tab: [[C(13, SPADE), C(13, HEART)], [C(13, DIAMOND)], [C(13, CLUB)]], up: [1, 0, 0],
+    stock: [], waste: [], score: 0, moves: 0,
+  });
+  ok(kl.simFinish() === true, '内层试打：这局其实收得完（收走 K♥ 就露出 K♠）');
+  ok(kl.noFaceDown() === false, '可桌上还盖着一张');
+  ok(kl.updateAuto() === false && byId.autoBtn.hidden === true, '★ 只要还有扣着的牌，就不给按钮 —— 规则就一条，玩家能自己判断');
+  ok(kl.autoFinish() === false, '这时点也点不动（会提示先翻开）');
+  ok(/翻开/.test(String(byId.toast.textContent)), '提示说的是「还有扣着的牌」（“' + byId.toast.textContent + '”）');
+
+  /* ---- 牌堆里还有牌也照样给：能无限重翻，不是障碍 ---- */
+  const tab2 = dragons.map(d => d.slice(3));      /* 每列 10 → A */
+  const moved = [];
+  dragons.forEach(d => { moved.push(d[0], d[1], d[2]); });   /* 收出来的 K Q J */
+  kl.setState({
+    tab: tab2, up: [0, 0, 0, 0], stock: moved.slice().reverse(), waste: [],
+    found: [0, 0, 0, 0], score: 0, moves: 0,
+  });
+  ok(kl.updateAuto() === true, '★ 全翻开但牌堆还剩 12 张 → 也给按钮（牌堆不是障碍）');
+  ok(kl.autoFinish() === true, '点「自动完成」开始收');
+  ok(kl.getAuto().busy === true, '收牌期间标成忙，挡住玩家输入');
+
+  kl.pressAt({ kind: 'card', c: 0 }, 10, 10, 1);
+  ok(kl.getPress() === null, '★ 自动收牌时按牌无效（不会和动画抢操作）');
+
+  let ticks = 0;
+  while(kl.getAuto().busy && ticks++ < 3000) kl.autoTick();
+  ok(kl.collected() === 52, '★ 连翻牌带收牌，52 张全收进去了（' + ticks + ' 步）');
+  ok(kl.getAuto().busy === false, '收完就放开输入');
+  ok(kl.G.stock.length === 0 && kl.G.waste.length === 0, '收完时牌堆和翻牌堆都空了');
+
+  /* 翻 3 张也走同一条路（翻 3 张时压在下面的牌要靠「摆到列上」露出来） */
+  kl.G.drawMode = 3;
+  kl.setState({
+    tab: dragons.map(d => d.slice(3)), up: [0, 0, 0, 0],
+    stock: moved.slice().reverse(), waste: [], found: [0, 0, 0, 0], score: 0, moves: 0,
+  });
+  ok(kl.updateAuto() === true, '翻 3 张时同样给按钮');
+  ok(kl.autoFinish() === true, '翻 3 张开始收');
+  ticks = 0;
+  while(kl.getAuto().busy && ticks++ < 3000) kl.autoTick();
+  ok(kl.collected() === 52, '★ 翻 3 张也收得完（' + ticks + ' 步）');
+  kl.G.drawMode = 1;
+
+  /* ---- 抽测：全翻开 + 牌堆随手洗，每局都得给得住按钮（不能只是碰巧那几局能通） ---- */
+  {
+    let seed = 7, bad = 0, n = 0;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    [1, 3].forEach(draw => {
+      kl.G.drawMode = draw;
+      for(let t = 0; t < 10; t++){
+        const tab = dragons.map(d => d.slice());
+        const stock = [];
+        for(let i = 0; i < 4; i++){
+          const k = Math.floor(rnd() * 5);
+          for(let j = 0; j < k; j++) stock.push(tab[i].shift());
+        }
+        for(let i = stock.length - 1; i > 0; i--){
+          const j = Math.floor(rnd() * (i + 1));
+          const tmp = stock[i]; stock[i] = stock[j]; stock[j] = tmp;
+        }
+        kl.setState({ tab, up: [0, 0, 0, 0], stock, waste: [], found: [0, 0, 0, 0], score: 0, moves: 0 });
+        n++;
+        if(kl.updateAuto() !== true || kl.simFinish() !== true) bad++;
+      }
+    });
+    kl.G.drawMode = 1;
+    ok(bad === 0, '★ 抽测 ' + n + ' 局「全翻开 + 牌堆随手洗」（翻 1 / 翻 3 各一半）都判成能收（' + bad + ' 局判错）');
+  }
+
+  /* ---- 收牌 + 计分 + 撤销：用老纸牌里最典型的收尾（只剩 4 张 K） ---- */
   const nearly = {
     found: [12, 12, 12, 12],
     tab: [[C(13, SPADE)], [C(13, HEART)], [C(13, DIAMOND)], [C(13, CLUB)], [], [], []],
     up: [0, 0, 0, 0, 0, 0, 0], stock: [], waste: [], score: 480, moves: 120,
   };
   kl.setState(nearly);
-  ok(kl.simFinish() === true, '★ 只剩 4 张 K 摊在桌上 → 判定为可以自动收完');
-
-  /* 牌堆里的牌也得算进去：桌上空着、最后 4 张 K 还压在牌堆里 */
-  kl.setState({
-    found: [12, 12, 12, 12], tab: [[], [], [], [], [], [], []],
-    up: [0, 0, 0, 0, 0, 0, 0],
-    stock: [C(13, SPADE), C(13, HEART), C(13, DIAMOND), C(13, CLUB)],
-    waste: [], score: 0, moves: 0,
-  });
-  ok(kl.simFinish() === true, '桌上都空了、牌堆里还剩 4 张 K → 照样算得出来（会自己翻牌）');
-
-  kl.setState({
-    found: [11, 11, 11, 11],
-    tab: [[C(12, SPADE)], [C(12, HEART)], [C(12, DIAMOND)], [C(12, CLUB)]],
-    up: [0, 0, 0, 0],
-    stock: [C(13, CLUB), C(13, DIAMOND), C(13, HEART), C(13, SPADE)],
-    waste: [], score: 0, moves: 0,
-  });
-  ok(kl.simFinish() === true, '★ 桌上都排好了、牌堆里的顺序也合适 → 也算得出来（不只看桌面）');
-
-  kl.G.drawMode = 3;
-  ok(kl.simFinish() === true, '翻 3 张时同样算得出来');
-  kl.G.drawMode = 1;
-
-  /* 全都翻开了也可能不是「只剩时间问题」：有一列没连号，底下的 A 出不来 */
-  const decks = [suitRun(SPADE), suitRun(HEART), suitRun(DIAMOND), suitRun(CLUB)];
-  kl.setState({ found: [0, 0, 0, 0], tab: decks, up: [0, 0, 0, 0], stock: [], waste: [], score: 0, moves: 0 });
-  ok(kl.simFinish() === true, '52 张全翻开、四列各自从 K 排到 A → 可以自动收完');
-
-  const broken = decks.map(a => a.slice());
-  broken[3] = broken[3].slice(0, 11).concat([C(1, CLUB), C(2, CLUB)]);   /* 最后两张掐反：2♣ 压住 A♣ */
-  kl.setState({ found: [0, 0, 0, 0], tab: broken, up: [0, 0, 0, 0], stock: [], waste: [], score: 0, moves: 0 });
-  ok(kl.simFinish() === false, '★ 也是全明牌，但有一列顺序反了 → 不该催玩家自动收完');
-
-  /* 扣着的牌也能一路翻着收：收走上面的 K♥，底下的 K♠ 自己翻出来接着收 */
-  kl.setState({
-    found: [12, 12, 12, 12],
-    tab: [[C(13, SPADE), C(13, HEART)], [C(13, DIAMOND)], [C(13, CLUB)]], up: [1, 0, 0],
-    stock: [], waste: [], score: 0, moves: 0,
-  });
-  ok(kl.simFinish() === true, '★ 扣着的牌翻出来正好接得上 → 也算「只剩时间问题」');
-
-  /* 但翻出来接不上就收不完（这里把 K♠ 换成一张接不上的牌） */
-  kl.setState({
-    found: [12, 12, 12, 12],
-    tab: [[C(5, SPADE), C(13, HEART)], [C(13, DIAMOND)], [C(13, CLUB)]], up: [1, 0, 0],
-    stock: [], waste: [], score: 0, moves: 0,
-  });
-  ok(kl.simFinish() === false, '翻出来接不上（5♠ 挡在最后）→ 收不完');
-
-  /* ---- 按钮 / 确认框的开关 ---- */
-  kl.setState(nearly);
-  ok(kl.getAuto().ready === false, '换局面后先按「还不能收」算（等下一次自动检查）');
-  ok(kl.autoProbe() === true, 'autoProbe 认出这局能自动收完了');
-  ok(byId.autoBtn.hidden === false, '★ 牌桌右下角的「自动完成」按钮露出来了');
-
-  kl.askAuto();
-  ok(byId.autoPanel.classList.contains('on') === true, '弹出确认框问玩家要不要自动收完');
-  ok(kl.getAuto().asked === true, '记下「这次问过了」');
-
-  byId.autoPanel.classList.remove('on');       /* 玩家选了「我自己点」 */
-  kl.askAuto();
-  ok(byId.autoPanel.classList.contains('on') === false, '★ 问过一次就不再弹（按钮还留着，随时能点）');
-
-  kl.setState({ tab: [[C(6, CLUB)], [C(5, DIAMOND)]] });
-  kl.autoProbe();
-  ok(byId.autoBtn.hidden === true, '牌局回到不能收的时候，按钮自己收起来');
-  ok(kl.autoFinish() === false, '不能收的时候按也没用（会提示还没到时候）');
-
-  /* ---- 真的自动收完 ---- */
-  kl.setState(nearly);
-  kl.G.score = 480;
+  ok(kl.updateAuto() === true, '只剩 4 张 K 摊在桌上 → 给按钮');
   const histBefore = kl.getHistLen();
-  ok(kl.autoFinish() === true, '★ 点「自动完成」开始收');
-  ok(kl.getAuto().busy === true, '自动收牌期间标成忙，挡住玩家输入');
-  ok(byId.autoBtn.hidden === true, '收牌期间按钮先藏起来');
-
-  kl.pressAt({ kind: 'card', c: 0 }, 10, 10, 1);
-  ok(kl.getPress() === null, '★ 自动收牌时按牌无效（不会和动画抢操作）');
-
-  let ticks = 0;
+  ok(kl.autoFinish() === true, '开始收');
+  ticks = 0;
   while(kl.getAuto().busy && ticks++ < 400) kl.autoTick();
   ok(kl.collected() === 52, '★ 一口气收满 52 张');
-  ok(kl.getAuto().busy === false, '收完就放开输入');
   ok(kl.G.score === 520, '4 张 K 各 +10 分（480 → ' + kl.G.score + '）');
   ok(kl.G.moves === 124, '步数跟着涨（120 → ' + kl.G.moves + '）');
   const fly = table.children.filter(el => el.classList.contains('fly')).length;
@@ -882,17 +903,10 @@ section('14) 自动完成：先认出「只剩时间问题」，再一张张收�
   ok(kl.collected() === 48, '★ 撤销一下，整段自动收牌全退回来（' + kl.collected() + '/52）');
   ok(kl.G.tab.filter(c => c.length).length === 4, '桌子上的 4 张 K 也回来了');
 
-  /* 扣着的那张也要能翻着收：autoStep 靠 flipIfNeeded 翻牌，这一环不能漏 */
-  kl.setState({
-    found: [12, 12, 12, 12],
-    tab: [[C(13, SPADE), C(13, HEART)], [C(13, DIAMOND)], [C(13, CLUB)]], up: [1, 0, 0],
-    stock: [], waste: [], score: 0, moves: 0,
-  });
-  ok(kl.autoFinish() === true, '扣着牌的局面也能开始自动收');
-  ticks = 0;
-  while(kl.getAuto().busy && ticks++ < 100) kl.autoTick();
-  ok(kl.collected() === 52, '★ 收走 K♥ 之后 K♠ 自己翻明、接着收完（' + kl.collected() + '/52）');
-  ok(kl.G.up[0] === 0, '翻明之后明暗边界也对（up[0] = ' + kl.G.up[0] + '）');
+  /* 牌局回到「还有扣着的牌」时按钮自己收起来 */
+  kl.setState({ tab: [[C(1, CLUB), C(6, CLUB)], [C(5, DIAMOND)]], up: [1, 0] });
+  ok(kl.updateAuto() === false && byId.autoBtn.hidden === true, '★ 牌局退回没翻开的阶段，按钮自己收起来');
+  ok(byId.tip.className === 'tip', '顶部提示也跟着回到平常那句');
 }
 
 section('15) ★ 牌桌放得下最长的那一列（初始 6 张扣着的 + K 到 A）');
