@@ -895,6 +895,79 @@ section('14) 自动完成：先认出「只剩时间问题」，再一张张收�
   ok(kl.G.up[0] === 0, '翻明之后明暗边界也对（up[0] = ' + kl.G.up[0] + '）');
 }
 
+section('15) ★ 牌桌放得下最长的那一列（初始 6 张扣着的 + K 到 A）');
+{
+  /* 一列最多 19 张：第 7 列开局 6 暗 1 明，之后还能再叠 12 张明牌（K 一路摆到 A）。
+     牌桌高度不够时，旧的压缩算法有下限（d>=5 / u>=CH*0.16），会把这列顶出牌桌、
+     压到底栏按钮上 —— 这节盯的就是「不管屏幕多矮，牌都不许出牌桌」。 */
+  function makeLong(){
+    const down = [C(1, CLUB), C(1, DIAMOND), C(2, CLUB), C(2, DIAMOND), C(3, CLUB), C(3, DIAMOND)];
+    const run = [];
+    for(let r = 13; r >= 1; r--) run.push(C(r, r % 2 ? SPADE : HEART));   /* K♠ Q♥ J♠ … A♠ */
+    const used = new Set([...down, ...run]);
+    const rest = [];
+    for(let c = 0; c < 52; c++) if(!used.has(c)) rest.push(c);
+    const tab = [down.concat(run)];
+    const up = [down.length];
+    [6, 6, 6, 5, 5, 5].forEach(n => { tab.push(rest.splice(0, n)); up.push(n); });
+    return { tab, up, stock: [], waste: [], found: [0, 0, 0, 0] };
+  }
+  const long = makeLong();
+  ok(long.tab[0].length === 19, '第 1 列 19 张（6 张扣着 + 13 张明牌），就是最坏情况');
+
+  function bottomOf(i){
+    const g = kl.geom();
+    const len = kl.G.tab[i].length, u = kl.G.up[i];
+    return g.COL_TOP + g.CH + u * g.DOFF + Math.max(0, len - u - 1) * g.UOFF;
+  }
+
+  /* 从大屏手机一路扫到手机横过来 */
+  const heights = [560, 470, 400, 340, 300, 260, 215];
+  const bad = [];
+  heights.forEach(h => {
+    wrap.clientHeight = h;
+    kl.layout();
+    kl.setState(long);
+    const g = kl.geom();
+    let low = 0;
+    for(let i = 0; i < 7; i++) low = Math.max(low, bottomOf(i));
+    if(low > g.TABLE_H){
+      bad.push('可用高 ' + h + '：牌底 ' + Math.round(low) + ' 越过牌桌 ' + g.TABLE_H);
+    }
+  });
+  ok(bad.length === 0, '★ 可用高从 560 到 215，19 张的列都留在牌桌里', bad.join('；'));
+
+  /* 竖屏高度够，就不该动间距（别为了极端情况把日常画面也压扁） */
+  wrap.clientHeight = 560;
+  kl.layout();
+  kl.newGame(7, true);
+  const g0 = kl.geom();
+  ok(g0.DOFF === Math.round(g0.CH * 0.20) && g0.UOFF === Math.round(g0.CH * 0.31),
+     '普通开局间距照旧（d=' + g0.DOFF + ' / u=' + g0.UOFF + '，CH=' + g0.CH + '）');
+
+  /* 挤的时候先让暗牌让位：暗牌被盖住不损失信息，明牌压一分就少看一分点数 */
+  wrap.clientHeight = 340;
+  kl.layout();
+  kl.setState(long);
+  const g1 = kl.geom();
+  ok(g1.DOFF <= Math.round(g1.CH * 0.10), '暗牌的缝先压到最小（d=' + g1.DOFF + '）');
+  ok(g1.UOFF > g1.DOFF, '明牌留的缝仍然比暗牌宽（u=' + g1.UOFF + ' > d=' + g1.DOFF + '）');
+
+  /* 明牌压紧时，角上的点数跟着缩 —— 露 11px 还用 21px 的字，只能看到字的上半截 */
+  const rfs = parseInt(table.style.getPropertyValue('--rfs'), 10);
+  ok(rfs > 0 && rfs <= Math.round(g1.UOFF * 1.15) + 1,
+     '牌被压紧时点数跟着缩小（' + rfs + 'px，明牌露出 ' + g1.UOFF + 'px）');
+
+  /* 整列都扣着时（up = len），不该再算一道明牌的缝 */
+  kl.setState({ tab: [[C(13, SPADE), C(12, HEART), C(11, SPADE)]], up: [3] });
+  const g2 = kl.geom();
+  ok(kl.colHeight(0, g2.DOFF, g2.UOFF) === g2.CH + 3 * g2.DOFF,
+     '整列扣着时列高 = 一张牌 + 3 道暗牌的缝（不多算明牌那道）');
+
+  wrap.clientHeight = 560;
+  kl.layout();
+}
+
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');
