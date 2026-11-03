@@ -1132,6 +1132,13 @@ function autoFinish(){
   return true;
 }
 
+/* 自动收牌的节拍（毫秒）。
+   牌移动的过渡是 170ms，所以「收一张」给 150ms —— 每张牌基本飞到位再走下一张，
+   一整局 52 张约 8 秒。这不是拖沓，是故意的：赢了就这几秒，让人看清楚牌一张张归位。
+   翻牌 / 重翻只是把牌挪个位置，给 80ms 就够，不然等得心焦。 */
+var PACE_MOVE = 150;
+var PACE_DRAW = 80;
+
 function autoTick(){
   if(!autoBusy) return;
   var r = autoStep();
@@ -1151,7 +1158,7 @@ function autoTick(){
   else sfx('shuffle');
 
   save(); render();
-  autoTimer = setTimeout(autoTick, (r === 'found' || r === 'place') ? 92 : 55);
+  autoTimer = setTimeout(autoTick, (r === 'found' || r === 'place') ? PACE_MOVE : PACE_DRAW);
 }
 
 /* 半路被打断（开新局 / 读档）时收干净，别让节拍器继续动 */
@@ -2246,6 +2253,7 @@ window.__kl = {
   render: render, layout: layout, elapsed: elapsed, save: save, load: load,
   checkWin: checkWin, validState: validState, fmt: fmt,
   simFinish: simFinish, autoStep: autoStep, autoTick: autoTick, autoFinish: autoFinish,
+  PACE_MOVE: PACE_MOVE, PACE_DRAW: PACE_DRAW,
   updateAuto: updateAuto, noFaceDown: noFaceDown, paintAuto: paintAuto, stopAuto: stopAuto,
   askPenalty: askPenalty, answerAsk: answerAsk, recycleWaste: recycleWaste,
   getAsk: function(){ return askingPenalty(); },

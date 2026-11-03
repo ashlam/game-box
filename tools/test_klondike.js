@@ -125,11 +125,14 @@ const localStorage = {
   removeItem(k){ delete store[k]; },
 };
 
+/* setTimeout 不真的跑（测试里靠手动调 autoTick 推进），但把延迟记下来，
+   好核对自动收牌的节拍到底给了多少毫秒 */
+const timers = [];
 const ctx = {
   document: doc,
   window: null,
   localStorage,
-  setTimeout(){ return 1; },
+  setTimeout(fn, ms){ timers.push(ms || 0); return 1; },
   clearTimeout(){},
   setInterval(){ return 1; },
   clearInterval(){},
@@ -929,6 +932,30 @@ section('14) 自动完成：没有扣着的牌（含左上牌堆）才给按钮�
     kl.G.drawMode = 1;
     ok(refused === n, '★ 抽测 ' + n + ' 局：牌还压在牌堆里时一律不给按钮（' + refused + ' 局都挡住了）');
     ok(bad === 0, '★ 抽测 ' + n + ' 局「全翻开 + 牌堆翻空、剩下的随手洗进翻牌堆」都判成能收（' + bad + ' 局判错）');
+  }
+
+  /* ---- 节拍：赢了就这几秒，牌要一张一张看得清（别飞快刷完） ---- */
+  {
+    kl.setState({ tab: dragons.map(d => d.slice()), up: [0, 0, 0, 0],
+                  stock: [], waste: [], found: [0, 0, 0, 0], score: 0, moves: 0 });
+    ok(kl.updateAuto() === true, '先摆出按钮');
+    ok(kl.autoFinish() === true, '开始自动收');
+
+    timers.length = 0;
+    kl.autoTick();
+    ok(timers[timers.length - 1] === kl.PACE_MOVE,
+       '★ 收一张牌等 ' + timers[timers.length - 1] + 'ms 才收下一张');
+
+    /* 牌移动的过渡是 170ms，节拍不能短到「上一张还在飞就走了」 */
+    ok(kl.PACE_MOVE >= 140, '★ 收牌节拍 ' + kl.PACE_MOVE + 'ms ≥ 140ms（不会再刷成一片残影）');
+    ok(kl.PACE_MOVE * 45 >= 6500,
+       '整局 52 张至少 ' + (kl.PACE_MOVE * 45 / 1000).toFixed(1) + ' 秒，够看完');
+    ok(kl.PACE_DRAW < kl.PACE_MOVE, '翻牌 / 重翻比收牌快（' + kl.PACE_DRAW + 'ms），等得不心焦');
+    ok(kl.PACE_DRAW >= 60, '翻牌也不会快成一闪（' + kl.PACE_DRAW + 'ms）');
+
+    let ticks = 0;
+    while(kl.getAuto().busy && ticks++ < 3000) kl.autoTick();
+    ok(kl.collected() === 52, '慢一点也照样收得完（' + ticks + ' 步）');
   }
 
   /* ---- 收牌 + 计分 + 撤销：用老纸牌里最典型的收尾（只剩 4 张 K） ---- */
