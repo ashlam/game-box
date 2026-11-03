@@ -51,7 +51,8 @@
   .tip b{color:#a9b8cf;font-weight:600}
 
   /* ===== 牌桌 ===== */
-  #wrap{flex:1 1 auto;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
+  #wrap{position:relative;flex:1 1 auto;min-height:0;width:100%;
+        display:flex;align-items:center;justify-content:center}
   #table{
     position:relative;flex:0 0 auto;
     --cw:50px; --ch:74px;
@@ -160,6 +161,26 @@
   .bar button:disabled{opacity:.42}
   .bar button#btnSound{flex:0 0 44px;font-size:15px;padding:11px 0}
   .bar button#btnAuto{flex:0 0 74px;color:var(--acc2);border-color:rgba(56,211,159,.32)}
+
+  /* ===== 自动完成：牌都排好后浮在牌桌右下角 =====
+     放在牌桌里（贴着绿布），不用 #wrap 定位 —— 牌桌不一定铺满 #wrap 的高度 */
+  #autoBtn{
+    position:absolute;right:7px;bottom:8px;z-index:340;
+    font:inherit;font-size:12.5px;font-weight:800;letter-spacing:.3px;
+    padding:9px 15px;border-radius:999px;
+    color:#08301f;background:linear-gradient(180deg,#6beabb,#2fc98f);
+    border:1px solid rgba(255,255,255,.3);
+    box-shadow:0 6px 18px rgba(20,180,130,.38),0 0 0 4px rgba(56,211,159,.10);
+    animation:autoPulse 1.9s ease-in-out infinite;
+  }
+  #autoBtn[hidden]{display:none}
+  #autoBtn:active{filter:brightness(.93);transform:scale(.97)}
+  @keyframes autoPulse{
+    0%,100%{box-shadow:0 6px 18px rgba(20,180,130,.38),0 0 0 4px rgba(56,211,159,.10)}
+    50%{box-shadow:0 6px 20px rgba(20,180,130,.5),0 0 0 9px rgba(56,211,159,.04)}
+  }
+  /* 自动收牌那几秒不让手碰牌桌和底栏，免得点出两个并行的操作 */
+  body.auto #table,body.auto .bar,body.auto #autoBtn{pointer-events:none}
 
   /* ===== 弹层 ===== */
   /* 不用毛玻璃模糊：没有 GPU 的 WebView 会把它渲染成一块白底，遮罩就废了 */
@@ -288,7 +309,9 @@
 
 <div class="tip" id="tip">点左上角牌堆翻牌 · 点一张牌 → 点目标位置，或者<b>按住直接拖</b></div>
 
-<div id="wrap"><div id="table"></div></div>
+<div id="wrap">
+  <div id="table"><button type="button" id="autoBtn" hidden>⏩ 自动完成</button></div>
+</div>
 
 <div class="bar">
   <button type="button" id="btnUndo">↩ 撤销</button>
@@ -324,6 +347,15 @@
   </div>
   <button type="button" class="pri" id="winAgain">再来一局</button>
   <button type="button" class="ghost" id="winClose">看看牌桌</button>
+</div></div>
+
+<!-- 自动完成询问 -->
+<div class="over" id="autoPanel"><div class="panel">
+  <h2>牌都排好了</h2>
+  <div class="sub2">剩下的只要一张张收进右上角就行，不用再动脑了。<br>要我一次收完吗？</div>
+  <button type="button" class="pri" id="autoYes">⏩ 自动收完</button>
+  <button type="button" id="autoNo">我自己点</button>
+  <div class="note">选「我自己点」也没关系：牌桌右下角会一直留着按钮，想收就点。</div>
 </div></div>
 
 <!-- 玩法说明 -->
@@ -445,6 +477,7 @@
   <div class="op"><em>👆</em><span>也可以点一张牌 → 再点目标位置，两种都行</span></div>
   <div class="op"><em>👆</em><span><b>连点两下</b>同一张牌 = 直接送进收牌堆</span></div>
   <div class="op"><em>⚡</em><span>底下「收牌」把现在能收的一次收干净</span></div>
+  <div class="op"><em>⏩</em><span>牌都排好后会问要不要<b>自动收完</b>；不想现在收，牌桌右下角一直留着按钮</span></div>
   <div class="op"><em>↩</em><span>走错了就撤销，可以一直退回去</span></div>
 
   <h3><i>5</i>分数怎么算</h3>
@@ -640,6 +673,7 @@ function pushHistory(){
 }
 
 function undo(){
+  if(autoBusy) return;                     /* 自动收牌正在跑，先别掺和 */
   if(!hist.length){ toast('已经回到最开始了'); return; }
   /* 通关撒牌时牌全在屏幕外面飘着（animation-fill-mode 会一直压住 transform），
      不清掉的话撤销回去的牌是看不见的 */
@@ -849,6 +883,200 @@ function collectAll(){
   return 1;
 }
 
+/* ============================================================================
+ * 自动完成（Windows 纸牌里那个「剩下的帮我收完」）
+ *
+ * 什么时候算「只剩时间问题」？不能只看桌上明牌连不连号 —— 牌堆里还压着什么、
+ * 翻 3 张会不会漏掉哪几张，光看桌面看不出来。所以直接在副本上试打一遍：
+ *   能收就收（收牌永远不会把局面弄坏），收不动就翻牌，牌堆空了把翻牌堆倒回来再翻。
+ * 试打能收满 52 张，就是「怎么点都能赢，只是要点很多下」。
+ *
+ * 真正动手时走 autoStep()，每次只做一个动作，靠 setTimeout 一张张收，
+ * 看起来跟玩家自己点一样（也有牌飞进右上角的动画）。
+ * ========================================================================== */
+
+var autoReady = false;      /* 现在这一手是不是已经到了能自动收完的时候 */
+var autoAsked = false;      /* 这次「能自动收完」问过玩家没有（问过就不再烦他） */
+var autoBusy = false;       /* 正在自动收牌：挡掉玩家输入 */
+var autoTimer = null;       /* 自动收牌的节拍器 */
+var autoPromptTimer = null; /* 弹确认框前的缓冲（让最后一张牌的动画先落定） */
+
+function foundTotal(f){ return f[0] + f[1] + f[2] + f[3]; }
+
+/* 在副本上试打一遍，返回「能不能一口气收完」 */
+function simFinish(){
+  var f = G.found.slice();
+  var cols = [], up = G.up.slice(), stock = G.stock.slice(), waste = G.waste.slice();
+  var i, j, moved, pass = 0, guard = 0;
+
+  for(i = 0; i < 7; i++) cols.push(G.tab[i].slice());
+
+  while(foundTotal(f) < 52 && guard++ < 900){
+    moved = false;
+
+    for(i = 0; i < 7; i++){
+      var col = cols[i];
+      if(!col.length) continue;
+      if(up[i] >= col.length) continue;            /* 整列都扣着，够不着 */
+      var c = col[col.length - 1];
+      if(rankOf(c) === f[suitOf(c)] + 1){
+        f[suitOf(c)]++; col.pop(); moved = true;
+        /* 拿走的正好是第一张明牌 → 下面那张自动翻明（游戏里 flipIfNeeded 干的就是这事） */
+        if(!col.length) up[i] = 0;
+        else if(up[i] >= col.length) up[i] = col.length - 1;
+      }
+    }
+    if(waste.length){
+      var w = waste[waste.length - 1];
+      if(rankOf(w) === f[suitOf(w)] + 1){ f[suitOf(w)]++; waste.pop(); moved = true; }
+    }
+    if(moved) continue;
+
+    if(stock.length){
+      for(j = 0; j < G.drawMode && stock.length; j++) waste.push(stock.pop());
+      continue;
+    }
+    if(!waste.length) break;               /* 牌全摊在桌上、也没得收了 */
+    if(++pass > 12) break;                 /* 翻来覆去还是那几张 = 收不完 */
+    stock = waste.slice().reverse();
+    waste = [];
+  }
+  return foundTotal(f) === 52;
+}
+
+/* 自动收牌的一小步：收一张 > 翻牌 > 整叠重翻 */
+function autoStep(){
+  var i, c;
+
+  for(i = 0; i < 7; i++){
+    var col = G.tab[i];
+    if(!col.length) continue;
+    if(col.length - 1 < G.up[i]) continue;        /* 还扣着，够不着 */
+    c = col[col.length - 1];
+    if(canFound(c)){
+      col.pop();
+      flipIfNeeded(i);              /* 全明牌时不会触发，留着是为了万一 */
+      G.found[suitOf(c)] = rankOf(c);
+      addScore(10);
+      G.moves++;
+      return 'found';
+    }
+  }
+
+  if(G.waste.length){
+    c = G.waste[G.waste.length - 1];
+    if(canFound(c)){
+      G.waste.pop();
+      G.found[suitOf(c)] = rankOf(c);
+      addScore(10);
+      G.moves++;
+      return 'found';
+    }
+  }
+
+  if(G.stock.length){
+    var n = Math.min(G.drawMode, G.stock.length);
+    while(n--) G.waste.push(G.stock.pop());
+    return 'draw';
+  }
+
+  if(G.waste.length){
+    G.stock = G.waste.slice().reverse();   /* 整叠翻面，和点牌堆重翻一个规则 */
+    G.waste = [];
+    return 'shuffle';
+  }
+
+  return 'done';
+}
+
+function paintAuto(){
+  var btn = $('autoBtn');
+  if(!btn) return;
+  btn.hidden = !(autoReady && !autoBusy && collected() < 52);
+}
+
+/* 每次牌局有变化就校一次。
+ * 只有「从不能变成能」的那一下才问玩家，问过之后（autoAsked）就只留按钮 ——
+ * 玩家说了自己点，就别一遍遍弹窗烦他。
+ */
+function autoProbe(){
+  if(autoBusy) return false;
+  if(collected() >= 52){ autoReady = false; paintAuto(); return false; }
+
+  var was = autoReady;
+  autoReady = simFinish();
+  paintAuto();
+
+  if(autoReady && !was){
+    clearTimeout(autoPromptTimer);
+    autoPromptTimer = setTimeout(askAuto, 620);
+  }
+  return autoReady;
+}
+
+function askAuto(){
+  if(!autoReady || autoBusy || autoAsked || collected() >= 52) return;
+  /* 手上正按着牌（拖到一半）就先等一等，别把面板拍到手指底下 */
+  if(press || drag){ autoPromptTimer = setTimeout(askAuto, 500); return; }
+  /* 别的面板开着就先别叠上去，等玩家关掉再说 */
+  if($('dealPanel').classList.contains('on') || $('helpPanel').classList.contains('on') ||
+     $('winPanel').classList.contains('on')){ return; }
+  autoAsked = true;
+  $('autoPanel').classList.add('on');
+  sfx('pick');
+}
+
+/* 开始自动收牌 */
+function autoFinish(){
+  if(autoBusy) return false;
+  if(collected() >= 52) return false;
+  autoReady = simFinish();          /* 玩家可能在面板弹出来之后又动过牌，现场再验一次 */
+  if(!autoReady){ paintAuto(); toast('还没到能一口气收完的时候'); return false; }
+
+  $('autoPanel').classList.remove('on');
+  autoReady = false;
+  paintAuto();
+
+  /* 整段自动收牌只记一个撤销点：后悔了按一下撤销就全回来 */
+  pushHistory();
+  autoBusy = true;
+  sel = null;
+  document.body.classList.add('auto');
+  startClock();
+  render();
+  autoTick();
+  return true;
+}
+
+function autoTick(){
+  if(!autoBusy) return;
+  var r = autoStep();
+
+  if(r === 'done' || collected() >= 52){
+    autoBusy = false;
+    document.body.classList.remove('auto');
+    autoTimer = null;
+    save(); render();
+    checkWin();
+    return;
+  }
+
+  if(r === 'found') sfx('found');
+  else if(r === 'draw') sfx('draw');
+  else sfx('shuffle');
+
+  save(); render();
+  autoTimer = setTimeout(autoTick, r === 'found' ? 92 : 55);
+}
+
+/* 半路被打断（开新局 / 读档）时收干净，别让节拍器继续动 */
+function stopAuto(){
+  if(autoTimer){ clearTimeout(autoTimer); autoTimer = null; }
+  if(autoPromptTimer){ clearTimeout(autoPromptTimer); autoPromptTimer = null; }
+  autoBusy = false;
+  if(document.body && document.body.classList) document.body.classList.remove('auto');
+}
+
 /* 点牌堆：翻牌；牌堆空了就把翻牌堆整叠收回来重翻 */
 function drawStock(){
   if(!G.stock.length){
@@ -984,7 +1212,7 @@ function hitTest(e){
 }
 
 function pressAt(h, x, y, id){
-  if(!h) return;
+  if(!h || autoBusy) return;
   press = { h:h, x:x, y:y, id:id };
   drag = null;
 }
@@ -1138,6 +1366,8 @@ function bindDrag(){
   }
 
   table.addEventListener('touchstart', function(e){
+    /* 「自动完成」按钮在牌桌里面：这里一 preventDefault 它就被吞掉了 */
+    if(e.target && e.target.closest && e.target.closest('#autoBtn')) return;
     if(press) clearDrag();
     var p = evXY(e);
     pressAt(hitTest(e), p.x, p.y, 't');
@@ -1410,6 +1640,9 @@ function save(){
       found: G.found, moves: G.moves, score: G.score, ms: elapsed(),
     }));
   }catch(e){}
+  /* 牌局每变一次就顺手看一眼「是不是只剩收牌了」—— 所有改牌的地方都会过 save()，
+     挂在这里就不会漏掉某条操作路径 */
+  autoProbe();
 }
 
 /* 存档要能挡住坏数据：少牌、重牌、越界的点数、up 越界，一律当没有存档。
@@ -1598,6 +1831,10 @@ function newGame(seed, silent){
   if(seed < 1) seed = 1;
   if(seed > 1000000) seed = 1000000;
   clearCelebrate();
+  stopAuto();                      /* 上一局可能正在自动收牌 */
+  autoReady = false;
+  autoAsked = false;
+  $('autoPanel').classList.remove('on');
   G.seed = seed;
   var d = deal(seed);
   G.tab = d.tab;
@@ -1711,6 +1948,13 @@ function bindUI(){
   $('btnUndo').addEventListener('click', undo);
   $('btnAuto').addEventListener('click', collectAll);
   $('btnNew').addEventListener('click', openDeal);
+  $('autoBtn').addEventListener('click', function(){ autoFinish(); });
+  $('autoYes').addEventListener('click', function(){ autoFinish(); });
+  $('autoNo').addEventListener('click', function(){ $('autoPanel').classList.remove('on'); });
+  /* 点面板外面 = 先不自动收，按钮留着 */
+  $('autoPanel').addEventListener('click', function(e){
+    if(e.target === $('autoPanel')) $('autoPanel').classList.remove('on');
+  });
   $('btnSound').addEventListener('click', function(){
     sfxOn = !sfxOn;
     try{ localStorage.setItem('gbox_sfx', sfxOn ? '1' : '0'); }catch(e){}
@@ -1795,6 +2039,9 @@ function boot(){
   paintMode();
   layout();
   render();
+  /* 读档进来的牌局也把「能不能自动收完」算出来（只留按钮，刚打开时不弹框问） */
+  autoReady = !autoBusy && collected() < 52 && simFinish();
+  paintAuto();
 }
 
 if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
@@ -1812,6 +2059,9 @@ window.__kl = {
   autoFound: autoFound, collectAll: collectAll, undo: undo,
   render: render, layout: layout, elapsed: elapsed, save: save, load: load,
   checkWin: checkWin, validState: validState, fmt: fmt,
+  simFinish: simFinish, autoStep: autoStep, autoTick: autoTick, autoFinish: autoFinish,
+  autoProbe: autoProbe, askAuto: askAuto, paintAuto: paintAuto, stopAuto: stopAuto,
+  getAuto: function(){ return { ready:autoReady, asked:autoAsked, busy:autoBusy }; },
   bestRec: bestRec, saveRec: saveRec,
   getSel: function(){ return sel; },
   setSel: function(s){ sel = s; render(); },
