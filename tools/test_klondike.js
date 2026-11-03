@@ -805,7 +805,7 @@ section('13b) 端到端：一张张翻着把 52 张全收完');
 }
 
 /* ================= 14) 自动完成 ================= */
-section('14) 自动完成：没有扣着的牌（含左上牌堆）才给按钮，然后一张张收光');
+section('14) 自动完成：三处都清干净（列全翻开、牌堆空、换牌区空）才给按钮，然后一张张收光');
 {
   /* 四条 13 张的合法长龙（点数降序 + 红黑交替），正好用掉 52 张。
      全翻开以后列里天然是合法的，不用额外摆 */
@@ -817,7 +817,7 @@ section('14) 自动完成：没有扣着的牌（含左上牌堆）才给按钮�
     });
   const allUp = () => dragons.map(d => d.slice());
 
-  /* ---- 判定：7 列全翻开 + 左上牌堆翻空 ---- */
+  /* ---- 判定：7 列全翻开 + 左上牌堆翻空 + 换牌区一张不剩 ---- */
   kl.newGame(7, true);
   ok(kl.noFaceDown() === false, '刚发完牌，桌上有扣着的牌');
   ok(kl.updateAuto() === false, '这时候不给「自动完成」');
@@ -850,7 +850,7 @@ section('14) 自动完成：没有扣着的牌（含左上牌堆）才给按钮�
   ok(kl.noFaceDown() === false, '可桌上还盖着一张');
   ok(kl.updateAuto() === false && byId.autoBtn.hidden === true, '★ 只要还有扣着的牌，就不给按钮 —— 规则就一条，玩家能自己判断');
   ok(kl.autoFinish() === false, '这时点也点不动（会提示先翻开）');
-  ok(/翻开/.test(String(byId.toast.textContent)), '提示说的是「还有扣着的牌」（“' + byId.toast.textContent + '”）');
+  ok(/收干净/.test(String(byId.toast.textContent)), '提示说的是「还有牌没收干净」（“' + byId.toast.textContent + '”）');
 
   /* ---- 牌堆还压着牌：不给按钮（哪怕程序真能替他把那几张翻出来） ---- */
   const tab2 = dragons.map(d => d.slice(3));      /* 每列 10 → A */
@@ -866,13 +866,27 @@ section('14) 自动完成：没有扣着的牌（含左上牌堆）才给按钮�
   ok(kl.updateAuto() === false && byId.autoBtn.hidden === true,
      '★ 牌堆没翻空就不给按钮 —— 牌桌和按钮说的必须是同一件事');
   ok(kl.autoFinish() === false, '这时点也点不动');
-  ok(/扣着|翻开/.test(String(byId.toast.textContent)),
-     '提示说的是「还有扣着的牌」（“' + byId.toast.textContent + '”）');
+  ok(/换牌区|收干净/.test(String(byId.toast.textContent)),
+     '提示说的是「还有牌没收干净」（“' + byId.toast.textContent + '”）');
 
-  /* 把牌堆翻空（真人也就是一张张点出来），按钮这时候才出来 */
+  /* 牌堆翻空、12 张摊在换牌区里：现在也不给 —— 换牌区也是「场上还有牌」 */
   while(kl.G.stock.length) kl.drawStock();
-  ok(kl.G.waste.length === 12, '牌堆翻空了，12 张全摊在翻牌堆里（都是明牌）');
-  ok(kl.noFaceDown() === true, '★ 牌堆空了 + 桌上全翻开 = 真的没有扣着的牌');
+  ok(kl.G.waste.length === 12, '牌堆翻空了，12 张全摊在换牌区里（都是明牌）');
+  ok(kl.noFaceDown() === false, '★ 换牌区还摊着 12 张 → 也不算「收完了」');
+  ok(kl.updateAuto() === false && byId.autoBtn.hidden === true,
+     '★ 换牌区没清空就不给按钮 —— 玩家看见旁边还摊着牌，按钮就不能冒出来');
+
+  /* 换牌区只剩一张能收的 A：还是不给；真人把这张 A 点进收牌堆，按钮才出来 */
+  kl.setState({
+    tab: dragons.map((d, i) => i === 0 ? d.slice(0, -1) : d.slice()),
+    up: [0, 0, 0, 0], stock: [], waste: [dragons[0][12]],
+    found: [0, 0, 0, 0], score: 0, moves: 0,
+  });
+  ok(kl.G.waste.length === 1 && kl.noFaceDown() === false, '★ 换牌区只剩一张 A♠ → 也算「有牌」');
+  ok(kl.updateAuto() === false && byId.autoBtn.hidden === true, '一张也不行，不给按钮');
+
+  kl.tapCard(C(1, SPADE));
+  ok(kl.tryFoundSel() === true && kl.G.waste.length === 0, '真人操作：把 A♠ 点进收牌堆，换牌区空了');
   ok(kl.updateAuto() === true && byId.autoBtn.hidden === false, '★ 这才给按钮');
   ok(kl.autoFinish() === true, '点「自动完成」开始收');
   ok(kl.getAuto().busy === true, '收牌期间标成忙，挡住玩家输入');
@@ -882,56 +896,51 @@ section('14) 自动完成：没有扣着的牌（含左上牌堆）才给按钮�
 
   let ticks = 0;
   while(kl.getAuto().busy && ticks++ < 3000) kl.autoTick();
-  ok(kl.collected() === 52, '★ 连摆牌带收牌，52 张全收进去了（' + ticks + ' 步）');
+  ok(kl.collected() === 52, '★ 52 张全收进去了（' + ticks + ' 步）');
   ok(kl.getAuto().busy === false, '收完就放开输入');
-  ok(kl.G.stock.length === 0 && kl.G.waste.length === 0, '收完时牌堆和翻牌堆都空了');
+  ok(kl.G.stock.length === 0 && kl.G.waste.length === 0, '收完时牌堆和换牌区都空了');
 
-  /* 翻 3 张也走同一条路（翻 3 张时压在下面的牌要靠「摆到列上」露出来） */
-  kl.G.drawMode = 3;
+  /* 换牌区有牌时按钮不给，但内层试打（simFinish）还得算得通 —— draw / place
+     两个动作留作保险，万一以后判定改宽，试打不会跟着失真 */
   kl.setState({
-    tab: dragons.map(d => d.slice(3)), up: [0, 0, 0, 0],
-    stock: inStock.slice(), waste: [], found: [0, 0, 0, 0], score: 0, moves: 0,
+    tab: dragons.map(d => d.filter(c => c !== C(2, HEART))),   /* 2♥ 从第 1 列出来 */
+    up: [0, 0, 0, 0], stock: [], waste: [C(2, HEART)],
+    found: [0, 0, 0, 0], score: 0, moves: 0,
   });
-  ok(kl.updateAuto() === false, '翻 3 张时牌堆没翻空，一样不给按钮');
-  while(kl.G.stock.length) kl.drawStock();
-  ok(kl.updateAuto() === true, '翻 3 张也得把牌堆翻空才给按钮');
-  ok(kl.autoFinish() === true, '翻 3 张开始收');
-  ticks = 0;
-  while(kl.getAuto().busy && ticks++ < 3000) kl.autoTick();
-  ok(kl.collected() === 52, '★ 翻 3 张也收得完（' + ticks + ' 步）');
-  kl.G.drawMode = 1;
+  ok(kl.updateAuto() === false, '（换牌区有 2♥，不给按钮）');
+  ok(kl.simFinish() === true, '★ 但内层试打照样收得完 —— 保险动作还在');
 
-  /* ---- 抽测：全翻开、牌堆也翻空（剩下的牌随手洗进翻牌堆），每局都得给得住按钮 ---- */
+  /* ---- 抽测：把 52 张随手分成「列上 / 牌堆 / 换牌区」，只有三处清干净才给按钮 ---- */
   {
-    let seed = 7, bad = 0, refused = 0, n = 0;
+    let seed = 7, leak = 0, bad = 0, n = 0;
     const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
-    [1, 3].forEach(draw => {
-      kl.G.drawMode = draw;
-      for(let t = 0; t < 10; t++){
-        const tab = dragons.map(d => d.slice());
-        const pile = [];
-        for(let i = 0; i < 4; i++){
-          const k = Math.floor(rnd() * 5);
-          for(let j = 0; j < k; j++) pile.push(tab[i].shift());
-        }
-        for(let i = pile.length - 1; i > 0; i--){
-          const j = Math.floor(rnd() * (i + 1));
-          const tmp = pile[i]; pile[i] = pile[j]; pile[j] = tmp;
-        }
-        /* 同一个局面，牌还压在牌堆里 → 必须不给按钮 */
-        kl.setState({ tab: tab.map(c => c.slice()), up: [0, 0, 0, 0],
-                      stock: pile.slice().reverse(), waste: [], found: [0, 0, 0, 0], score: 0, moves: 0 });
-        if(kl.updateAuto() === false) refused++;
-        /* 牌堆翻空、全摊在翻牌堆里 → 应该给 */
-        kl.setState({ tab: tab.map(c => c.slice()), up: [0, 0, 0, 0],
-                      stock: [], waste: pile.slice(), found: [0, 0, 0, 0], score: 0, moves: 0 });
-        n++;
-        if(kl.updateAuto() !== true || kl.simFinish() !== true) bad++;
+    for(let t = 0; t < 40; t++){
+      const tab = dragons.map(d => d.slice());
+      const pile = [];
+      for(let i = 0; i < 4; i++){
+        const k = Math.floor(rnd() * 5);
+        for(let j = 0; j < k; j++) pile.push(tab[i].shift());
       }
-    });
-    kl.G.drawMode = 1;
-    ok(refused === n, '★ 抽测 ' + n + ' 局：牌还压在牌堆里时一律不给按钮（' + refused + ' 局都挡住了）');
-    ok(bad === 0, '★ 抽测 ' + n + ' 局「全翻开 + 牌堆翻空、剩下的随手洗进翻牌堆」都判成能收（' + bad + ' 局判错）');
+      for(let i = pile.length - 1; i > 0; i--){
+        const j = Math.floor(rnd() * (i + 1));
+        const tmp = pile[i]; pile[i] = pile[j]; pile[j] = tmp;
+      }
+      /* 牌还压在牌堆里 → 必须不给 */
+      kl.setState({ tab: tab.map(c => c.slice()), up: [0, 0, 0, 0],
+                    stock: pile.slice().reverse(), waste: [], found: [0, 0, 0, 0], score: 0, moves: 0 });
+      if(kl.updateAuto() !== false) leak++;
+      /* 牌摊在换牌区里 → 也必须不给 */
+      kl.setState({ tab: tab.map(c => c.slice()), up: [0, 0, 0, 0],
+                    stock: [], waste: pile.slice(), found: [0, 0, 0, 0], score: 0, moves: 0 });
+      if(kl.updateAuto() !== false) leak++;
+      /* 三处清干净（52 张全在列上）→ 必须给，而且内层试打要真的收得完 */
+      kl.setState({ tab: dragons.map(d => d.slice()), up: [0, 0, 0, 0],
+                    stock: [], waste: [], found: [0, 0, 0, 0], score: 0, moves: 0 });
+      n++;
+      if(kl.updateAuto() !== true || kl.simFinish() !== true) bad++;
+    }
+    ok(leak === 0 && bad === 0,
+       '★ 抽测 ' + n + ' 局：牌堆里 / 换牌区里有牌一律不给（漏 ' + leak + ' 次），三处清干净才给（错 ' + bad + ' 局）');
   }
 
   /* ---- 节拍：赢了就这几秒，牌要一张一张看得清（别飞快刷完） ---- */
