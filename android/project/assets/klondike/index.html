@@ -500,7 +500,7 @@
   <div class="op"><em>👆</em><span><b>连点两下</b>同一张牌 = 直接送进收牌堆</span></div>
   <div class="op"><em>⚡</em><span>底下「收牌」把现在能收的一次收干净</span></div>
   <div class="op"><em>⏩</em><span>桌上、牌堆、换牌区都<b>清干净了</b>时，牌桌右下角会冒出「自动完成」，一点就替你收完</span></div>
-  <div class="op"><em>↩</em><span>走错了就撤销，可以一直退回去</span></div>
+  <div class="op"><em>↩</em><span>走错了就撤销，能撤回最近一步</span></div>
   <div class="op"><em>❔</em><span>会扣分的操作先问一句（底部一张<b>小卡片</b>，牌桌还看得见），点「算了」就什么都不发生</span></div>
 
   <p><b>为什么到「都清干净了」才给自动完成？</b>条件就一条：桌上 7 列全翻开，左上的牌堆和旁边的换牌区一张不剩。一列的牌永远是从大压到小，所以最底下那张一定是这列里最小的：四张 A 一定都在末位，能直接收；A 收走以后，2 又成了末位，又能收，一路到 K，桌上的牌一定收得完。牌堆和换牌区空了以后，剩下的牌只会在列上 —— 所以条件一到，这局已经赢了，剩下的只是点很多下。</p>
@@ -621,7 +621,7 @@ var G = {
 };
 
 var sel = null;            /* {type:'col'|'waste'|'found', i, idx} */
-var hist = [];             /* 撤销栈：每步一份快照 */
+var hist = [];             /* 撤销栈：只存最近一步的快照（撤销只能撤一次） */
 var cardEl = [];           /* 52 个牌元素，常驻，靠 transform 移动 */
 var slotEl = [];           /* 13 个空位元素 */
 var POS = [];              /* 每张牌最近一次渲染到的坐标（拖拽 / 撒牌的基准） */
@@ -713,13 +713,14 @@ function snapshot(){
   });
 }
 function pushHistory(){
-  hist.push(snapshot());
-  if(hist.length > 600) hist.shift();
+  /* 只能撤最近一步：新快照把旧的顶掉（孩子们连点撤销会把局面搅得更乱，
+     不如一开始就不给连撤） */
+  hist = [snapshot()];
 }
 
 function undo(){
   if(autoBusy) return;                     /* 自动收牌正在跑，先别掺和 */
-  if(!hist.length){ toast('已经回到最开始了'); return; }
+  if(!hist.length){ toast('只能撤最近的一步'); return; }
   /* 通关撒牌时牌全在屏幕外面飘着（animation-fill-mode 会一直压住 transform），
      不清掉的话撤销回去的牌是看不见的 */
   clearCelebrate();
