@@ -1,0 +1,1845 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>纸牌接龙 · 小游戏盒子</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#191d26; --card2:#202632; --line:#2b3242;
+    --txt:#e8ecf3; --dim:#8b95a7; --acc:#5b8cff; --acc2:#38d39f; --hot:#ffd45e;
+    --red:#d7443f; --black:#2b3446;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
+    -webkit-touch-callout:none}
+  html,body{margin:0;height:100%}
+  body{
+    height:100%;overflow:hidden;
+    display:flex;flex-direction:column;align-items:center;
+    background:radial-gradient(1200px 600px at 50% -10%,#1b2233 0%,var(--bg) 60%);
+    color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    padding:calc(env(safe-area-inset-top) + 8px) 10px calc(env(safe-area-inset-bottom) + 8px);
+    touch-action:manipulation;
+  }
+
+  /* ===== 顶栏 ===== */
+  .top{width:100%;max-width:460px;display:flex;align-items:center;gap:8px;flex:0 0 auto;margin-bottom:7px}
+  .top a{color:var(--dim);text-decoration:none;font-size:18px;padding:6px 10px;border-radius:9px;
+         background:var(--card);border:1px solid var(--line);line-height:1}
+  .top h1{font-size:15px;margin:0;font-weight:600;white-space:nowrap}
+  .top .how,.top .deal{
+    font:inherit;font-size:11.5px;padding:7px 11px;border-radius:9px;line-height:1;
+    background:var(--card);color:var(--dim);border:1px solid var(--line);white-space:nowrap;
+  }
+  .top .how{margin-left:auto;color:#a9b8cf}
+  .top .deal{margin-left:6px}
+  .top .how:active,.top .deal:active{border-color:var(--acc)}
+
+  /* ===== 数据条 ===== */
+  .stats{width:100%;max-width:460px;display:flex;gap:6px;flex:0 0 auto;margin-bottom:7px}
+  .stat{flex:1;background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);
+        border-radius:11px;padding:6px 3px;text-align:center;min-width:0}
+  .stat b{display:block;font-size:14px;font-weight:800;font-variant-numeric:tabular-nums;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stat span{display:block;font-size:9.5px;color:var(--dim);margin-top:1px}
+
+  .tip{width:100%;max-width:460px;flex:0 0 auto;font-size:11px;color:var(--dim);
+       text-align:center;margin-bottom:6px;line-height:1.5}
+  .tip b{color:#a9b8cf;font-weight:600}
+
+  /* ===== 牌桌 ===== */
+  #wrap{flex:1 1 auto;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
+  #table{
+    position:relative;flex:0 0 auto;
+    --cw:50px; --ch:74px;
+    border-radius:15px;
+    background:
+      radial-gradient(120% 80% at 50% 0%,rgba(255,255,255,.05),transparent 60%),
+      linear-gradient(180deg,#12453b,#0c302a);
+    border:1px solid rgba(255,255,255,.07);
+    box-shadow:0 12px 30px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06);
+    /* 牌桌上不滚动、不缩放，手势全部留给拖拽（touch-action 在老 WebView 上不生效，另有 preventDefault 兜底） */
+    touch-action:none;
+  }
+
+  /* 空位：牌堆 / 翻牌堆 / 4 个收牌堆 / 7 个空列 */
+  .slot{
+    position:absolute;left:0;top:0;width:var(--cw);height:var(--ch);
+    border-radius:calc(var(--cw) * .14);
+    border:1.5px dashed rgba(255,255,255,.16);
+    background:rgba(0,0,0,.14);
+    display:grid;place-items:center;
+    color:rgba(255,255,255,.22);
+    font-size:calc(var(--cw) * .46);line-height:1;
+    transition:border-color .15s ease,background .15s ease,box-shadow .15s ease;
+  }
+  .slot.found{color:rgba(255,255,255,.24);font-size:calc(var(--cw) * .40)}
+  .slot.can{border-color:var(--acc2);background:rgba(56,211,159,.13);
+            box-shadow:0 0 0 2px rgba(56,211,159,.22)}
+  .slot.can b{color:var(--acc2)}
+
+  /* 一张牌：外层只负责位置，内层负责长相（选中时内层上浮，不打架） */
+  .card{
+    position:absolute;left:0;top:0;width:var(--cw);height:var(--ch);
+    transition:transform .17s cubic-bezier(.22,.9,.35,1);
+    will-change:transform;
+  }
+  /* 拖拽中：关掉过渡，让牌严丝合缝地跟着手指走 */
+  .card.drag{transition:none;z-index:360}
+  .card .face{
+    position:relative;width:100%;height:100%;
+    border-radius:calc(var(--cw) * .14);
+    background:linear-gradient(178deg,#ffffff 0%,#f2f6fc 100%);
+    border:1px solid #b9c4d6;
+    box-shadow:0 2px 4px rgba(0,0,0,.38), inset 0 1px 0 #fff;
+    transition:box-shadow .15s ease,transform .15s ease,border-color .15s ease;
+  }
+  .card .face .r{
+    position:absolute;left:7%;top:2%;font-weight:800;line-height:1;
+    font-size:calc(var(--cw) * .42);letter-spacing:-.5px;
+    font-variant-numeric:tabular-nums;
+  }
+  .card .face .s{
+    position:absolute;right:6%;top:3%;line-height:1;
+    font-size:calc(var(--cw) * .33);
+  }
+  .card .face .big{
+    position:absolute;left:50%;top:54%;transform:translate(-50%,-50%);
+    font-style:normal;line-height:1;opacity:.92;pointer-events:none;
+    font-size:calc(var(--cw) * .54);
+  }
+  .card.red .face .r,.card.red .face .s,.card.red .face .big{color:var(--red)}
+  .card.black .face .r,.card.black .face .s,.card.black .face .big{color:var(--black)}
+
+  /* 背面：深蓝斜纹（Windows 那种花背的简化版），纯 CSS 画的，不引图片 */
+  .card .back{
+    position:absolute;left:0;top:0;width:100%;height:100%;
+    border-radius:calc(var(--cw) * .14);
+    background:
+      repeating-linear-gradient(45deg,rgba(255,255,255,.085) 0 3px,transparent 3px 7px),
+      repeating-linear-gradient(-45deg,rgba(255,255,255,.085) 0 3px,transparent 3px 7px),
+      linear-gradient(160deg,#33539f,#1a2c60);
+    border:1px solid #16224a;
+    box-shadow:0 2px 4px rgba(0,0,0,.38), inset 0 0 0 2px rgba(255,255,255,.10);
+    display:none;
+  }
+  .card.down .face{display:none}
+  .card.down .back{display:block}
+
+  .card.sel .face{
+    transform:translateY(-5px);
+    box-shadow:0 0 0 2px var(--hot), 0 8px 16px rgba(255,212,94,.35);
+    border-color:var(--hot);
+  }
+  .card.can .face{
+    box-shadow:0 0 0 2px var(--acc2), 0 6px 14px rgba(56,211,159,.28);
+    border-color:var(--acc2);
+  }
+
+  /* ===== 通关撒牌：52 张牌从收牌堆飞出去（Windows 那个经典动画的简化版） =====
+     起终点用 CSS 变量传进来（--sx/--sy 是牌当前所在的位置），
+     否则动画的 0% 会把牌拉回牌桌左上角，看起来是先闪一下再飞。 */
+  .card.fly{animation:flyAway 1.9s cubic-bezier(.35,.05,.75,.6) var(--dly,0s) forwards}
+  @keyframes flyAway{
+    0%{transform:translate3d(var(--sx,0px),var(--sy,0px),0) rotate(0deg)}
+    38%{transform:translate3d(var(--mx,0px),var(--my,0px),0) rotate(var(--r1,0deg))}
+    100%{transform:translate3d(var(--ex,0px),var(--ey,0px),0) rotate(var(--r2,0deg))}
+  }
+
+  /* ===== 底部按钮 ===== */
+  .bar{width:100%;max-width:460px;display:flex;gap:7px;flex:0 0 auto;margin-top:8px}
+  .bar button{
+    flex:1;font:inherit;font-size:12.5px;padding:11px 3px;border-radius:12px;
+    border:1px solid var(--line);background:var(--card2);color:var(--txt);
+    white-space:nowrap;overflow:hidden;
+  }
+  .bar button:active{background:var(--acc);border-color:var(--acc);color:#fff}
+  .bar button:disabled{opacity:.42}
+  .bar button#btnSound{flex:0 0 44px;font-size:15px;padding:11px 0}
+  .bar button#btnAuto{flex:0 0 74px;color:var(--acc2);border-color:rgba(56,211,159,.32)}
+
+  /* ===== 弹层 ===== */
+  /* 不用毛玻璃模糊：没有 GPU 的 WebView 会把它渲染成一块白底，遮罩就废了 */
+  /* 牌的 z-index 最高到 393（撒牌），弹层必须比它高，否则结算面板会被牌压住 */
+  .over{position:fixed;inset:0;background:rgba(8,12,18,.84);display:none;
+        align-items:center;justify-content:center;padding:22px;z-index:400}
+  .over.on{display:flex}
+  .panel{
+    width:100%;max-width:330px;text-align:center;
+    background:linear-gradient(180deg,#1d2534,#161c26);
+    border:1px solid var(--line);border-radius:20px;padding:20px 18px 14px;
+    box-shadow:0 22px 60px rgba(0,0,0,.6);animation:panelIn .24s cubic-bezier(.2,1.3,.5,1);
+  }
+  @keyframes panelIn{from{transform:translateY(12px) scale(.97);opacity:0}to{transform:none;opacity:1}}
+  .panel h2{margin:0 0 6px;font-size:19px;letter-spacing:1px}
+  .panel .sub2{font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.6}
+  .rows{display:flex;gap:8px;margin-bottom:14px}
+  .rows div{flex:1;background:rgba(255,255,255,.04);border:1px solid var(--line);
+            border-radius:11px;padding:8px 4px;min-width:0}
+  .rows b{display:block;font-size:15px;font-variant-numeric:tabular-nums;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rows span{display:block;font-size:10px;color:var(--dim);margin-top:2px}
+  .rows div.rec{border-color:rgba(255,212,94,.45);background:rgba(255,212,94,.08)}
+  .rows div.rec b{color:var(--hot)}
+  .panel input{
+    width:100%;font:inherit;font-size:15px;text-align:center;letter-spacing:1px;
+    padding:11px;border-radius:11px;border:1px solid var(--line);
+    background:#0e131c;color:var(--txt);margin-bottom:10px;
+    -webkit-appearance:none;appearance:none;
+  }
+  .panel input:focus{outline:none;border-color:var(--acc)}
+  .panel button{width:100%;font:inherit;font-size:14px;padding:12px;border-radius:12px;
+                border:1px solid var(--line);background:var(--card2);color:var(--txt);margin-bottom:8px}
+  .panel button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+  .panel button.ghost{background:transparent;color:var(--dim)}
+  .panel button:active{filter:brightness(.94)}
+  .panel .note{font-size:10.5px;color:#6f7b8f;line-height:1.6;margin:2px 0 0}
+
+  /* 翻牌张数：二选一的分段按钮 */
+  .modes{display:flex;gap:8px;margin:0 0 8px}
+  .modes button{margin:0;flex:1;font-size:13px;padding:10px 4px;color:var(--dim)}
+  .modes button.on{
+    color:#dbe8ff;border-color:var(--acc);background:rgba(91,140,255,.18);
+    box-shadow:inset 0 0 0 1px rgba(91,140,255,.35);
+  }
+  .panel .note.left{text-align:left;margin:0 0 12px}
+
+  /* ===== 玩法说明 ===== */
+  .panel.help{
+    max-width:352px;max-height:86vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    text-align:left;padding:18px 16px 14px;
+  }
+  .panel.help h2{text-align:center;font-size:18px}
+  .panel.help .lead{text-align:center;font-size:12px;color:var(--dim);margin:0 0 4px;line-height:1.7}
+  .panel.help h3{
+    display:flex;align-items:center;font-size:13px;margin:15px 0 7px;
+    color:#cfd9e8;font-weight:700;
+  }
+  .panel.help h3 i{
+    flex:0 0 auto;display:grid;place-items:center;width:18px;height:18px;margin-right:7px;
+    border-radius:50%;background:rgba(91,140,255,.20);color:#9db9ff;
+    font-size:10.5px;font-style:normal;font-weight:700;
+  }
+  .panel.help p{margin:0;font-size:12px;line-height:1.75;color:#c3ccdb}
+  .panel.help p b{color:#eef3fa}
+  .panel.help p + p{margin-top:5px}
+  .panel.help .fig{
+    background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:12px;
+    padding:8px 8px 7px;margin:2px 0 9px;
+  }
+  .panel.help .fig svg{display:block;width:100%;height:auto}
+  .panel.help .legend{
+    display:flex;flex-wrap:wrap;justify-content:center;gap:3px 12px;
+    font-size:10.5px;color:var(--dim);margin-top:6px;
+  }
+  .panel.help .legend i{
+    display:inline-block;width:9px;height:9px;border-radius:2.5px;
+    border:1.5px dashed;margin-right:4px;vertical-align:-1px;
+  }
+  .panel.help .op{
+    display:flex;gap:8px;align-items:flex-start;
+    font-size:12px;line-height:1.6;color:#c3ccdb;margin-bottom:7px;
+  }
+  .panel.help .op em{flex:0 0 18px;text-align:center;font-style:normal;font-size:14px;line-height:1.35}
+  .panel.help .op b{color:#eef3fa}
+  .panel.help .score{
+    background:rgba(56,211,159,.07);border:1px solid rgba(56,211,159,.26);border-radius:11px;
+    padding:9px 12px;font-size:11.5px;line-height:1.85;color:#9fdcc4;margin:2px 0 4px;
+  }
+  .panel.help .score b{color:#e6f7f0}
+  .panel.help button{margin-top:14px}
+
+  /* ===== 提示条 ===== */
+  #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 74px);
+         transform:translate(-50%,10px);
+         background:#20262fee;border:1px solid var(--line);padding:9px 15px;border-radius:11px;
+         font-size:12.5px;opacity:0;transition:opacity .2s ease,transform .2s ease;pointer-events:none;
+         z-index:500;max-width:86vw;text-align:center;line-height:1.5}
+  #toast.on{opacity:1;transform:translate(-50%,0)}
+
+  /* ===== 撒花 ===== */
+  #confetti{position:fixed;inset:0;pointer-events:none;z-index:390;overflow:hidden}
+  .cf{position:absolute;top:0;width:9px;height:13px;border-radius:2px;opacity:0;
+      animation:fall 1.8s cubic-bezier(.22,.52,.5,1) forwards}
+  @keyframes fall{
+    0%{transform:translate3d(0,-14vh,0) rotate(0deg);opacity:1}
+    100%{transform:translate3d(var(--dx,0),110vh,0) rotate(var(--rot,540deg));opacity:.1}
+  }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <a href="../index.html" aria-label="返回">‹</a>
+  <h1>纸牌接龙</h1>
+  <button class="how" id="btnHow" type="button">玩法</button>
+  <button class="deal" id="dealBtn" type="button">第 1 局</button>
+</div>
+
+<div class="stats">
+  <div class="stat"><b id="stScore">0</b><span>得分</span></div>
+  <div class="stat"><b id="stMoves">0</b><span>步数</span></div>
+  <div class="stat"><b id="stTime">0:00</b><span>用时</span></div>
+  <div class="stat"><b id="stDone">0/52</b><span>已收牌</span></div>
+</div>
+
+<div class="tip" id="tip">点左上角牌堆翻牌 · 点一张牌 → 点目标位置，或者<b>按住直接拖</b></div>
+
+<div id="wrap"><div id="table"></div></div>
+
+<div class="bar">
+  <button type="button" id="btnUndo">↩ 撤销</button>
+  <button type="button" id="btnAuto">⚡ 收牌</button>
+  <button type="button" id="btnNew">🎲 新局</button>
+  <button type="button" id="btnSound" aria-label="音效开关">🔊</button>
+</div>
+
+<!-- 选择牌局 -->
+<div class="over" id="dealPanel"><div class="panel">
+  <h2>选择牌局</h2>
+  <div class="sub2">一次翻几张牌，决定这局有多难</div>
+  <div class="modes">
+    <button type="button" id="mode1" data-mode="1">翻 1 张（好打）</button>
+    <button type="button" id="mode3" data-mode="3">翻 3 张</button>
+  </div>
+  <div class="note left" id="modeNote">翻 1 张：随手翻、慢慢想，适合第一次玩。翻 3 张：一次过三张，跟 Windows 默认一样，牌序不对就得重翻。</div>
+  <input id="dealInput" type="tel" inputmode="numeric" maxlength="7" value="1" aria-label="局号">
+  <button type="button" class="pri" id="dealGo">开这一局</button>
+  <button type="button" id="dealRand">🎲 随便来一局</button>
+  <button type="button" id="dealReplay">↻ 重玩本局</button>
+  <button type="button" class="ghost" id="dealClose">关闭</button>
+</div></div>
+
+<!-- 通关 -->
+<div class="over" id="winPanel"><div class="panel">
+  <h2>全部收完！</h2>
+  <div class="sub2" id="winSub">第 1 局 · 翻 1 张</div>
+  <div class="rows">
+    <div><b id="winScore">0</b><span>得分</span></div>
+    <div><b id="winTime">0:00</b><span>用时</span></div>
+    <div id="winRecBox"><b id="winRec">—</b><span>最高分</span></div>
+  </div>
+  <button type="button" class="pri" id="winAgain">再来一局</button>
+  <button type="button" class="ghost" id="winClose">看看牌桌</button>
+</div></div>
+
+<!-- 玩法说明 -->
+<div class="over" id="helpPanel"><div class="panel help">
+  <h2>怎么玩</h2>
+  <p class="lead">Windows 里那个最经典的纸牌。把四个花色各自从 A 收到 K，全部收满就赢。</p>
+
+  <h3><i>1</i>认牌桌</h3>
+  <div class="fig">
+    <svg viewBox="0 0 280 124" role="img" aria-label="牌桌布局示意图">
+      <rect x="0" y="0" width="280" height="124" rx="11" fill="#12453b"/>
+      <!-- 左上：牌堆（一叠背面朝上的牌） -->
+      <rect x="37" y="10" width="26" height="34" rx="3.5" fill="#2b4c9b" stroke="#16224a" stroke-width="0.8"/>
+      <path d="M41 16 l18 22 M59 16 l-18 22" stroke="rgba(255,255,255,.22)" stroke-width="1"/>
+      <!-- 翻牌堆 -->
+      <rect x="67" y="10" width="26" height="34" rx="3.5" fill="#f7fafd" stroke="#b9c4d6" stroke-width="0.8"/>
+      <text x="70.5" y="21" font-size="9" font-weight="700" font-family="sans-serif" fill="#d7443f">7♦</text>
+      <!-- 4 个收牌堆 -->
+      <g fill="rgba(0,0,0,.18)" stroke="#ffd45e" stroke-width="1.3" stroke-dasharray="3.5 2.5">
+        <rect x="127" y="10" width="26" height="34" rx="4"/>
+        <rect x="157" y="10" width="26" height="34" rx="4"/>
+        <rect x="187" y="10" width="26" height="34" rx="4"/>
+        <rect x="217" y="10" width="26" height="34" rx="4"/>
+      </g>
+      <g fill="rgba(255,255,255,.34)" font-family="sans-serif" stroke="none" text-anchor="middle">
+        <text x="140" y="32" font-size="11">♣</text><text x="170" y="32" font-size="11">♦</text>
+        <text x="200" y="32" font-size="11">♥</text><text x="230" y="32" font-size="11">♠</text>
+      </g>
+      <!-- 7 列 -->
+      <g fill="rgba(0,0,0,.14)" stroke="#6f9d90" stroke-width="1.2" stroke-dasharray="3 2.5">
+        <rect x="37" y="56" width="26" height="34" rx="4"/>
+        <rect x="67" y="56" width="26" height="34" rx="4"/>
+        <rect x="97" y="56" width="26" height="34" rx="4"/>
+        <rect x="127" y="56" width="26" height="34" rx="4"/>
+        <rect x="157" y="56" width="26" height="34" rx="4"/>
+        <rect x="187" y="56" width="26" height="34" rx="4"/>
+        <rect x="217" y="56" width="26" height="34" rx="4"/>
+      </g>
+      <!-- 第 1 列：两张背面 + 一张明牌 -->
+      <g>
+        <rect x="37" y="56" width="26" height="34" rx="3.5" fill="#2b4c9b" stroke="#16224a" stroke-width="0.8"/>
+        <rect x="37" y="66" width="26" height="34" rx="3.5" fill="#2b4c9b" stroke="#16224a" stroke-width="0.8"/>
+        <rect x="37" y="76" width="26" height="34" rx="3.5" fill="#f7fafd" stroke="#b9c4d6" stroke-width="0.8"/>
+        <text x="40.5" y="87" font-size="9" font-weight="700" font-family="sans-serif" fill="#2b3446">8♣</text>
+      </g>
+      <!-- 第 2 列：一张背面 + 一张明牌 -->
+      <g>
+        <rect x="67" y="56" width="26" height="34" rx="3.5" fill="#2b4c9b" stroke="#16224a" stroke-width="0.8"/>
+        <rect x="67" y="66" width="26" height="34" rx="3.5" fill="#f7fafd" stroke="#b9c4d6" stroke-width="0.8"/>
+        <text x="70.5" y="77" font-size="9" font-weight="700" font-family="sans-serif" fill="#d7443f">Q♥</text>
+      </g>
+      <!-- 第 4 列：一张明牌 -->
+      <rect x="127" y="56" width="26" height="34" rx="3.5" fill="#f7fafd" stroke="#b9c4d6" stroke-width="0.8"/>
+      <text x="130.5" y="67" font-size="9" font-weight="700" font-family="sans-serif" fill="#2b3446">J♠</text>
+      <!-- 第 6 列：长的 -->
+      <g>
+        <rect x="187" y="56" width="26" height="34" rx="3.5" fill="#f7fafd" stroke="#b9c4d6" stroke-width="0.8"/>
+        <rect x="187" y="66" width="26" height="34" rx="3.5" fill="#f7fafd" stroke="#b9c4d6" stroke-width="0.8"/>
+        <rect x="187" y="76" width="26" height="34" rx="3.5" fill="#f7fafd" stroke="#b9c4d6" stroke-width="0.8"/>
+        <text x="190.5" y="67" font-size="9" font-weight="700" font-family="sans-serif" fill="#2b3446">K♣</text>
+        <text x="190.5" y="77" font-size="9" font-weight="700" font-family="sans-serif" fill="#d7443f">Q♦</text>
+        <text x="190.5" y="87" font-size="9" font-weight="700" font-family="sans-serif" fill="#2b3446">J♠</text>
+      </g>
+      <text x="140" y="119" text-anchor="middle" font-size="8.5" font-family="sans-serif" fill="#7fb3a5">空的列也可以放牌</text>
+    </svg>
+    <div class="legend">
+      <span><i style="border-color:#5b8cff;background:#2b4c9b"></i>牌堆：点一下翻牌</span>
+      <span><i style="border-color:#ffd45e"></i>4 个收牌堆</span>
+      <span><i style="border-color:#6f9d90"></i>7 列牌</span>
+    </div>
+  </div>
+  <p>左上那叠<b>扣着的牌</b>是牌堆，点它就翻到旁边；翻完可以再把整叠收回来重翻。右上 4 个格子是收牌堆，收进去的牌就不用管了。</p>
+
+  <h3><i>2</i>怎么摆牌</h3>
+  <div class="fig"><svg viewBox="0 0 280 82" role="img" aria-label="叠牌规则示意图">
+      <g fill="#f7fafd" stroke="#b9c4d6" stroke-width="0.8">
+        <rect x="52" y="4" width="26" height="34" rx="3.5"/>
+        <rect x="52" y="20" width="26" height="34" rx="3.5"/>
+        <rect x="168" y="4" width="26" height="34" rx="3.5"/>
+        <rect x="168" y="20" width="26" height="34" rx="3.5"/>
+      </g>
+      <g font-size="9" font-weight="700" font-family="sans-serif">
+        <text x="55.5" y="14" fill="#2b3446">K♠</text>
+        <text x="55.5" y="30" fill="#d7443f">Q♥</text>
+        <text x="171.5" y="14" fill="#d7443f">Q♥</text>
+        <text x="171.5" y="30" fill="#d7443f">J♦</text>
+      </g>
+      <circle cx="100" cy="26" r="9" fill="#38d39f"/>
+      <text x="100" y="30" text-anchor="middle" font-size="11" font-weight="700" fill="#0d2b22">✓</text>
+      <circle cx="216" cy="26" r="9" fill="#d7443f"/>
+      <text x="216" y="30" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">✗</text>
+      <text x="52" y="68" font-size="9" font-family="sans-serif" fill="#8fdcbe">红黑交替、从大到小</text>
+      <text x="168" y="68" font-size="9" font-family="sans-serif" fill="#f0a6a2">两张同色，不行</text>
+      <text x="52" y="78" font-size="8.5" font-family="sans-serif" fill="#7fb3a5">空出来的列可以放任何牌</text>
+    </svg></div>
+  <p>列里<b>大的在下、小的在上</b>，而且颜色要<b>一红一黑交替</b>。一叠牌只要连着降序 + 红黑交替，就能<b>整段一起搬</b>。</p>
+
+  <h3><i>3</i>怎么收牌</h3>
+  <div class="fig"><svg viewBox="0 0 280 78" role="img" aria-label="收牌规则示意图">
+      <g fill="#f7fafd" stroke="#b9c4d6" stroke-width="0.8">
+        <rect x="16" y="6" width="30" height="40" rx="4"/>
+        <rect x="61" y="6" width="30" height="40" rx="4"/>
+        <rect x="106" y="6" width="30" height="40" rx="4"/>
+        <rect x="196" y="6" width="30" height="40" rx="4"/>
+      </g>
+      <g font-size="12" font-weight="700" font-family="sans-serif" fill="#2b3446">
+        <text x="20" y="20">A♣</text><text x="65" y="20">2♣</text><text x="110" y="20">3♣</text><text x="200" y="20">K♣</text>
+      </g>
+      <text x="152" y="32" font-size="15" font-family="sans-serif" fill="#8b95a7">…</text>
+      <path d="M46 58 H210" stroke="#38d39f" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <path d="M210 58 l-6 -3.4 v6.8 z" fill="#38d39f"/>
+      <text x="128" y="72" text-anchor="middle" font-size="9" font-family="sans-serif" fill="#8fdcbe">同一个花色，A → 2 → 3 … → K</text>
+    </svg></div>
+  <p>收牌堆只认<b>同一花色、正好大一位</b>的牌：A 才能起头，之后 2、3 一路到 K。桌上看见能收的，连点两下就送上去。</p>
+
+  <h3><i>4</i>怎么操作</h3>
+  <div class="op"><em>👆</em><span>点左上牌堆翻牌，翻完再点就把整叠<b>收回来重翻</b></span></div>
+  <div class="op"><em>✋</em><span>按住牌<b>直接拖</b>到目标上松手；拖不动会自己飞回去</span></div>
+  <div class="op"><em>👆</em><span>也可以点一张牌 → 再点目标位置，两种都行</span></div>
+  <div class="op"><em>👆</em><span><b>连点两下</b>同一张牌 = 直接送进收牌堆</span></div>
+  <div class="op"><em>⚡</em><span>底下「收牌」把现在能收的一次收干净</span></div>
+  <div class="op"><em>↩</em><span>走错了就撤销，可以一直退回去</span></div>
+
+  <h3><i>5</i>分数怎么算</h3>
+  <div class="score">
+    送牌进收牌堆 <b>+10</b><br>
+    翻出一张扣着的牌 <b>+5</b><br>
+    从收牌堆把牌拿回牌桌 <b>−15</b><br>
+    牌堆翻完了、整叠收回来重翻 <b>−20</b>
+  </div>
+  <p>分数只进不退到 0 以下，翻 1 张和翻 3 张各记各的最高分。</p>
+
+  <button type="button" class="pri" id="helpClose">知道了</button>
+</div></div>
+
+<div id="toast"></div>
+<div id="confetti"></div>
+
+<script>
+(function(){
+'use strict';
+
+/* ============================================================================
+ * 纸牌接龙（Klondike / Windows 纸牌）
+ *
+ * 规则（和 Windows 那个一样）：
+ *   · 52 张牌，7 列：第 1 列 1 张、第 2 列 2 张 …… 第 7 列 7 张，只有最上面那张明牌
+ *   · 剩下的 24 张扣在左上当牌堆，点一下翻 1 张或 3 张到旁边的翻牌堆
+ *   · 右上 4 个收牌堆，同花色从 A 收到 K
+ *   · 列里只能小牌压大牌、红黑交替；整段连着降序 + 交替才能一起搬
+ *   · 空的列可以放任何牌（比「只放 K」宽松一点，小孩不容易卡死）
+ *   · 牌堆翻完了可以把翻牌堆整叠收回来重翻，次数不限
+ *
+ * 微软当年把它塞进 Windows 3.0，就是为了让用户练熟鼠标拖拽 ——
+ * 所以这里拖拽和点选都做到能用，手势判定和空当接龙共用一套。
+ *
+ * 牌用「卡号 0..51」表示：花色 = c % 4（♣♦♥♠），点数 = c / 4 | 0 + 1（A=1..K=13）
+ * 与空当接龙同一套编码，判定代码可以互相对照。
+ *
+ * 明暗牌用 up[] 记：up[i] 是第 i 列「第一张明牌」的下标。
+ *   [0, up[i]) 扣着，[up[i], len) 明着 —— 因为永远不会有明牌上面再扣一张，
+ *   所以这个「明牌一定是后缀」的不变式成立，一整列只用一个数字就能表达明暗。
+ * ========================================================================== */
+
+var SUIT_CH = ['♣','♦','♥','♠'];
+var RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+var SAVE_KEY = 'gbox_klondike_v1';
+var REC_KEY  = 'gbox_klondike_rec_v1';
+
+function suitOf(c){ return c & 3; }
+function rankOf(c){ return (c >> 2) + 1; }
+function isRed(c){ return suitOf(c) === 1 || suitOf(c) === 2; }
+function cardName(c){ return RANKS[rankOf(c) - 1] + SUIT_CH[suitOf(c)]; }
+
+/* ===== 32 位乘法（不用 Math.imul：老 WebView 上可能没有） ===== */
+function imul32(a, b){
+  var ah = (a >>> 16) & 0xffff, al = a & 0xffff;
+  var bh = (b >>> 16) & 0xffff, bl = b & 0xffff;
+  return (((al * bl) >>> 0) + ((((ah * bl + al * bh) << 16) >>> 0))) >>> 0;
+}
+
+/* ===== 发牌：同一个局号永远发同一副牌（存档、重玩、测试都靠它） =====
+ * 用空当接龙那套 LCG 当随机源 + Fisher-Yates 洗牌。
+ * 然后按 1、2、3……7 张发到 7 列，剩下 24 张进牌堆。
+ */
+function deal(seed){
+  var s = seed >>> 0;
+  function rnd(){
+    s = (imul32(s, 214013) + 2531011) & 0x7fffffff;
+    return s >>> 16;
+  }
+  var deck = [], i, j, t;
+  for(i = 0; i < 52; i++) deck.push(i);
+  for(i = 51; i > 0; i--){
+    j = rnd() % (i + 1);
+    t = deck[i]; deck[i] = deck[j]; deck[j] = t;
+  }
+  var tab = [[],[],[],[],[],[],[]], up = [0,0,0,0,0,0,0], k = 0;
+  for(i = 0; i < 7; i++){
+    for(j = 0; j <= i; j++) tab[i].push(deck[k++]);
+    up[i] = i;                       /* 只有最后一张是明牌 */
+  }
+  return { tab:tab, up:up, stock:deck.slice(28) };
+}
+
+/* ===== 状态 ===== */
+var G = {
+  seed: 1,
+  drawMode: 1,                       /* 一次翻 1 张 / 3 张 */
+  tab: [[],[],[],[],[],[],[]],       /* 7 列，从下往上 */
+  up: [0,0,0,0,0,0,0],               /* 第一张明牌的下标 */
+  stock: [],                         /* 牌堆（末尾是顶） */
+  waste: [],                         /* 翻牌堆（末尾是顶） */
+  found: [0,0,0,0],                  /* 每种花色收到第几张 */
+  moves: 0,
+  score: 0,
+};
+
+var sel = null;            /* {type:'col'|'waste'|'found', i, idx} */
+var hist = [];             /* 撤销栈：每步一份快照 */
+var cardEl = [];           /* 52 个牌元素，常驻，靠 transform 移动 */
+var slotEl = [];           /* 13 个空位元素 */
+var POS = [];              /* 每张牌最近一次渲染到的坐标（拖拽 / 撒牌的基准） */
+
+/* ===== 计时 ===== */
+var running = false, startedAt = 0, baseMs = 0, timer = null;
+
+/* ===== 布局尺寸 ===== */
+var CW = 50, CH = 74, GAP = 5, COL_TOP = 90, TABLE_H = 560, AVAIL_H = 520;
+var PAD = 5, TOPPAD = 6;   /* 牌桌内边距：牌贴边会被边框切掉一条 */
+var DOFF = 15, UOFF = 23;  /* 扣着 / 明着的叠放间距，每帧按列高重算 */
+
+function $(id){ return document.getElementById(id); }
+var table, toastEl, confettiEl, tipEl;
+
+/* ============================================================================
+ * 规则
+ * ========================================================================== */
+
+/* 这张牌能不能落到这一列（空列永远可以） */
+function onColOk(card, col){
+  if(!col || !col.length) return true;
+  var top = col[col.length - 1];
+  return rankOf(top) === rankOf(card) + 1 && isRed(top) !== isRed(card);
+}
+
+/* col[idx..] 是不是一段合法的「降序 + 红黑交替」序列 */
+function runOK(col, idx){
+  for(var i = idx; i < col.length - 1; i++){
+    if(rankOf(col[i]) !== rankOf(col[i + 1]) + 1) return false;
+    if(isRed(col[i]) === isRed(col[i + 1])) return false;
+  }
+  return true;
+}
+
+/* 这张牌能不能收进收牌堆（必须正好是下一个点数） */
+function canFound(card){
+  return rankOf(card) === G.found[suitOf(card)] + 1;
+}
+
+/* 收牌堆顶上那张牌 */
+function foundCard(s){ var f = G.found[s]; return f > 0 ? (f - 1) * 4 + s : -1; }
+
+function collected(){ return G.found[0] + G.found[1] + G.found[2] + G.found[3]; }
+
+/* 这张牌现在在哪：{type:'col'|'waste'|'found'|'stock', i, idx} */
+function findCard(c){
+  var i, k;
+  if(rankOf(c) <= G.found[suitOf(c)]) return { type:'found', i:suitOf(c), idx:rankOf(c) - 1 };
+  k = G.waste.indexOf(c);
+  if(k >= 0) return { type:'waste', i:0, idx:k };
+  k = G.stock.indexOf(c);
+  if(k >= 0) return { type:'stock', i:0, idx:k };
+  for(i = 0; i < 7; i++){
+    k = G.tab[i].indexOf(c);
+    if(k >= 0) return { type:'col', i:i, idx:k };
+  }
+  return null;
+}
+
+/* 当前选中的那一段牌（从选中处到列尾） */
+function selRun(){
+  if(!sel) return null;
+  if(sel.type === 'found'){
+    var c = foundCard(sel.i);
+    return c < 0 ? null : [c];
+  }
+  if(sel.type === 'waste'){
+    /* 只有最上面那张能拿；压在下面的老牌不算「选中」，
+       这样上层（点牌 / 高亮）拿到的永远是真正能搬的那张 */
+    if(sel.idx !== G.waste.length - 1) return null;
+    return [G.waste[sel.idx]];
+  }
+  if(sel.idx >= G.tab[sel.i].length) return null;
+  return G.tab[sel.i].slice(sel.idx);
+}
+
+function sameLoc(a, b){
+  return !!a && !!b && a.type === b.type && a.i === b.i && a.idx === b.idx;
+}
+
+/* ============================================================================
+ * 操作
+ * ========================================================================== */
+
+function snapshot(){
+  return JSON.stringify({
+    t:G.tab, u:G.up, s:G.stock, w:G.waste, f:G.found, m:G.moves, o:G.score,
+  });
+}
+function pushHistory(){
+  hist.push(snapshot());
+  if(hist.length > 600) hist.shift();
+}
+
+function undo(){
+  if(!hist.length){ toast('已经回到最开始了'); return; }
+  /* 通关撒牌时牌全在屏幕外面飘着（animation-fill-mode 会一直压住 transform），
+     不清掉的话撤销回去的牌是看不见的 */
+  clearCelebrate();
+  var s = JSON.parse(hist.pop());
+  G.tab = s.t; G.up = s.u; G.stock = s.s; G.waste = s.w; G.found = s.f;
+  G.moves = s.m; G.score = s.o;
+  sel = null;
+  if(!running) startClock();
+  save(); render(); sfx('undo');
+}
+
+/* 分数只进不退到 0 以下：小孩看到负数会慌 */
+function addScore(n){
+  G.score = Math.max(0, G.score + n);
+}
+
+/* 拿掉牌以后，露出来的那张要翻明（顺便 +5）。
+ * 任何「从列里拿走牌」的路径都必须过这一关，所以收在一处。
+ * up[i] === col.length 说明刚拿走的正好是第一张明牌 —— 下面那张该翻了。
+ */
+function flipIfNeeded(i){
+  var col = G.tab[i];
+  if(!col.length){ G.up[i] = 0; return false; }
+  if(G.up[i] > col.length) G.up[i] = col.length;
+  if(G.up[i] === col.length){
+    G.up[i] = col.length - 1;
+    addScore(5);
+    return true;
+  }
+  return false;
+}
+
+/* 把选中的牌从源上取下来，返回卡片数组（不动 render / moves） */
+function detach(){
+  if(!sel) return null;
+  if(sel.type === 'col'){
+    var run = G.tab[sel.i].slice(sel.idx);
+    G.tab[sel.i].length = sel.idx;
+    flipIfNeeded(sel.i);
+    return run;
+  }
+  if(sel.type === 'waste'){
+    if(sel.idx !== G.waste.length - 1) return null;
+    return [G.waste.pop()];
+  }
+  if(sel.type === 'found'){
+    var s = sel.i, rk = G.found[s];
+    if(rk <= 0) return null;
+    G.found[s] = rk - 1;
+    return [(rk - 1) * 4 + s];
+  }
+  return null;
+}
+
+/* 从不同地方搬牌给的分不一样（照 Windows 的标准计分简化） */
+function scoreFor(from){
+  if(from.type === 'waste') return 5;
+  if(from.type === 'found') return -15;
+  return 0;
+}
+
+/* 放不下的理由（说人话） */
+function badMsg(card, col){
+  if(!col || !col.length) return '放不下';
+  var top = col[col.length - 1];
+  if(rankOf(card) === 13) return 'K 只能放到空列上';
+  if(rankOf(top) !== rankOf(card) + 1){
+    return RANKS[rankOf(card) - 1] + ' 要放到 ' + RANKS[rankOf(card)] + ' 上面';
+  }
+  return '要一红一黑交替着放';
+}
+
+/* 能不能把选中的牌放到第 dst 列 —— 只判断，不弹提示 */
+function canMoveToCol(dst){
+  if(!sel) return { ok:false };
+  var run = selRun();
+  if(!run || !run.length) return { ok:false };
+  if(sel.type === 'col' && sel.i === dst) return { ok:false };
+  if(!onColOk(run[0], G.tab[dst])) return { ok:false, why:'color' };
+  return { ok:true, run:run };
+}
+
+/* 把选中的牌放到第 dst 列 */
+function moveRunToCol(dst, quiet){
+  if(!sel) return false;
+  if(sel.type === 'col' && sel.i === dst) return false;   /* 点自己那列 = 想改选，交给上层 */
+  var run = selRun();
+  if(!run || !run.length){ sel = null; render(); return false; }
+
+  if(!onColOk(run[0], G.tab[dst])){
+    if(!quiet) toast(badMsg(run[0], G.tab[dst]));
+    return false;
+  }
+
+  pushHistory();
+  var from = sel;
+  var cards = detach();
+  if(!cards){ sel = null; render(); return false; }
+  G.tab[dst] = G.tab[dst].concat(cards);
+
+  addScore(scoreFor(from));
+  if(from.type === 'found') toast('从收牌堆拿回来 −15');
+
+  G.moves++;
+  sel = null;
+  startClock();
+  sfx('move');
+  save(); render(); checkWin();
+  return true;
+}
+
+/* 把选中的单张送进收牌堆 */
+function tryFoundSel(quiet){
+  if(!sel) return false;
+  if(sel.type === 'found') return false;
+  var run = selRun();
+  if(!run || !run.length) return false;
+  if(run.length > 1){
+    if(!quiet) toast('一次只能收一张');
+    return false;
+  }
+  var c = run[0];
+  if(!canFound(c)){
+    if(!quiet) toast('收牌从 A 起头，同花色一张张往上收');
+    return false;
+  }
+
+  pushHistory();
+  var from = sel;
+  detach();
+  G.found[suitOf(c)] = rankOf(c);
+  addScore(10);
+
+  G.moves++;
+  sel = null;
+  startClock();
+  sfx('found');
+  save(); render(); checkWin();
+  return true;
+}
+
+/* 直接把某张牌送上收牌堆（连点两下 / 收牌按钮用） */
+function autoFound(c){
+  if(!canFound(c)) return false;
+  var loc = findCard(c);
+  if(!loc || loc.type === 'found' || loc.type === 'stock') return false;
+  if(loc.type === 'col'){
+    if(loc.idx !== G.tab[loc.i].length - 1) return false;
+    G.tab[loc.i].pop();
+    flipIfNeeded(loc.i);
+  } else if(loc.type === 'waste'){
+    if(loc.idx !== G.waste.length - 1) return false;
+    G.waste.pop();
+  } else return false;
+
+  G.found[suitOf(c)] = rankOf(c);
+  addScore(10);
+  return true;
+}
+
+/* 收牌按钮：能收的全收
+ *
+ * ★ 必须循环到收不动为止：收走一张、翻出一张，新翻出来的可能马上又能收。
+ *   （空当接龙里同样的坑：分两段扫会漏牌，这里干脆一路 while 到底）
+ */
+function collectAll(){
+  var any = false, i, c, moved = true, guard = 0;
+
+  while(moved && guard++ < 80){
+    moved = false;
+
+    if(G.waste.length){
+      c = G.waste[G.waste.length - 1];
+      if(canFound(c)){
+        if(!any) pushHistory();
+        any = true;
+        G.waste.pop();
+        G.found[suitOf(c)] = rankOf(c);
+        addScore(10);
+        G.moves++;
+        moved = true;
+      }
+    }
+
+    for(i = 0; i < 7; i++){
+      var col = G.tab[i];
+      if(!col.length) continue;
+      c = col[col.length - 1];
+      if(canFound(c)){
+        if(!any) pushHistory();
+        any = true;
+        col.pop();
+        G.found[suitOf(c)] = rankOf(c);
+        addScore(10);
+        G.moves++;
+        flipIfNeeded(i);
+        moved = true;
+      }
+    }
+  }
+
+  if(!any){ toast('现在没有能收的牌'); return 0; }
+  startClock();
+  sfx('found');
+  save(); render(); checkWin();
+  return 1;
+}
+
+/* 点牌堆：翻牌；牌堆空了就把翻牌堆整叠收回来重翻 */
+function drawStock(){
+  if(!G.stock.length){
+    if(!G.waste.length){ toast('牌都翻完了，桌上也没牌可翻'); return false; }
+    pushHistory();
+    /* 整叠翻个面：原来最上面那张变成新的最底下一张，所以顺序要倒过来 */
+    G.stock = G.waste.slice().reverse();
+    G.waste = [];
+    addScore(-20);
+    G.moves++;
+    sel = null;
+    toast('整叠收回来重翻 −20');
+    startClock(); sfx('shuffle'); save(); render();
+    return true;
+  }
+
+  pushHistory();
+  var n = Math.min(G.drawMode, G.stock.length), k;
+  for(k = 0; k < n; k++) G.waste.push(G.stock.pop());
+  G.moves++;
+  sel = null;
+  startClock(); sfx('draw'); save(); render();
+  return true;
+}
+
+/* ============================================================================
+ * 操作：点选 + 拖拽
+ *
+ * 两个入口最终都落到同一个函数上，行为天然一致：
+ *   按下 → pressAt()   移动 → moveTo()   松开 → releaseAt()
+ * 点选就是「按下后没怎么动就松开了」，此时走 tapCard / tapSlot；
+ * 移动超过 DRAG_PX 才启用拖拽，这样手指轻微的抖动不会被误判成拖动。
+ * ========================================================================== */
+
+function selectAt(c){
+  var loc = findCard(c);
+  if(!loc || loc.type === 'stock') return;
+
+  if(loc.type === 'col' && loc.idx < G.up[loc.i]) return;         /* 扣着的牌选不了 */
+  if(loc.type === 'waste' && loc.idx !== G.waste.length - 1) return;
+  if(loc.type === 'found' && G.found[loc.i] <= 0) return;
+
+  if(loc.type === 'col' && !runOK(G.tab[loc.i], loc.idx)){
+    toast('这张和下面的牌不连号，没法一起搬');
+    sel = null; render();
+    return;
+  }
+  sel = loc;
+  sfx('pick');
+  render();
+}
+
+/* 点了一张牌 */
+function tapCard(c){
+  var loc = findCard(c);
+  if(!loc) return;
+
+  if(loc.type === 'stock'){ drawStock(); return; }
+
+  /* 扣着的牌、翻牌堆里压在下面的牌：点了什么也不做，但**别打断**已有的选择 */
+  if(loc.type === 'col' && loc.idx < G.up[loc.i]) return;
+  if(loc.type === 'waste' && loc.idx !== G.waste.length - 1) return;
+
+  /* 1) 已经选着牌 → 先试「放到这里」 */
+  if(sel && !sameLoc(sel, loc)){
+    if(loc.type === 'col'){
+      if(canMoveToCol(loc.i).ok){ moveRunToCol(loc.i); return; }
+    } else if(loc.type === 'found'){
+      if(sel.type === 'found'){ selectAt(c); return; }   /* 收牌堆之间搬不了，改成重新选 */
+      tryFoundSel();
+      return;
+    }
+    /* 落到翻牌堆上不是合法目标，继续往下走 = 改选 */
+  }
+
+  /* 2) 再点一次同一张：能收就收，不能就取消选中 */
+  if(sel && sameLoc(sel, loc)){
+    var r = selRun();
+    if(r && r.length === 1 && canFound(r[0])){
+      pushHistory();
+      /* 走 autoFound 而不是再写一遍：连点两下和「收牌」按钮必须用同一套判定 */
+      if(autoFound(r[0])){
+        G.moves++;
+        sel = null;
+        startClock(); sfx('found'); save(); render(); checkWin();
+      }
+      return;
+    }
+    sel = null; render();
+    return;
+  }
+
+  /* 3) 选中它 */
+  selectAt(c);
+}
+
+/* 点了一个空位 */
+function tapSlot(kind, i){
+  if(kind === 'stock'){ drawStock(); return; }
+  if(kind === 'col'){
+    if(!sel) return;
+    moveRunToCol(i);
+    return;
+  }
+  if(kind === 'found'){
+    if(!sel) return;
+    tryFoundSel();
+  }
+  /* kind === 'waste'：空的翻牌堆，什么也不做 */
+}
+
+/* ---------- 拖拽 ---------- */
+
+var press = null;          /* {h:{kind:'card',c}|{kind:'slot',k,i}, x, y, id} */
+var drag = null;           /* {run:[卡号...], sx, sy, dx, dy} */
+var DRAG_PX = 6;           /* 手指移动超过这么多像素才算「拖」，否则还是「点」 */
+
+function evXY(e){
+  var t = (e.touches && e.touches.length) ? e.touches[0]
+        : (e.changedTouches && e.changedTouches.length) ? e.changedTouches[0] : e;
+  return { x:t.clientX || 0, y:t.clientY || 0 };
+}
+
+/* 按下的位置下面是牌还是空位 */
+function hitTest(e){
+  var t = e.target;
+  if(!t || !t.closest) return null;
+  var cd = t.closest('.card');
+  if(cd) return { kind:'card', c: parseInt(cd.dataset.c, 10) };
+  var sl = t.closest('.slot');
+  if(sl) return { kind:'slot', k: sl.dataset.kind, i: parseInt(sl.dataset.i, 10) };
+  return null;
+}
+
+function pressAt(h, x, y, id){
+  if(!h) return;
+  press = { h:h, x:x, y:y, id:id };
+  drag = null;
+}
+
+/* 手指 / 鼠标移动：先判断该不该转成拖拽，再让牌跟着走 */
+function moveTo(x, y){
+  if(!press) return;
+
+  if(!drag){
+    if(press.h.kind !== 'card') return;                       /* 空位拖不动 */
+    if(Math.abs(x - press.x) < DRAG_PX && Math.abs(y - press.y) < DRAG_PX) return;
+    if(!beginDrag(press.h.c)){ press = null; return; }        /* 这段牌搬不动，当没拖 */
+  }
+
+  drag.dx = x - drag.sx;
+  drag.dy = y - drag.sy;
+  paintDrag();
+}
+
+/* 真正开始拖：先按点选的规则把这段牌选中，选不中就放弃 */
+function beginDrag(c){
+  var loc = findCard(c);
+  if(!loc || loc.type === 'stock') return false;
+  if(loc.type === 'col' && loc.idx < G.up[loc.i]) return false;
+  if(loc.type === 'waste' && loc.idx !== G.waste.length - 1) return false;
+  if(loc.type === 'found' && G.found[loc.i] <= 0) return false;
+
+  if(loc.type === 'col' && !runOK(G.tab[loc.i], loc.idx)){
+    toast('这张和下面的牌不连号，没法一起搬');   /* 和点选时的提示保持一致 */
+    return false;
+  }
+
+  sel = loc;
+  sfx('pick');
+  render();                    /* 先画一帧：可落点的绿色高亮在拖的过程中就该看得见 */
+
+  var run = selRun();
+  if(!run || !run.length){ sel = null; return false; }
+
+  drag = { run:run, sx:press.x, sy:press.y, dx:0, dy:0 };
+  run.forEach(function(cc){ cardEl[cc].classList.add('drag'); });
+  return true;
+}
+
+/* 让被拖的那几张牌跟着手指走（只改 transform，不触发重排） */
+function paintDrag(){
+  for(var i = 0; i < drag.run.length; i++){
+    var cc = drag.run[i], b = POS[cc], el = cardEl[cc];
+    if(!b) continue;
+    el.style.zIndex = 360 + i;      /* 压在收牌堆（最高 313）上面，但仍在弹层下面 */
+    el.style.transform = 'translate3d(' + (b.x + drag.dx) + 'px,' + (b.y + drag.dy) + 'px,0)';
+  }
+}
+
+function clearDrag(){
+  if(drag){
+    drag.run.forEach(function(cc){ cardEl[cc].classList.remove('drag'); });
+    /* 强制回流一次：先让浏览器认下「又有过渡了」，下一帧改坐标才会有飞回去的动画 */
+    void table.offsetWidth;
+  }
+  drag = null;
+  press = null;
+}
+
+/* 松手：拖过 → 按落点执行；没拖过 → 当成点击走点选 */
+function releaseAt(x, y){
+  if(!press) return;
+  var h = press.h;
+
+  if(drag){
+    var t = dropTarget(x, y);
+    clearDrag();
+    if(t){
+      if(!applyDrop(t)){ sel = null; render(); }
+      return;
+    }
+    sel = null; render();        /* 放在牌桌外面 = 放弃，牌自己飞回去 */
+    return;
+  }
+
+  press = null;
+  if(h.kind === 'card') tapCard(h.c);
+  else tapSlot(h.k, h.i);
+}
+
+/* 手指落在哪一列上（横向按最近的牌列算，判得松一点不容易误伤） */
+function dropTarget(px, py){
+  var r = table.getBoundingClientRect();
+  var tx = px - r.left, ty = py - r.top;
+  var span = CW + GAP;
+
+  if(tx < PAD - span * 0.9) return null;
+  if(tx > PAD + 7 * CW + 6 * GAP + span * 0.9) return null;
+
+  var k = Math.round((tx - PAD - CW / 2) / span);
+  if(k < 0) k = 0;
+  if(k > 6) k = 6;
+
+  if(ty < -CH) return null;
+  if(ty < COL_TOP - GAP * 0.5){                    /* 上面一行：只有收牌堆能放 */
+    return k >= 3 ? { kind:'found', i:k - 3 } : null;
+  }
+  if(ty > TABLE_H + CH) return null;               /* 掉到牌桌下面老远，不算 */
+  return { kind:'col', i:k };
+}
+
+function applyDrop(t){
+  if(t.kind === 'col') return moveRunToCol(t.i);
+  if(t.kind === 'found') return tryFoundSel();
+  return false;
+}
+
+/* 手势被打断（来电、系统手势）：牌飞回原位，别留下拖到一半的僵局 */
+function abortDrag(){
+  if(drag) drag.run.forEach(function(cc){ cardEl[cc].classList.remove('drag'); });
+  drag = null; press = null;
+  sel = null; render();
+}
+
+/* 绑事件：有 PointerEvent 就一路 Pointer（鼠标 / 手指 / 触控笔同一套），
+ * 老 WebView 没有 PointerEvent，退回 touch + mouse 两套。
+ * ★ 这里不能再绑 click：一次点击会被处理两遍（点选一次、拖拽判定一次）。 */
+function bindDrag(){
+  if(window.PointerEvent){
+    table.addEventListener('pointerdown', function(e){
+      if(e.pointerType === 'mouse' && e.button !== 0) return;
+      if(press) clearDrag();                    /* 上一根手指的 up 丢了，别被它拖住 */
+      var p = evXY(e);
+      pressAt(hitTest(e), p.x, p.y, e.pointerId);
+    }, false);
+
+    document.addEventListener('pointermove', function(e){
+      if(!press || e.pointerId !== press.id) return;
+      if(drag && e.cancelable) e.preventDefault();
+      var p = evXY(e);
+      moveTo(p.x, p.y);
+    }, false);
+
+    document.addEventListener('pointerup', function(e){
+      if(!press || e.pointerId !== press.id) return;
+      var p = evXY(e);
+      releaseAt(p.x, p.y);
+    }, false);
+
+    document.addEventListener('pointercancel', function(e){
+      if(!press || e.pointerId !== press.id) return;
+      abortDrag();
+    }, false);
+
+    return;
+  }
+
+  table.addEventListener('touchstart', function(e){
+    if(press) clearDrag();
+    var p = evXY(e);
+    pressAt(hitTest(e), p.x, p.y, 't');
+    if(e.cancelable) e.preventDefault();        /* 老 WebView 不认 touch-action，这里掐掉滚动 */
+  }, { passive:false });
+
+  document.addEventListener('touchmove', function(e){
+    if(!press) return;
+    if(drag && e.cancelable) e.preventDefault();
+    var p = evXY(e);
+    moveTo(p.x, p.y);
+  }, { passive:false });
+
+  document.addEventListener('touchend', function(e){
+    if(!press) return;
+    var p = evXY(e);
+    releaseAt(p.x, p.y);
+  }, false);
+
+  document.addEventListener('touchcancel', abortDrag, false);
+
+  table.addEventListener('mousedown', function(e){
+    if(e.button !== 0) return;
+    var p = evXY(e);
+    pressAt(hitTest(e), p.x, p.y, 'm');
+    if(e.cancelable) e.preventDefault();        /* 别让浏览器开始拖选文字 */
+  }, false);
+
+  document.addEventListener('mousemove', function(e){
+    if(!press) return;
+    moveTo(e.clientX, e.clientY);
+  }, false);
+
+  document.addEventListener('mouseup', function(e){
+    if(!press) return;
+    releaseAt(e.clientX, e.clientY);
+  }, false);
+}
+
+/* ============================================================================
+ * 渲染
+ * ========================================================================== */
+
+/* 牌桌坐标：0 号位是牌堆，1 号是翻牌堆，2 号空着，3~6 是收牌堆；下面 7 列对齐同一套 x */
+function colX(k){ return PAD + k * (CW + GAP); }
+
+function slotXY(kind, i){
+  if(kind === 'stock') return { x: colX(0), y: TOPPAD };
+  if(kind === 'waste') return { x: colX(1), y: TOPPAD };
+  if(kind === 'found') return { x: colX(3 + i), y: TOPPAD };
+  return { x: colX(i), y: COL_TOP };
+}
+
+function layout(){
+  var W = table.parentNode.clientWidth || 390;
+  if(W > 460) W = 460;
+  GAP = Math.max(3, Math.round(W * 0.012));
+  CW = Math.floor((W - GAP * 6 - PAD * 2) / 7);
+  if(CW > 62) CW = 62;
+  if(CW < 24) CW = 24;
+  CH = Math.round(CW * 1.48);
+  COL_TOP = TOPPAD + CH + GAP * 2;
+
+  AVAIL_H = Math.max(CH * 2 + 40, table.parentNode.clientHeight || 520);
+
+  table.style.width = (CW * 7 + GAP * 6 + PAD * 2) + 'px';
+  table.style.setProperty('--cw', CW + 'px');
+  table.style.setProperty('--ch', CH + 'px');
+
+  slotEl.forEach(function(o){
+    var p = slotXY(o.kind, o.i);
+    o.el.style.transform = 'translate3d(' + p.x + 'px,' + p.y + 'px,0)';
+  });
+}
+
+/* 叠放间距：明牌要留出角上的点数（否则一压就看不见是什么牌），
+ * 列太长时整体压缩，保证最长的那列能全塞进屏幕。 */
+function calcOffsets(){
+  var d = Math.round(CH * 0.20);
+  var u = Math.round(CH * 0.31);
+  var room = AVAIL_H - COL_TOP - GAP * 2;
+  var need = 0, i, n, h;
+
+  function tallest(dd, uu){
+    var m = 0;
+    for(var k = 0; k < 7; k++){
+      var len = G.tab[k].length;
+      if(!len) continue;
+      var hh = CH + G.up[k] * dd + (len - G.up[k] - 1) * uu;
+      if(hh > m) m = hh;
+    }
+    return m;
+  }
+
+  need = tallest(d, u);
+  if(need > room && need > CH){
+    var f = (room - CH) / (need - CH);
+    if(f < 0) f = 0;
+    if(f > 1) f = 1;
+    d = Math.max(5, Math.round(d * f));
+    u = Math.max(Math.round(CH * 0.16), Math.round(u * f));
+  }
+  return { d:d, u:u };
+}
+
+function render(){
+  var off = calcOffsets();
+  var dOff = off.d, uOff = off.u;
+  DOFF = dOff; UOFF = uOff;
+
+  /* 最长那列的落脚点 */
+  var tallest = CH, i, k, n;
+  for(i = 0; i < 7; i++){
+    n = G.tab[i].length;
+    if(!n) continue;
+    var hh = CH + G.up[i] * dOff + (n - G.up[i] - 1) * uOff;
+    if(hh > tallest) tallest = hh;
+  }
+  /* 牌桌高度：内容高 + 一圈余量，再和可用高度的 62% 取大。
+     太贴合会像在纯黑背景上漂着一块牌子，铺满又会在下面留一大片空绿布 */
+  var needH = COL_TOP + tallest + GAP * 2 + TOPPAD;
+  TABLE_H = Math.min(AVAIL_H, Math.max(needH + 20, Math.round(AVAIL_H * 0.62)));
+  table.style.height = TABLE_H + 'px';
+
+  /* 选中失效就把选中清掉（撤销 / 收牌之后可能出现） */
+  if(sel){
+    if(sel.type === 'found' && G.found[sel.i] <= 0) sel = null;
+    if(sel.type === 'waste' && sel.idx >= G.waste.length) sel = null;
+    if(sel.type === 'col' && sel.idx >= G.tab[sel.i].length) sel = null;
+  }
+
+  var selSet = {};
+  var run = selRun();
+  if(run){
+    if(sel.type === 'col') for(k = sel.idx; k < G.tab[sel.i].length; k++) selSet[G.tab[sel.i][k]] = 1;
+    else selSet[run[0]] = 1;
+  }
+
+  /* 可落点：把所有合法目标标出来，省得玩家一个个试 */
+  var canCol = {}, canFoundSuit = -1;
+  if(run && run.length){
+    for(i = 0; i < 7; i++){
+      if(sel.type === 'col' && sel.i === i) continue;
+      if(onColOk(run[0], G.tab[i])) canCol[i] = 1;
+    }
+    if(run.length === 1 && canFound(run[0]) && sel.type !== 'found') canFoundSuit = suitOf(run[0]);
+  }
+  /* 目标列的「顶牌」才发光：牌堆中间那张不该亮 */
+  var canCardSet = {};
+  for(i = 0; i < 7; i++){
+    if(canCol[i] && G.tab[i].length) canCardSet[G.tab[i][G.tab[i].length - 1]] = 1;
+  }
+
+  for(i = 0; i < 52; i++){
+    var el = cardEl[i];
+    var hide = false, x = 0, y = 0, z = 10, down = false, placed = false;
+    var fi = G.found[suitOf(i)];
+    var rk = rankOf(i);
+
+    if(rk <= fi){
+      /* 收牌堆：只露最近三张，能看出收到哪了；更早的藏起来 */
+      var depth = fi - rk;
+      if(depth > 2) hide = true;
+      else { x = colX(3 + suitOf(i)); y = TOPPAD + depth * 1.5; z = 300 + rk; }
+      placed = true;
+    }
+
+    if(!placed){
+      k = G.stock.indexOf(i);
+      if(k >= 0){
+        /* 牌堆只画最上面那张（其余完全重叠，没必要都摆出来） */
+        if(k < G.stock.length - 1) hide = true;
+        else { x = colX(0); y = TOPPAD; z = 90; down = true; }
+        placed = true;
+      }
+    }
+
+    if(!placed){
+      k = G.waste.indexOf(i);
+      if(k >= 0){
+        /* 翻 3 张时最上面三张扇形错开，一眼看得出这次翻了哪几张 */
+        var first = Math.max(0, G.waste.length - 3);
+        if(k < first) hide = true;
+        else {
+          var j = k - first;
+          x = colX(1) + j * Math.round(CW * 0.22);
+          y = TOPPAD;
+          z = 100 + j;
+        }
+        placed = true;
+      }
+    }
+
+    if(!placed){
+      for(k = 0; k < 7; k++){
+        var idx = G.tab[k].indexOf(i);
+        if(idx < 0) continue;
+        x = colX(k);
+        if(idx < G.up[k]){
+          down = true;
+          y = COL_TOP + idx * dOff;
+        } else {
+          y = COL_TOP + G.up[k] * dOff + (idx - G.up[k]) * uOff;
+        }
+        z = 10 + idx;
+        placed = true;
+        break;
+      }
+    }
+
+    if(!placed) hide = true;
+
+    el.style.display = hide ? 'none' : 'block';
+    el.style.transform = 'translate3d(' + x + 'px,' + y + 'px,0)';
+    el.style.zIndex = z;
+    POS[i] = { x:x, y:y };     /* 拖拽 / 撒牌从这里起算 */
+    el.classList.toggle('down', down);
+    el.classList.toggle('sel', !!selSet[i]);
+    el.classList.toggle('can', !!canCardSet[i]);
+  }
+
+  /* 空位高亮 */
+  slotEl.forEach(function(o){
+    var on = false;
+    if(o.kind === 'col') on = !!canCol[o.i] && G.tab[o.i].length === 0;
+    else if(o.kind === 'found') on = (canFoundSuit === o.i);
+    o.el.classList.toggle('can', on);
+  });
+
+  paintStats();
+  $('btnUndo').disabled = hist.length === 0;
+}
+
+function paintStats(){
+  $('stScore').textContent = G.score;
+  $('stMoves').textContent = G.moves;
+  $('stTime').textContent = fmt(elapsed());
+  $('stDone').textContent = collected() + '/52';
+}
+
+function fmt(ms){
+  var s = Math.floor(ms / 1000);
+  var m = Math.floor(s / 60);
+  s = s % 60;
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+/* ============================================================================
+ * 计时 / 存档 / 音效
+ * ========================================================================== */
+
+function startClock(){
+  if(running) return;
+  running = true;
+  startedAt = Date.now();
+  if(!timer) timer = setInterval(function(){ if(running) paintStats(); }, 500);
+}
+function stopClock(){
+  if(running){ baseMs = elapsed(); running = false; }
+}
+function elapsed(){
+  return baseMs + (running ? (Date.now() - startedAt) : 0);
+}
+
+function save(){
+  try{
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      v: 1, seed: G.seed, draw: G.drawMode,
+      tab: G.tab, up: G.up, stock: G.stock, waste: G.waste,
+      found: G.found, moves: G.moves, score: G.score, ms: elapsed(),
+    }));
+  }catch(e){}
+}
+
+/* 存档要能挡住坏数据：少牌、重牌、越界的点数、up 越界，一律当没有存档。
+ * 收牌堆的牌不是显式存的（只存「收到第几张」），所以要反推出它们的卡号一起查重。 */
+function validState(o){
+  if(!o || o.v !== 1) return false;
+  if(typeof o.seed !== 'number' || o.seed < 1 || o.seed > 1000000) return false;
+  if(o.draw !== 1 && o.draw !== 3) return false;
+  if(!o.tab || o.tab.length !== 7) return false;
+  if(!o.up || o.up.length !== 7) return false;
+  if(!o.stock || !o.waste || !o.found || o.found.length !== 4) return false;
+  if(typeof o.moves !== 'number' || typeof o.score !== 'number') return false;
+
+  var seen = {}, total = 0, i, k, j;
+
+  function take(arr){
+    for(j = 0; j < arr.length; j++){
+      var c = arr[j];
+      if(typeof c !== 'number' || c < 0 || c > 51 || seen[c]) return false;
+      seen[c] = 1; total++;
+    }
+    return true;
+  }
+
+  for(i = 0; i < 7; i++){
+    if(!o.tab[i]) return false;
+    var u = o.up[i];
+    if(typeof u !== 'number' || u < 0 || u > o.tab[i].length) return false;
+    if(!take(o.tab[i])) return false;
+  }
+  if(!take(o.stock)) return false;
+  if(!take(o.waste)) return false;
+
+  for(i = 0; i < 4; i++){
+    var f = o.found[i];
+    if(typeof f !== 'number' || f < 0 || f > 13) return false;
+    for(k = 1; k <= f; k++){
+      var id = (k - 1) * 4 + i;
+      if(seen[id]) return false;
+      seen[id] = 1; total++;
+    }
+  }
+  return total === 52;
+}
+
+function load(){
+  var o;
+  try{ o = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); }catch(e){ return false; }
+  if(!validState(o)) return false;
+  G.seed = o.seed;
+  G.drawMode = o.draw;
+  G.tab = o.tab;
+  G.up = o.up;
+  G.stock = o.stock;
+  G.waste = o.waste;
+  G.found = o.found;
+  G.moves = o.moves || 0;
+  G.score = o.score || 0;
+  baseMs = Math.max(0, o.ms || 0);
+  running = false;
+  hist = []; sel = null;
+  if(baseMs > 0) startClock();
+  return true;
+}
+
+/* --- 音效：纯合成，不加载任何文件（离线包也能响） --- */
+var sfxOn = true, actx = null;
+try{ sfxOn = localStorage.getItem('gbox_sfx') !== '0'; }catch(e){}
+function tone(freq, dur, type, vol, when){
+  if(!sfxOn) return;
+  try{
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return;
+    if(!actx) actx = new AC();
+    var t = actx.currentTime + (when || 0);
+    var osc = actx.createOscillator(), g = actx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol || 0.08, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g); g.connect(actx.destination);
+    osc.start(t); osc.stop(t + dur + 0.02);
+  }catch(e){}
+}
+function sfx(kind){
+  if(kind === 'move') tone(320, 0.07, 'triangle', 0.06);
+  else if(kind === 'pick') tone(520, 0.05, 'sine', 0.04);
+  else if(kind === 'draw') tone(420, 0.05, 'triangle', 0.045);
+  else if(kind === 'shuffle'){ tone(300, 0.08, 'triangle', 0.05); tone(240, 0.09, 'triangle', 0.05, 0.07); }
+  else if(kind === 'found'){ tone(660, 0.09, 'sine', 0.06); tone(880, 0.10, 'sine', 0.05, 0.06); }
+  else if(kind === 'undo') tone(240, 0.08, 'sine', 0.05);
+  else if(kind === 'win'){
+    [523, 659, 784, 1046].forEach(function(f, i){ tone(f, 0.22, 'triangle', 0.07, i * 0.11); });
+  }
+}
+function paintSound(){
+  $('btnSound').textContent = sfxOn ? '🔊' : '🔇';
+}
+
+/* ============================================================================
+ * 提示 / 撒花 / 通关
+ * ========================================================================== */
+var toastTimer = null;
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('on');
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ toastEl.classList.remove('on'); }, 1600);
+}
+
+function confetti(){
+  var box = confettiEl, colors = ['#ffd45e','#38d39f','#5b8cff','#ff7a7a','#c08bff','#fff'];
+  for(var i = 0; i < 28; i++){
+    var d = document.createElement('i');
+    d.className = 'cf';
+    d.style.left = (Math.random() * 100) + '%';
+    d.style.background = colors[i % colors.length];
+    d.style.animationDelay = (Math.random() * 0.35) + 's';
+    d.style.setProperty('--dx', ((Math.random() - 0.5) * 140) + 'px');
+    d.style.setProperty('--rot', (360 + Math.random() * 720) + 'deg');
+    box.appendChild(d);
+    (function(el){ setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); }, 2600); })(d);
+  }
+}
+
+/* 撒牌：52 张从收牌堆各飞各的，落点全在牌桌外面（Windows 通关动画的简化版）。
+ * 起点必须写成 CSS 变量交给 keyframes —— 动画里写 translate3d(0,0,0) 会把牌
+ * 拉回牌桌左上角，看起来是「先闪一下再飞」。 */
+var celebrateTimer = null;
+function flyAll(){
+  if(!table) return;
+  var W = table.clientWidth || 390, H = table.clientHeight || 500;
+  for(var i = 0; i < 52; i++){
+    var el = cardEl[i], p = POS[i];
+    if(!el || !p) continue;
+    var dx = (Math.random() - 0.5) * W * 1.7;
+    var dy = H + CH * 1.5 + Math.random() * 160;
+    el.style.setProperty('--sx', p.x + 'px');
+    el.style.setProperty('--sy', p.y + 'px');
+    el.style.setProperty('--mx', (p.x + dx * 0.3) + 'px');
+    el.style.setProperty('--my', (p.y - CH * 1.3 - Math.random() * 70) + 'px');
+    el.style.setProperty('--ex', (p.x + dx) + 'px');
+    el.style.setProperty('--ey', (p.y + dy) + 'px');
+    el.style.setProperty('--r1', ((Math.random() * 60 - 30) | 0) + 'deg');
+    el.style.setProperty('--r2', ((Math.random() * 720 - 360) | 0) + 'deg');
+    el.style.setProperty('--dly', (rankOf(i) * 0.042).toFixed(2) + 's');
+    el.style.zIndex = 340 + rankOf(i);
+    el.classList.add('fly');
+  }
+}
+
+/* 新局 / 关面板时要把撒牌动画收干净：
+ * animation-fill-mode:forwards 会一直压住行内 transform，不清掉的话重开一局
+ * 牌会全部赖在屏幕外面不回来。 */
+function clearCelebrate(){
+  if(celebrateTimer){ clearTimeout(celebrateTimer); celebrateTimer = null; }
+  for(var i = 0; i < cardEl.length; i++){
+    if(!cardEl[i]) continue;
+    cardEl[i].classList.remove('fly');
+    cardEl[i].style.zIndex = '';
+  }
+}
+
+function checkWin(){
+  if(collected() < 52) return false;
+  stopClock();
+  sel = null;
+  save();
+  sfx('win');
+  confetti();
+  flyAll();
+  clearTimeout(celebrateTimer);
+  celebrateTimer = setTimeout(function(){
+    celebrateTimer = null;
+    showWin();
+  }, 2100);
+  return true;
+}
+
+/* ============================================================================
+ * 新局 / 面板
+ * ========================================================================== */
+
+function newGame(seed, silent){
+  if(seed < 1) seed = 1;
+  if(seed > 1000000) seed = 1000000;
+  clearCelebrate();
+  G.seed = seed;
+  var d = deal(seed);
+  G.tab = d.tab;
+  G.up = d.up;
+  G.stock = d.stock;
+  G.waste = [];
+  G.found = [0, 0, 0, 0];
+  G.moves = 0;
+  G.score = 0;
+  baseMs = 0; running = false; startedAt = 0;
+  hist = []; sel = null;
+  $('dealBtn').textContent = '第 ' + seed + ' 局';
+  $('winPanel').classList.remove('on');
+  paintTip();
+  save(); render();
+  if(!silent) sfx('pick');
+}
+
+function paintTip(){
+  if(!tipEl) return;
+  tipEl.innerHTML = '一次翻 <b>' + G.drawMode + ' 张</b>（点左上牌堆）· 点一张牌 → 点目标位置，或者<b>按住直接拖</b>';
+}
+
+function paintMode(){
+  $('mode1').classList.toggle('on', G.drawMode === 1);
+  $('mode3').classList.toggle('on', G.drawMode === 3);
+}
+
+function recAll(){
+  try{
+    var o = JSON.parse(localStorage.getItem(REC_KEY) || 'null');
+    return (o && typeof o === 'object') ? o : {};
+  }catch(e){ return {}; }
+}
+function bestRec(){
+  var r = recAll();
+  return r[G.drawMode] || null;
+}
+function saveRec(){
+  var r = recAll(), cur = r[G.drawMode];
+  if(!cur || G.score > cur.score){
+    r[G.drawMode] = { score: G.score, ms: elapsed() };
+    try{ localStorage.setItem(REC_KEY, JSON.stringify(r)); }catch(e){}
+    return true;
+  }
+  return false;
+}
+
+function showWin(){
+  var isRec = saveRec();
+  $('winSub').textContent = '第 ' + G.seed + ' 局 · 翻 ' + G.drawMode + ' 张';
+  $('winScore').textContent = G.score;
+  $('winTime').textContent = fmt(elapsed());
+  var b = bestRec();
+  $('winRec').textContent = b ? b.score : '—';
+  $('winRecBox').className = isRec ? 'rec' : '';
+  $('winPanel').classList.add('on');
+}
+
+/* ============================================================================
+ * 启动
+ * ========================================================================== */
+
+function buildBoard(){
+  table = $('table');
+  toastEl = $('toast');
+  confettiEl = $('confetti');
+  tipEl = $('tip');
+
+  /* 空位：牌堆 | 翻牌堆 | 空 | 4 个收牌堆 | 7 个空列 */
+  var kinds = [
+    { kind:'stock', n:1 },
+    { kind:'waste', n:1 },
+    { kind:'found', n:4 },
+    { kind:'col', n:7 },
+  ];
+  kinds.forEach(function(g){
+    for(var i = 0; i < g.n; i++){
+      var d = document.createElement('div');
+      d.className = 'slot ' + g.kind;
+      d.dataset.kind = g.kind;
+      d.dataset.i = i;
+      if(g.kind === 'stock') d.innerHTML = '<b>↻</b>';     /* 牌堆空了就露出来 */
+      else if(g.kind === 'found') d.innerHTML = '<b>' + SUIT_CH[i] + '</b>';
+      table.appendChild(d);
+      slotEl.push({ kind:g.kind, i:i, el:d });
+    }
+  });
+
+  /* 52 张牌，一次建好，之后只挪位置（挪动有过渡，看起来像在飞） */
+  for(var c = 0; c < 52; c++){
+    var el = document.createElement('div');
+    el.className = 'card ' + (isRed(c) ? 'red' : 'black');
+    el.dataset.c = c;
+    el.innerHTML =
+      '<div class="back"></div>' +
+      '<div class="face">' +
+        '<b class="r">' + RANKS[rankOf(c) - 1] + '</b>' +
+        '<b class="s">' + SUIT_CH[suitOf(c)] + '</b>' +
+        '<i class="big">' + SUIT_CH[suitOf(c)] + '</i>' +
+      '</div>';
+    table.appendChild(el);
+    cardEl.push(el);
+  }
+
+  /* 点击和拖拽共用一套指针事件：按下时不立刻动作，等松手才知道是「点」还是「拖」。 */
+  bindDrag();
+}
+
+function bindUI(){
+  $('btnUndo').addEventListener('click', undo);
+  $('btnAuto').addEventListener('click', collectAll);
+  $('btnNew').addEventListener('click', openDeal);
+  $('btnSound').addEventListener('click', function(){
+    sfxOn = !sfxOn;
+    try{ localStorage.setItem('gbox_sfx', sfxOn ? '1' : '0'); }catch(e){}
+    paintSound();
+    if(sfxOn) sfx('pick');
+  });
+  $('btnHow').addEventListener('click', function(){
+    $('helpPanel').classList.add('on');
+    $('helpPanel').scrollTop = 0;
+  });
+  $('helpClose').addEventListener('click', function(){ $('helpPanel').classList.remove('on'); });
+  /* 点面板外面也能关掉 */
+  $('helpPanel').addEventListener('click', function(e){
+    if(e.target === $('helpPanel')) $('helpPanel').classList.remove('on');
+  });
+
+  $('dealBtn').addEventListener('click', openDeal);
+  $('dealClose').addEventListener('click', function(){ $('dealPanel').classList.remove('on'); });
+  $('dealRand').addEventListener('click', function(){
+    $('dealPanel').classList.remove('on');
+    newGame(1 + Math.floor(Math.random() * 1000000));
+  });
+  $('dealReplay').addEventListener('click', function(){
+    $('dealPanel').classList.remove('on');
+    newGame(G.seed);
+    toast('第 ' + G.seed + ' 局重新开始');
+  });
+  $('dealGo').addEventListener('click', function(){
+    var v = parseInt($('dealInput').value, 10);
+    if(!v || v < 1 || v > 1000000){ toast('局号要在 1 ~ 1000000 之间'); return; }
+    $('dealPanel').classList.remove('on');
+    newGame(v);
+  });
+  $('dealInput').addEventListener('keydown', function(e){
+    if(e.key === 'Enter') $('dealGo').click();
+  });
+
+  /* 翻牌张数：改了立刻按同一个局号重发，方便对比两种难度 */
+  [$('mode1'), $('mode3')].forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var m = parseInt(btn.dataset.mode, 10);
+      if(m === G.drawMode) return;
+      G.drawMode = m;
+      paintMode();
+      newGame(G.seed, true);
+      toast('现在一次翻 ' + m + ' 张 · 第 ' + G.seed + ' 局重发');
+    });
+  });
+
+  $('winAgain').addEventListener('click', function(){
+    $('winPanel').classList.remove('on');
+    newGame(1 + Math.floor(Math.random() * 1000000));
+  });
+  $('winClose').addEventListener('click', function(){ $('winPanel').classList.remove('on'); });
+
+  var rt = null;
+  window.addEventListener('resize', function(){
+    if(rt) clearTimeout(rt);
+    rt = setTimeout(function(){ layout(); render(); }, 120);
+  });
+}
+
+function openDeal(){
+  $('dealInput').value = String(G.seed);
+  paintMode();
+  $('dealPanel').classList.add('on');
+  setTimeout(function(){ try{ $('dealInput').select(); }catch(e){} }, 60);
+}
+
+function boot(){
+  buildBoard();
+  bindUI();
+  paintSound();
+  if(!load()) newGame(1);
+  else if(collected() >= 52){
+    /* 存档里是一局已经收完的牌 —— 打开就是一张空桌子，不如直接发新局 */
+    newGame(1 + Math.floor(Math.random() * 1000000));
+  } else {
+    $('dealBtn').textContent = '第 ' + G.seed + ' 局';
+    paintTip();
+  }
+  paintMode();
+  layout();
+  render();
+}
+
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();
+
+/* ===== 给测试用的钩子（不参与界面逻辑） ===== */
+window.__kl = {
+  G: G,
+  deal: deal,
+  suitOf: suitOf, rankOf: rankOf, isRed: isRed, cardName: cardName,
+  onColOk: onColOk, runOK: runOK, canFound: canFound, collected: collected,
+  foundCard: foundCard, findCard: findCard, selRun: selRun,
+  newGame: newGame, tapCard: tapCard, tapSlot: tapSlot, drawStock: drawStock,
+  selectAt: selectAt, moveRunToCol: moveRunToCol, tryFoundSel: tryFoundSel,
+  autoFound: autoFound, collectAll: collectAll, undo: undo,
+  render: render, layout: layout, elapsed: elapsed, save: save, load: load,
+  checkWin: checkWin, validState: validState, fmt: fmt,
+  bestRec: bestRec, saveRec: saveRec,
+  getSel: function(){ return sel; },
+  setSel: function(s){ sel = s; render(); },
+  getHistLen: function(){ return hist.length; },
+  /* 拖拽：给测试用坐标接口，绕开真实的 DOM 事件，逻辑走的是同一份代码 */
+  pressAt: pressAt, moveTo: moveTo, releaseAt: releaseAt,
+  dropTarget: dropTarget, applyDrop: applyDrop,
+  getPress: function(){ return press; },
+  getDrag: function(){ return drag; },
+  abortDrag: abortDrag,
+  geom: function(){ return { CW:CW, CH:CH, GAP:GAP, PAD:PAD, TOPPAD:TOPPAD,
+                            COL_TOP:COL_TOP, TABLE_H:TABLE_H, DOFF:DOFF, UOFF:UOFF }; },
+  setState: function(o){
+    G.tab = o.tab || [[],[],[],[],[],[],[]];
+    while(G.tab.length < 7) G.tab.push([]);
+    G.up = o.up || [0,0,0,0,0,0,0];
+    G.stock = o.stock || [];
+    G.waste = o.waste || [];
+    G.found = o.found || [0,0,0,0];
+    G.moves = o.moves || 0;
+    G.score = o.score || 0;
+    if(o.seed) G.seed = o.seed;
+    if(o.draw) G.drawMode = o.draw;
+    sel = null; hist = [];
+    render();
+  },
+};
+})();
+</script>
+</body>
+</html>
