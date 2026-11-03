@@ -30,11 +30,13 @@
   .top a{color:var(--dim);text-decoration:none;font-size:18px;padding:6px 10px;border-radius:9px;
          background:var(--card);border:1px solid var(--line);line-height:1}
   .top h1{font-size:15px;margin:0;font-weight:600;white-space:nowrap}
-  .top .deal{
-    margin-left:auto;font:inherit;font-size:11.5px;padding:7px 11px;border-radius:9px;line-height:1;
+  .top .how,.top .deal{
+    font:inherit;font-size:11.5px;padding:7px 11px;border-radius:9px;line-height:1;
     background:var(--card);color:var(--dim);border:1px solid var(--line);white-space:nowrap;
   }
-  .top .deal:active{border-color:var(--acc)}
+  .top .how{margin-left:auto;color:#a9b8cf}
+  .top .deal{margin-left:6px}
+  .top .how:active,.top .deal:active{border-color:var(--acc)}
 
   /* ===== 数据条 ===== */
   .stats{width:100%;max-width:460px;display:flex;gap:8px;flex:0 0 auto;margin-bottom:7px}
@@ -174,6 +176,54 @@
   .panel button:active{filter:brightness(.94)}
   .panel .note{font-size:10.5px;color:#6f7b8f;line-height:1.6;margin:2px 0 0}
 
+  /* ===== 玩法说明 ===== */
+  .panel.help{
+    max-width:352px;max-height:86vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    text-align:left;padding:18px 16px 14px;
+  }
+  .panel.help h2{text-align:center;font-size:18px}
+  .panel.help .lead{text-align:center;font-size:12px;color:var(--dim);margin:0 0 4px;line-height:1.7}
+  .panel.help h3{
+    display:flex;align-items:center;font-size:13px;margin:15px 0 7px;
+    color:#cfd9e8;font-weight:700;
+  }
+  .panel.help h3 i{
+    flex:0 0 auto;display:grid;place-items:center;width:18px;height:18px;margin-right:7px;
+    border-radius:50%;background:rgba(91,140,255,.20);color:#9db9ff;
+    font-size:10.5px;font-style:normal;font-weight:700;
+  }
+  .panel.help p{margin:0;font-size:12px;line-height:1.75;color:#c3ccdb}
+  .panel.help p b{color:#eef3fa}
+  .panel.help p + p{margin-top:5px}
+  .panel.help .fig{
+    background:rgba(255,255,255,.035);border:1px solid var(--line);border-radius:12px;
+    padding:8px 8px 7px;margin:2px 0 9px;
+  }
+  .panel.help .fig svg{display:block;width:100%;height:auto}
+  .panel.help .legend{
+    display:flex;flex-wrap:wrap;justify-content:center;gap:3px 12px;
+    font-size:10.5px;color:var(--dim);margin-top:6px;
+  }
+  .panel.help .legend i{
+    display:inline-block;width:9px;height:9px;border-radius:2.5px;
+    border:1.5px dashed;margin-right:4px;vertical-align:-1px;
+  }
+  .panel.help .formula{
+    background:rgba(56,211,159,.07);border:1px solid rgba(56,211,159,.26);border-radius:11px;
+    padding:9px 12px;font-size:12px;line-height:1.8;color:#9fdcc4;margin:2px 0 9px;
+  }
+  .panel.help .formula b{color:#e6f7f0}
+  .panel.help .formula sup{font-size:9px}
+  .panel.help .formula .eg{margin-top:5px;padding-top:5px;font-size:11.5px;line-height:1.7;
+                           color:#8ecdb4;border-top:1px dashed rgba(56,211,159,.22)}
+  .panel.help .op{
+    display:flex;gap:8px;align-items:flex-start;
+    font-size:12px;line-height:1.6;color:#c3ccdb;margin-bottom:7px;
+  }
+  .panel.help .op em{flex:0 0 18px;text-align:center;font-style:normal;font-size:14px;line-height:1.35}
+  .panel.help .op b{color:#eef3fa}
+  .panel.help button{margin-top:14px}
+
   /* ===== 提示条 ===== */
   #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 74px);
          transform:translate(-50%,10px);
@@ -197,6 +247,7 @@
 <div class="top">
   <a href="/" aria-label="返回">‹</a>
   <h1>空当接龙</h1>
+  <button class="how" id="btnHow" type="button">玩法</button>
   <button class="deal" id="dealBtn" type="button">第 1 局</button>
 </div>
 
@@ -239,6 +290,72 @@
   </div>
   <button type="button" class="pri" id="winAgain">再来一局</button>
   <button type="button" class="ghost" id="winClose">看看牌桌</button>
+</div></div>
+
+<!-- 玩法说明 -->
+<div class="over" id="helpPanel"><div class="panel help">
+  <h2>怎么玩</h2>
+  <p class="lead">52 张牌全摊在桌上，把每个花色从 A 一路收到 K，四堆收满就赢。</p>
+
+  <h3><i>1</i>认牌桌</h3>
+  <div class="fig">
+    <svg viewBox="0 0 280 106" role="img" aria-label="牌桌布局示意图">
+      <rect x="0" y="0" width="280" height="106" rx="11" fill="#12453b"/>
+      <g fill="rgba(0,0,0,.18)" stroke="#5b8cff" stroke-width="1.3" stroke-dasharray="3.5 2.5"><rect x="15" y="10" width="26" height="34" rx="4"/><text x="28" y="32" text-anchor="middle" font-size="12">+</text><rect x="47" y="10" width="26" height="34" rx="4"/><text x="60" y="32" text-anchor="middle" font-size="12">+</text><rect x="79" y="10" width="26" height="34" rx="4"/><text x="92" y="32" text-anchor="middle" font-size="12">+</text><rect x="111" y="10" width="26" height="34" rx="4"/><text x="124" y="32" text-anchor="middle" font-size="12">+</text></g>
+      <g fill="rgba(255,255,255,.30)" font-family="sans-serif" stroke="none"><text x="28" y="32" text-anchor="middle" font-size="12">+</text><text x="60" y="32" text-anchor="middle" font-size="12">+</text><text x="92" y="32" text-anchor="middle" font-size="12">+</text><text x="124" y="32" text-anchor="middle" font-size="12">+</text></g>
+      <g fill="rgba(0,0,0,.18)" stroke="#ffd45e" stroke-width="1.3" stroke-dasharray="3.5 2.5"><rect x="143" y="10" width="26" height="34" rx="4"/><text x="156" y="32" text-anchor="middle" font-size="11">♣</text><rect x="175" y="10" width="26" height="34" rx="4"/><text x="188" y="32" text-anchor="middle" font-size="11">♦</text><rect x="207" y="10" width="26" height="34" rx="4"/><text x="220" y="32" text-anchor="middle" font-size="11">♥</text><rect x="239" y="10" width="26" height="34" rx="4"/><text x="252" y="32" text-anchor="middle" font-size="11">♠</text></g>
+      <g fill="rgba(255,255,255,.34)" font-family="sans-serif" stroke="none"><text x="156" y="32" text-anchor="middle" font-size="11">♣</text><text x="188" y="32" text-anchor="middle" font-size="11">♦</text><text x="220" y="32" text-anchor="middle" font-size="11">♥</text><text x="252" y="32" text-anchor="middle" font-size="11">♠</text></g>
+      <g fill="rgba(0,0,0,.14)" stroke="#6f9d90" stroke-width="1.2" stroke-dasharray="3 2.5"><rect x="143" y="54" width="26" height="34" rx="4"/><rect x="175" y="54" width="26" height="34" rx="4"/><rect x="207" y="54" width="26" height="34" rx="4"/><rect x="239" y="54" width="26" height="34" rx="4"/></g>
+      <g fill="#f7fafd" stroke="#b9c4d6" stroke-width="0.8"><rect x="15" y="54" width="26" height="34" rx="3.5"/><rect x="15" y="66" width="26" height="34" rx="3.5"/><rect x="47" y="54" width="26" height="34" rx="3.5"/><rect x="47" y="66" width="26" height="34" rx="3.5"/><rect x="79" y="54" width="26" height="34" rx="3.5"/><rect x="111" y="54" width="26" height="34" rx="3.5"/></g>
+      <g font-size="9" font-weight="700" font-family="sans-serif" fill="#2b3446"><text x="18" y="64">K♠</text><text x="50" y="76">6♣</text><text x="114" y="64">J♣</text></g>
+      <g font-size="9" font-weight="700" font-family="sans-serif" fill="#d7443f"><text x="18" y="76">Q♥</text><text x="50" y="64">7♦</text><text x="82" y="64">9♥</text></g>
+    </svg>
+    <div class="legend">
+      <span><i style="border-color:#5b8cff"></i>4 个暂存格</span>
+      <span><i style="border-color:#ffd45e"></i>4 个收牌堆</span>
+      <span><i style="border-color:#6f9d90"></i>8 列牌</span>
+    </div>
+  </div>
+  <p>左上 4 个格子<b>每格只放一张</b>，是临时中转站；右上 4 个是收牌堆，收走的牌就不用再管了。</p>
+
+  <h3><i>2</i>怎么叠牌</h3>
+  <div class="fig"><svg viewBox="0 0 280 78" role="img" aria-label="叠牌规则示意图">
+      <g fill="#f7fafd" stroke="#b9c4d6" stroke-width="0.8">
+        <rect x="52" y="4" width="26" height="34" rx="3.5"/>
+        <rect x="52" y="20" width="26" height="34" rx="3.5"/>
+        <rect x="168" y="4" width="26" height="34" rx="3.5"/>
+        <rect x="168" y="20" width="26" height="34" rx="3.5"/>
+      </g>
+      <g font-size="9" font-weight="700" font-family="sans-serif">
+        <text x="55.5" y="14" fill="#2b3446">K♠</text>
+        <text x="55.5" y="30" fill="#d7443f">Q♥</text>
+        <text x="171.5" y="14" fill="#d7443f">Q♥</text>
+        <text x="171.5" y="30" fill="#d7443f">J♦</text>
+      </g>
+      <circle cx="100" cy="26" r="9" fill="#38d39f"/>
+      <text x="100" y="30" text-anchor="middle" font-size="11" font-weight="700" fill="#0d2b22">✓</text>
+      <circle cx="216" cy="26" r="9" fill="#d7443f"/>
+      <text x="216" y="30" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">✗</text>
+      <text x="52" y="68" font-size="9" font-family="sans-serif" fill="#8fdcbe">红黑交替</text>
+      <text x="168" y="68" font-size="9" font-family="sans-serif" fill="#f0a6a2">两张同色</text>
+    </svg></div>
+  <p>列里只能<b>大牌在下、小牌在上</b>，并且颜色要<b>红黑交替</b>。空列可以放任何牌。</p>
+  <p>一叠牌只要连着降序 + 红黑交替，就能<b>整段一起搬</b>。</p>
+
+  <h3><i>3</i>一次能搬几张</h3>
+  <div class="formula">
+    一次最多搬 <b>（空暂存格 + 1）× 2<sup>空列数</sup></b> 张
+    <div class="eg">例：4 个暂存格全空、没有空列<br>(4 + 1) × 1 = <b>5 张</b></div>
+  </div>
+  <p>想搬长一点的牌，就先腾空暂存格或整整一列 —— 空位就是这游戏的全部策略。</p>
+
+  <h3><i>4</i>怎么操作</h3>
+  <div class="op"><em>👆</em><span>点一张牌 → 再点目标位置，就放下了</span></div>
+  <div class="op"><em>✋</em><span>按住牌<b>直接拖</b>到目标上松手，两种都行；拖不动会自己飞回去</span></div>
+  <div class="op"><em>👆</em><span><b>连点两下</b>同一张牌 = 直接送进收牌堆（要从 A 开始）</span></div>
+  <div class="op"><em>⚡</em><span>底下「收牌」把现在能收的一次收干净</span></div>
+
+  <button type="button" class="pri" id="helpClose">知道了</button>
 </div></div>
 
 <div id="toast"></div>
@@ -1267,6 +1384,15 @@ function bindUI(){
     try{ localStorage.setItem('gbox_sfx', sfxOn ? '1' : '0'); }catch(e){}
     paintSound();
     if(sfxOn) sfx('pick');
+  });
+  $('btnHow').addEventListener('click', function(){
+    $('helpPanel').classList.add('on');
+    $('helpPanel').scrollTop = 0;
+  });
+  $('helpClose').addEventListener('click', function(){ $('helpPanel').classList.remove('on'); });
+  /* 点面板外面也能关掉 */
+  $('helpPanel').addEventListener('click', function(e){
+    if(e.target === $('helpPanel')) $('helpPanel').classList.remove('on');
   });
   $('dealBtn').addEventListener('click', openDeal);
   $('dealClose').addEventListener('click', function(){ $('dealPanel').classList.remove('on'); });

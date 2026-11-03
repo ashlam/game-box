@@ -808,6 +808,36 @@ section('11) ★ 用求解器把第 1 局真的走通（规则没被写死）');
   }
 }
 
+/* ================= 12) 玩法说明 ================= */
+section('12) 玩法说明面板');
+{
+  ok(/<button class="how" id="btnHow"/.test(html), '顶栏有「玩法」按钮');
+  ok(/<div class="over" id="helpPanel">/.test(html), '有玩法说明弹层');
+
+  const figs = (html.match(/<svg viewBox=/g) || []).length;
+  ok(figs >= 2, '说明里带内联示意图（' + figs + ' 张，纯 SVG 不依赖图片）');
+  /* 示意图里的牌必须画在 SVG 内部，而不是引用外部文件 */
+  ok(!/url\(|<image\b|<use\b[^>]*href/.test(html), '示意图没有引用外部资源');
+
+  /* 四节内容都在 */
+  ['认牌桌', '怎么叠牌', '一次能搬几张', '怎么操作'].forEach(t => {
+    ok(html.indexOf(t) > 0, '说明里有「' + t + '」这一节');
+  });
+
+  /* 开 / 关 */
+  const panel = byId.helpPanel, btn = byId.btnHow;
+  ok(!!panel && !!btn, '按钮和面板都取到了 DOM');
+  btn.fire('click');
+  ok(panel.classList.contains('on'), '点「玩法」打开说明');
+  byId.helpClose.fire('click');
+  ok(!panel.classList.contains('on'), '点「知道了」关掉说明');
+
+  /* 点面板外围也能关 */
+  btn.fire('click');
+  panel.fire('click', { target: panel });
+  ok(!panel.classList.contains('on'), '点面板外面的遮罩也能关掉');
+}
+
 /* ================= 汇总 ================= */
 console.log('\n' + '='.repeat(60));
 console.log('通过 ' + pass + ' 项，失败 ' + fail + ' 项');
