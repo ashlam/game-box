@@ -9,7 +9,7 @@
  *   4) 移动：列↔列、翻牌堆↔列、收牌堆的牌拿回来；非法移动必须拒绝且不改状态
  *   5) ★ 翻牌：拿走第一张明牌后，下面那张要翻明并 +5 —— 这是本游戏最容易漏的分支
  *   6) 计分：进收牌堆 +10、翻明 +5、从收牌堆拿回 −15、重翻牌堆 −20，且不会变负
- *   7) 撤销：连撤到底，牌堆 / 翻牌堆 / 分数 / 明暗全部一起回来
+ *   7) 撤销：只能撤最近一步，牌堆 / 翻牌堆 / 分数 / 明暗一起回来
  *   8) 收牌按钮 + 通关判定（含撒牌动画的清理）
  *   9) 存档：往返一致，坏存档（少牌 / 重牌 / up 越界）一律当没有
  *  10) 点击交互：选中 → 点目标列；再点同一张 = 收牌；点牌堆 = 翻牌
@@ -420,10 +420,9 @@ section('6) 计分：+10 / +5 / −15 / −20，且不会变负');
 }
 
 /* ================= 7) 撤销 ================= */
-section('7) 撤销：牌堆 / 翻牌堆 / 分数 / 明暗一起回来');
+section('7) 撤销：只能撤最近一步，再撤就不动了');
 {
   kl.newGame(3, true);
-  const before = JSON.stringify({ t:kl.G.tab, u:kl.G.up, s:kl.G.stock, w:kl.G.waste, f:kl.G.found, sc:kl.G.score });
 
   kl.drawStock();                                   /* 翻一张 */
   const col0 = kl.G.tab[0][kl.G.tab[0].length - 1];
@@ -433,13 +432,24 @@ section('7) 撤销：牌堆 / 翻牌堆 / 分数 / 明暗一起回来');
 
   kl.drawStock();
   kl.drawStock();
-  ok(kl.getHistLen() === 3, '每一步都记進撤销栈（' + kl.getHistLen() + '）');
-  kl.undo(); kl.undo(); kl.undo();
-  const after = JSON.stringify({ t:kl.G.tab, u:kl.G.up, s:kl.G.stock, w:kl.G.waste, f:kl.G.found, sc:kl.G.score });
-  ok(before === after, '连撤三步回到开局原样（牌堆、翻牌堆、分数全都回来了）');
+  ok(kl.getHistLen() === 1, '★ 连做几步，栈里也只留最近一步');
+
+  const beforeUndo = JSON.stringify({ t:kl.G.tab, u:kl.G.up, s:kl.G.stock, w:kl.G.waste, f:kl.G.found, sc:kl.G.score });
+  kl.undo();
+  const afterUndo = JSON.stringify({ t:kl.G.tab, u:kl.G.up, s:kl.G.stock, w:kl.G.waste, f:kl.G.found, sc:kl.G.score });
+  ok(beforeUndo !== afterUndo, '★ 撤一步：最近那次操作真的退回去了');
+  ok(kl.G.stock.length === 18 && kl.G.waste.length === 6, '退到的是「第三次翻牌之前」的位置（18 + 6，翻 3 张模式）');
 
   kl.undo();
-  ok(kl.G.moves === 0, '撤到底也不崩，只是提示「已经回到最开始了」');
+  ok(JSON.stringify({ t:kl.G.tab, u:kl.G.up, s:kl.G.stock, w:kl.G.waste, f:kl.G.found, sc:kl.G.score }) === afterUndo,
+     '★ 再撤就不动了 —— 只能撤一次');
+  ok(/只能撤/.test(String(byId.toast.textContent)), '提示说明「只能撤最近的一步」');
+
+  /* 撤完再走一步，还是能撤一步（撤销资格跟着最新操作走） */
+  kl.drawStock();
+  ok(kl.getHistLen() === 1, '撤完再走一步，撤销资格又有了');
+  kl.undo();
+  ok(kl.G.stock.length === 18 && kl.G.waste.length === 6, '★ 这一步也撤得回去');
 
   /* 撤销要和翻牌联动：搬走牌 + 翻明 + 加分，撤一步全回去 */
   kl.setState({
