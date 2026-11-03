@@ -937,6 +937,16 @@ section('15) ★ 牌桌放得下最长的那一列（初始 6 张扣着的 + K �
   });
   ok(bad.length === 0, '★ 可用高从 560 到 215，19 张的列都留在牌桌里', bad.join('；'));
 
+  /* 牌桌高度焊死在可用高度上：不能一列变长桌子就跟着长一截（玩到一半桌面变大很跳） */
+  wrap.clientHeight = 470;
+  kl.layout();
+  kl.newGame(3, true);
+  const h7 = kl.geom().TABLE_H;
+  kl.setState(long);
+  const h19 = kl.geom().TABLE_H;
+  ok(h7 === h19, '★ 牌桌高度不随牌局变（开局 7 列 ' + h7 + 'px / 19 张列 ' + h19 + 'px）');
+  ok(h7 === 470, '牌桌把可用高度整个吃掉（可用 470 → 牌桌 ' + h7 + 'px）');
+
   /* 竖屏高度够，就不该动间距（别为了极端情况把日常画面也压扁） */
   wrap.clientHeight = 560;
   kl.layout();

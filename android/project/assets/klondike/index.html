@@ -1523,22 +1523,17 @@ function render(){
   var dOff = off.d, uOff = off.u;
   DOFF = dOff; UOFF = uOff;
 
-  /* 最长那列的落脚点 */
-  var tallest = CH, i, k;
-  for(i = 0; i < 7; i++){
-    var hh = colHeight(i, dOff, uOff);
-    if(hh > tallest) tallest = hh;
-  }
+  var i, k;
   /* 明牌被压得很紧时，角上的点数也跟着缩：露出 10px 却用 20px 的字，
      等于只能看到字的上半截。字号不超过「明牌露出的那条」的高度就好。 */
   var rfs = Math.round(CW * 0.42);
   if(Math.round(uOff * 1.15) < rfs) rfs = Math.max(10, Math.round(uOff * 1.15));
   table.style.setProperty('--rfs', rfs + 'px');
 
-  /* 牌桌高度：内容高 + 一圈余量，再和可用高度的 62% 取大。
-     太贴合会像在纯黑背景上漂着一块牌子，铺满又会在下面留一大片空绿布 */
-  var needH = COL_TOP + tallest + GAP * 2 + TOPPAD;
-  TABLE_H = Math.min(AVAIL_H, Math.max(needH + 20, Math.round(AVAIL_H * 0.62)));
+  /* 牌桌高度固定吃满可用高度。以前是「内容高 + 20 和可用高 62% 取大」，
+     一列变长牌桌就跟着长一截 —— 玩到一半桌面突然变大很跳，索性一开始就拉到最高。
+     列再长也只是牌往下走，桌子不动，空出来的地方就是绿布。 */
+  TABLE_H = AVAIL_H;
   table.style.height = TABLE_H + 'px';
 
   /* 选中失效就把选中清掉（撤销 / 收牌之后可能出现） */
