@@ -12,6 +12,7 @@
  *   7) 收牌按钮 + 通关判定
  *   8) 存档：往返一致，坏存档（少牌 / 重牌 / 越界）一律当没有
  *   9) 点击交互：选中 → 点目标列；再点同一张 = 收牌
+ * 9.6) ★ 拖拽：按住牌直接拖，落点判定 + 和点选等价（手抖不算拖、拖错飞回原位）
  *  10) 单文件自包含（无外链 / 无图片），返回键是 "/"
  *
  * 用法：node tools/test_freecell.js [web/freecell/index.html]
@@ -486,10 +487,17 @@ section('9) 点击交互');
 }
 
 
-/* ================= 9.5) ★ 随机乱走 400 步：状态不能被走坏 ================= */
+/* ================= 9.5) ★ 随机乱走：状态不能被走坏 ================= */
 section('9.5) ★ 随机走 400 步，牌不能多也不能少');
 {
-  fc.newGame(1);
+  /* 用固定种子的 LCG 打乱，不用 Math.random：
+     这条测试只看「状态会不会被走坏」，结果必须每次一样，否则就是个随机陷阱 */
+  const lcg = seed => {
+    let x = seed >>> 0;
+    return () => (x = (Math.imul(x, 1664525) + 1013904223) >>> 0) / 4294967296;
+  };
+  const shuf = (a, rnd) => a.map(v => [rnd(), v]).sort((x, y) => x[0] - y[0]).map(x => x[1]);
+
   const total = () => {
     let n = 0;
     fc.G.cols.forEach(c => { n += c.length; });
@@ -498,48 +506,215 @@ section('9.5) ★ 随机走 400 步，牌不能多也不能少');
     return n;
   };
   const dup = () => {
-    const seen = new Set(), all = [];
+    const all = [];
     fc.G.cols.forEach(c => all.push(...c));
     fc.G.free.forEach(f => { if(f !== null) all.push(f); });
     return all.length !== new Set(all).size;
   };
 
-  const order = [0,1,2,3,4,5,6,7];
-  const shuf = a => a.map(v => [Math.random(), v]).sort((x,y) => x[0] - y[0]).map(x => x[1]);
-  let played = 0, bad = '';
+  /* 走一局：随便挑合法的起点和目标，走满 400 步或自己把自己堵死为止 */
+  function walk(gameSeed, randSeed){
+    fc.newGame(gameSeed);
+    const rnd = lcg(randSeed);
+    const order = [0,1,2,3,4,5,6,7];
+    let played = 0, bad = '';
 
-  for(let step = 0; step < 400 && !bad; step++){
-    if(total() !== 52) { bad = '第 ' + step + ' 步牌数变成 ' + total(); break; }
-    if(dup()) { bad = '第 ' + step + ' 步出现重复牌'; break; }
-    if(fc.G.found.some(f => f < 0 || f > 13)) { bad = '第 ' + step + ' 步收牌堆越界'; break; }
+    for(let step = 0; step < 400 && !bad; step++){
+      if(total() !== 52){ bad = '第 ' + step + ' 步牌数变成 ' + total(); break; }
+      if(dup()){ bad = '第 ' + step + ' 步出现重复牌'; break; }
+      if(fc.G.found.some(f => f < 0 || f > 13)){ bad = '第 ' + step + ' 步收牌堆越界'; break; }
 
-    /* 收集所有「能整段搬」的起点（列里任意合法序列的开头 + 暂存格） */
-    const srcs = [];
-    for(let i = 0; i < 8; i++){
-      const col = fc.G.cols[i];
-      for(let j = 0; j < col.length; j++) if(fc.runOK(col, j)) srcs.push({ type:'col', i:i, idx:j });
+      /* 所有「能整段搬」的起点：列里任意合法序列的开头 + 暂存格 */
+      const srcs = [];
+      for(let i = 0; i < 8; i++){
+        const col = fc.G.cols[i];
+        for(let j = 0; j < col.length; j++) if(fc.runOK(col, j)) srcs.push({ type:'col', i:i, idx:j });
+      }
+      for(let i = 0; i < 4; i++) if(fc.G.free[i] !== null) srcs.push({ type:'free', i:i, idx:0 });
+
+      let moved = false;
+      for(const src of shuf(srcs, rnd)){
+        if(moved) break;
+        if(src.type === 'col' && fc.G.cols[src.i].length === 0) continue;
+        fc.setSel(src);
+        for(const t of shuf(order, rnd)){ if(fc.moveRunToCol(t)) { moved = true; break; } }
+        if(moved) break;
+        for(const f of shuf([0,1,2,3], rnd)){ if(fc.tryFree(f)) { moved = true; break; } }
+        if(moved) break;
+        if(fc.tryFoundSel()) moved = true;
+      }
+      if(moved) played++;
     }
-    for(let i = 0; i < 4; i++) if(fc.G.free[i] !== null) srcs.push({ type:'free', i:i, idx:0 });
-
-    let moved = false;
-    for(const s of shuf(srcs)){
-      if(moved) break;
-      if(s.type === 'col' && fc.G.cols[s.i].length === 0) continue;
-      fc.setSel(s);
-      for(const t of shuf(order)){ if(fc.moveRunToCol(t)) { moved = true; break; } }
-      if(moved) break;
-      for(const f of shuf([0,1,2,3])){ if(fc.tryFree(f)) { moved = true; break; } }
-      if(moved) break;
-      if(fc.tryFoundSel()) moved = true;
-    }
-    if(moved) played++;
+    return { played: played, bad: bad, moves: fc.G.moves, hist: fc.getHistLen() };
   }
+
+  const runs = [walk(1, 7), walk(617, 11), walk(1024, 23)];
+  const bad = runs.map(r => r.bad).filter(Boolean).join('；');
+  const played = runs.reduce((n, r) => n + r.played, 0);
+
   ok(bad === '', '★ 一路走下来牌数始终是 52、没有重复、收牌堆不越界', bad);
-  /* 不做「走得多远」的断言：FreeCell 随机乱走十几步就把自己堵死是正常的，
-     这里只要求确实走起来了，证明移动路径是通的 */
-  ok(played >= 8, '随机走子确实走起来了（' + played + ' 步，之后是自己把空位用光了）');
-  ok(fc.G.moves >= 0, '步数没有变成负数');
-  ok(fc.getHistLen() <= 400, '撤销栈有上限，不会无限长（' + fc.getHistLen() + '）');
+  /* 不做「走得多远」的硬指标：随机乱走把自己堵死是 FreeCell 的常态，
+     只要求这些局确实走起来了，证明各种移动路径都是通的 */
+  ok(played >= 12, '随机走子确实走起来了（三局共 ' + played + ' 步，之后是自己把空位用光了）');
+  ok(runs.every(r => r.moves >= 0), '步数没有变成负数');
+  ok(runs.every(r => r.hist <= 400), '撤销栈有上限，不会无限长（' + runs.map(r => r.hist).join('/') + '）');
+}
+
+/* ================= 9.6) ★ 拖拽：按住牌直接拖，和点选必须等价 ================= */
+section('9.6) ★ 拖拽');
+{
+  const g = fc.geom();
+  const colX = i => g.PAD + i * (g.CW + g.GAP) + g.CW / 2;
+  const colY = g.COL_TOP + 30;
+  const topY = g.TOPPAD + g.CH / 2;
+  const snap = () => JSON.stringify([fc.G.cols, fc.G.free, fc.G.found, fc.G.moves]);
+  const empty = () => [null, null, null, null];
+
+  const K = C(13, SPADE), Qh = C(12, HEART), Js = C(11, SPADE), Qc = C(12, CLUB);
+  const As = C(1, SPADE);
+
+  /* --- 落点判定：手指在哪一格 --- */
+  fc.setState([[K]], empty(), [0,0,0,0], 0);
+  let bad = [];
+  for(let i = 0; i < 8; i++){
+    const t = fc.dropTarget(colX(i), colY);
+    if(!t || t.kind !== 'col' || t.i !== i) bad.push('列 ' + i + ' → ' + JSON.stringify(t));
+  }
+  ok(bad.length === 0, '8 列的中心点都判成对应的列', bad.join('；'));
+
+  const f0 = fc.dropTarget(colX(0), topY), f3 = fc.dropTarget(colX(3), topY);
+  const o0 = fc.dropTarget(colX(4), topY), o1 = fc.dropTarget(colX(5), topY);
+  ok(f0 && f0.kind === 'free' && f0.i === 0, '上面一行左边 4 格是暂存格');
+  ok(f3 && f3.kind === 'free' && f3.i === 3, '第 4 个暂存格判得对');
+  ok(o0 && o0.kind === 'found' && o0.i === 0 && o1 && o1.i === 1, '右边 4 格是收牌堆');
+  ok(fc.dropTarget(-9999, colY) === null, '拖到牌桌左外面不算落点');
+  ok(fc.dropTarget(colX(3), 99999) === null, '拖到牌桌下面老远不算落点');
+
+  /* --- 拖一张到别的列 --- */
+  fc.setState([[K], [C(9, CLUB)]], empty(), [0,0,0,0], 0);
+  fc.pressAt({ kind:'card', c:K }, colX(0), colY);
+  fc.moveTo(colX(0) + 12, colY);                  /* 超过阈值 → 开始拖 */
+  ok(!!fc.getDrag(), '手指动起来就进入拖拽状态');
+  ok(fc.getSel() && fc.getSel().i === 0, '拖拽开始时已经把这段牌选中');
+  fc.moveTo(colX(3), colY);
+  fc.releaseAt(colX(3), colY);
+  ok(fc.G.cols[3].length === 1 && fc.G.cols[3][0] === K, '拖到第 4 列就落在第 4 列');
+  ok(fc.G.cols[0].length === 0, '源列空了');
+  ok(fc.getDrag() === null && fc.getSel() === null, '松手后拖拽和选中都清干净');
+  ok(fc.G.moves === 1, '算一步');
+
+  /* --- 手抖不算拖 --- */
+  fc.setState([[K]], empty(), [0,0,0,0], 0);
+  fc.pressAt({ kind:'card', c:K }, colX(0), colY);
+  fc.moveTo(colX(0) + 3, colY + 2);               /* 只动了 3px */
+  ok(fc.getDrag() === null, '★ 手指抖 3px 不算拖拽');
+  fc.releaseAt(colX(0) + 3, colY + 2);
+  ok(fc.G.moves === 0 && fc.getSel() && fc.getSel().i === 0, '★ 当成一次点击：选中了这张牌');
+
+  /* --- 拖拽抓起几张：从按住的那张往下算 --- */
+  fc.setState([[K, Qh, Js]], empty(), [0,0,0,0], 0);
+  fc.pressAt({ kind:'card', c:Js }, colX(0), colY + 40);
+  fc.moveTo(colX(0) + 14, colY + 40);
+  ok(fc.getDrag() && fc.getDrag().run.length === 1, '按住最底下那张：只拿起它自己');
+  fc.abortDrag();
+
+  fc.pressAt({ kind:'card', c:K }, colX(0), colY);
+  fc.moveTo(colX(0) + 14, colY);
+  ok(fc.getDrag() && fc.getDrag().run.length === 3, '★ 按住连牌的头一张：整段（3 张）一起拖');
+  fc.moveTo(colX(6), colY);
+  fc.releaseAt(colX(6), colY);
+  ok(fc.G.cols[6].length === 3 && fc.G.cols[6][0] === K, '整段搬到空列，顺序不变');
+  ok(fc.G.cols[0].length === 0, '源列搬空');
+
+  /* --- 不连号的牌拖不动 --- */
+  fc.setState([[C(13, SPADE), C(9, CLUB)]], empty(), [0,0,0,0], 0);
+  byId.toast.textContent = '';
+  fc.pressAt({ kind:'card', c:C(13, SPADE) }, colX(0), colY);
+  fc.moveTo(colX(0) + 20, colY);
+  ok(fc.getDrag() === null, '下面压着的牌不连号时，拖不起来');
+  ok(/不连号/.test(byId.toast.textContent), '★ 会说明为什么拖不动');
+  fc.releaseAt(colX(3), colY);
+  ok(fc.G.cols[0].length === 2 && fc.G.cols[3].length === 0, '什么都没发生');
+
+  /* --- 拖到放不下的地方：牌飞回原位 --- */
+  fc.setState([[Qh], [Qc]], empty(), [0,0,0,0], 0);
+  const before = snap();
+  fc.pressAt({ kind:'card', c:Qh }, colX(0), colY);
+  fc.moveTo(colX(0) + 12, colY);
+  fc.moveTo(colX(1), colY);
+  fc.releaseAt(colX(1), colY);
+  ok(snap() === before, '★ 拖到不合法的列：一张牌都没动（牌自己飞回去）');
+  ok(fc.getSel() === null, '失败后不留下选中');
+
+  /* --- 拖到牌桌外面 --- */
+  fc.setState([[K]], empty(), [0,0,0,0], 0);
+  const before2 = snap();
+  fc.pressAt({ kind:'card', c:K }, colX(0), colY);
+  fc.moveTo(colX(0) + 12, colY);
+  fc.releaseAt(colX(0) + 12, 99999);
+  ok(snap() === before2, '拖到牌桌外面松手 = 放弃，牌回原位');
+
+  /* --- 拖进暂存格 --- */
+  fc.setState([[K]], empty(), [0,0,0,0], 0);
+  fc.pressAt({ kind:'card', c:K }, colX(0), colY);
+  fc.moveTo(colX(0) + 12, colY);
+  fc.moveTo(colX(2), topY);
+  fc.releaseAt(colX(2), topY);
+  ok(fc.G.free[2] === K && fc.G.cols[0].length === 0, '拖进第 3 个暂存格');
+
+  /* --- 暂存格拖出去又放回原处：不该弹「这个格子里有牌了」 --- */
+  byId.toast.textContent = '';
+  const mv0 = fc.G.moves;
+  fc.pressAt({ kind:'card', c:K }, colX(2), topY);
+  fc.moveTo(colX(2) + 12, topY + 8);
+  fc.moveTo(colX(2), topY);
+  fc.releaseAt(colX(2), topY);
+  ok(fc.G.free[2] === K, '★ 从暂存格拖出去又放回原处，牌还在原位');
+  ok(fc.G.moves === mv0 && !/有牌/.test(byId.toast.textContent), '★ 也不会弹「这个暂存格里有牌了」');
+
+  /* --- 拖进收牌堆 --- */
+  fc.setState([[As]], empty(), [0,0,0,0], 0);
+  fc.pressAt({ kind:'card', c:As }, colX(0), colY);
+  fc.moveTo(colX(0) + 12, colY);
+  fc.moveTo(colX(7), topY);                       /* 右上第 4 个 = ♠ 收牌堆 */
+  fc.releaseAt(colX(7), topY);
+  ok(fc.G.found[SPADE] === 1 && fc.G.cols[0].length === 0, '拖到收牌堆上就收进去');
+
+  /* --- 拖拽和点选必须得到同一个局面 --- */
+  const board = () => [[K, Qh, Js], [C(10, DIAMOND)], [], [C(7, CLUB)], [], [C(5, HEART)], [], []];
+  fc.setState(board(), empty(), [0,0,0,0], 0);
+  fc.pressAt({ kind:'card', c:Js }, colX(0), colY + 40);
+  fc.moveTo(colX(0) + 12, colY + 40);
+  fc.moveTo(colX(2), colY);
+  fc.releaseAt(colX(2), colY);
+  const byDrag = snap();
+
+  fc.setState(board(), empty(), [0,0,0,0], 0);
+  fc.tapCard(Js);
+  fc.tapSlot('col', 2);
+  const byTap = snap();
+  ok(byDrag === byTap, '★ 同样的走法，拖拽和点选的结果一模一样', '拖：' + byDrag + ' / 点：' + byTap);
+
+  /* --- 收牌堆上的牌：手抖一下也还是点击 --- */
+  fc.setState([[C(2, CLUB)]], empty(), [1,0,0,0], 0);
+  fc.pressAt({ kind:'card', c:C(1, CLUB) }, colX(4), topY);
+  fc.moveTo(colX(4) + 18, topY + 10);             /* 明显移动了 */
+  ok(fc.getDrag() === null, '收牌堆上的牌拖不起来');
+  fc.releaseAt(colX(4) + 18, topY + 10);
+  ok(fc.G.found[CLUB] === 1, '手抖也按「点了一下收牌堆」处理，不会误收牌');
+  fc.tapCard(C(2, CLUB));
+  fc.pressAt({ kind:'card', c:C(1, CLUB) }, colX(4), topY);
+  fc.moveTo(colX(4) + 18, topY + 10);
+  fc.releaseAt(colX(4) + 18, topY + 10);
+  ok(fc.G.found[CLUB] === 2, '★ 选着牌时点一下收牌堆（哪怕手指动了）仍然能收进去');
+
+  /* --- 拖到一半被打断（来电、系统手势） --- */
+  fc.setState([[K]], empty(), [0,0,0,0], 0);
+  fc.pressAt({ kind:'card', c:K }, colX(0), colY);
+  fc.moveTo(colX(0) + 12, colY);
+  fc.abortDrag();
+  ok(fc.getDrag() === null && fc.getSel() === null && fc.getPress() === null, '★ 手势被打断后状态是干净的');
+  ok(fc.G.cols[0].length === 1 && fc.G.cols[0][0] === K, '牌还在原处');
 }
 
 /* ================= 10) 页面自包含 ================= */

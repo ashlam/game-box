@@ -12,7 +12,8 @@
     --txt:#e8ecf3; --dim:#8b95a7; --acc:#5b8cff; --acc2:#38d39f; --hot:#ffd45e;
     --red:#d7443f; --black:#2b3446;
   }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
+    -webkit-touch-callout:none}
   html,body{margin:0;height:100%}
   body{
     height:100%;overflow:hidden;
@@ -58,7 +59,8 @@
       linear-gradient(180deg,#12453b,#0c302a);
     border:1px solid rgba(255,255,255,.07);
     box-shadow:0 12px 30px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06);
-    touch-action:manipulation;
+    /* 牌桌上不滚动、不缩放，手势全部留给拖拽（touch-action 在老 WebView 上不生效，另有 preventDefault 兜底） */
+    touch-action:none;
   }
 
   /* 空位：4 个暂存格 + 4 个收牌堆 + 8 个空列 */
@@ -83,6 +85,8 @@
     transition:transform .17s cubic-bezier(.22,.9,.35,1);
     will-change:transform;
   }
+  /* 拖拽中：关掉过渡，让牌严丝合缝地跟着手指走 */
+  .card.drag{transition:none;z-index:360}
   .card .face{
     position:relative;width:100%;height:100%;
     border-radius:calc(var(--cw) * .14);
@@ -202,7 +206,7 @@
   <div class="stat"><b id="stDone">0/52</b><span>已收牌</span></div>
 </div>
 
-<div class="tip">点一张牌 → 点目标位置 · <b>连点两下</b>自动收牌</div>
+<div class="tip">点一张牌 → 点目标位置，或者<b>按住直接拖</b> · <b>连点两下</b>自动收牌</div>
 
 <div id="wrap"><div id="table"></div></div>
 
@@ -259,9 +263,11 @@
  * 局号：用微软当年公开的那套 LCG 洗牌（见 deal()），所以第 1 局和第 1024 局
  * 跟 Windows 里是同一副牌。已用公开的第 1 局牌谱核对过。
  *
- * 交互是为手机改的（原版靠拖拽，手指在 42px 宽的牌上拖很容易点错）：
- *   点牌选中 → 点目标列 / 暂存格 / 收牌堆 → 放下
- *   再点一次同一张 = 自动送上收牌堆（等于双击）
+ * 交互两套并存，玩家爱用哪个用哪个：
+ *   ① 点选：点牌选中 → 点目标列 / 暂存格 / 收牌堆 → 放下
+ *      再点一次同一张 = 自动送上收牌堆（等于双击）
+ *   ② 拖拽：按住牌直接拖到目标上松手；拖不到合法位置就飞回原处（不会误伤）
+ *   两者共用同一套落点判定，拖和点得到的结果必然一致
  *
  * 牌用「卡号 0..51」表示：花色 = c % 4（♣♦♥♠），点数 = c / 4 | 0 + 1（A=1..K=13）
  * 这个编码就是微软发牌数组的顺序，所以洗牌和判定可以共用一套数字。
@@ -320,6 +326,7 @@ var sel = null;            /* {type:'col', i, idx} | {type:'free', i} */
 var hist = [];             /* 撤销栈：每步一份快照 */
 var cardEl = [];           /* 52 个牌元素，常驻，靠 transform 移动 */
 var slotEl = [];           /* 16 个空位元素 */
+var POS = [];              /* 每张牌最近一次渲染到的坐标（拖拽的基准位置） */
 
 /* ===== 计时 ===== */
 var running = false, startedAt = 0, baseMs = 0, timer = null;
@@ -577,7 +584,12 @@ function collectAll(){
 }
 
 /* ============================================================================
- * 点选交互
+ * 操作：点选 + 拖拽
+ *
+ * 两个入口最终都落到同一个函数上，行为天然一致：
+ *   按下 → pressAt()   移动 → moveTo()   松开 → releaseAt()
+ * 点选就是「按下后没怎么动就松开了」，此时走原来的 tapCard / tapSlot；
+ * 移动超过 DRAG_PX 才启用拖拽，这样手指轻微的抖动不会被误判成拖动。
  * ========================================================================== */
 
 function selectAt(c){
@@ -648,6 +660,228 @@ function tapSlot(kind, i){
     if(!sel) return;
     tryFoundSel();
   }
+}
+
+/* ---------- 拖拽 ---------- */
+
+var press = null;          /* {h:{kind:'card',c}|{kind:'slot',k,i}, x, y, id} */
+var drag = null;           /* {run:[卡号...], sx, sy, dx, dy} */
+var DRAG_PX = 6;           /* 手指移动超过这么多像素才算「拖」，否则还是「点」 */
+
+function evXY(e){
+  var t = (e.touches && e.touches.length) ? e.touches[0]
+        : (e.changedTouches && e.changedTouches.length) ? e.changedTouches[0] : e;
+  return { x:t.clientX || 0, y:t.clientY || 0 };
+}
+
+/* 按下的位置下面是牌还是空位 */
+function hitTest(e){
+  var t = e.target;
+  if(!t || !t.closest) return null;
+  var cd = t.closest('.card');
+  if(cd) return { kind:'card', c: parseInt(cd.dataset.c, 10) };
+  var sl = t.closest('.slot');
+  if(sl) return { kind:'slot', k: sl.dataset.kind, i: parseInt(sl.dataset.i, 10) };
+  return null;
+}
+
+function pressAt(h, x, y, id){
+  if(!h) return;
+  press = { h:h, x:x, y:y, id:id };
+  drag = null;
+  if(h.kind === 'card'){
+    var loc = findCard(h.c);
+    /* 收牌堆里的牌拖不出来，按在它上面只可能是「点击」 */
+    press.noDrag = !!loc && loc.type === 'found';
+  }
+}
+
+/* 手指 / 鼠标移动：先判断该不该转成拖拽，再让牌跟着走 */
+function moveTo(x, y){
+  if(!press) return;
+
+  if(!drag){
+    if(press.h.kind !== 'card' || press.noDrag) return;       /* 空位、收牌堆上的牌拖不动 */
+    if(Math.abs(x - press.x) < DRAG_PX && Math.abs(y - press.y) < DRAG_PX) return;
+    if(!beginDrag(press.h.c)){ press = null; return; }        /* 这段牌搬不动，当没拖 */
+  }
+
+  drag.dx = x - drag.sx;
+  drag.dy = y - drag.sy;
+  paintDrag();
+}
+
+/* 真正开始拖：先按点选的规则把这段牌选中，选不中就放弃 */
+function beginDrag(c){
+  var loc = findCard(c);
+  if(!loc || loc.type === 'found') return false;
+
+  if(loc.type === 'col' && !runOK(G.cols[loc.i], loc.idx)){
+    toast('这张和下面的牌不连号，没法一起搬');   /* 和点选时的提示保持一致 */
+    return false;
+  }
+
+  sel = loc;
+  sfx('pick');
+  render();                    /* 先画一帧：可落点的绿色高亮在拖的过程中就该看得见 */
+
+  var run = selRun();
+  if(!run || !run.length){ sel = null; return false; }
+
+  drag = { run:run, sx:press.x, sy:press.y, dx:0, dy:0 };
+  run.forEach(function(cc){ cardEl[cc].classList.add('drag'); });
+  return true;
+}
+
+/* 让被拖的那几张牌跟着手指走（只改 transform，不触发重排） */
+function paintDrag(){
+  for(var i = 0; i < drag.run.length; i++){
+    var cc = drag.run[i], b = POS[cc], el = cardEl[cc];
+    if(!b) continue;
+    el.style.zIndex = 360 + i;      /* 压在收牌堆（最高 313）上面，但仍在弹层下面 */
+    el.style.transform = 'translate3d(' + (b.x + drag.dx) + 'px,' + (b.y + drag.dy) + 'px,0)';
+  }
+}
+
+function clearDrag(){
+  if(drag){
+    drag.run.forEach(function(cc){ cardEl[cc].classList.remove('drag'); });
+    /* 强制回流一次：先让浏览器认下「又有过渡了」，下一帧改坐标才会有飞回去的动画 */
+    void table.offsetWidth;
+  }
+  drag = null;
+  press = null;
+}
+
+/* 松手：拖过 → 按落点执行；没拖过 → 当成点击走点选 */
+function releaseAt(x, y){
+  if(!press) return;
+  var h = press.h;
+
+  if(drag){
+    var t = dropTarget(x, y);
+    clearDrag();
+    if(t){
+      /* applyDrop 内部失败会自己弹提示（红黑不对 / 空位不够 / 暂存格只能放一张） */
+      if(!applyDrop(t)){ sel = null; render(); }
+      return;
+    }
+    sel = null; render();        /* 放在牌桌外面 = 放弃，牌自己飞回去 */
+    return;
+  }
+
+  press = null;
+  if(h.kind === 'card') tapCard(h.c);
+  else tapSlot(h.k, h.i);
+}
+
+/* 手指落在哪一格上（牌桌坐标，横向按最近的牌列算，判得松一点不容易误伤） */
+function dropTarget(px, py){
+  var r = table.getBoundingClientRect();
+  var tx = px - r.left, ty = py - r.top;
+  var span = CW + GAP;
+
+  if(tx < PAD - span * 0.8) return null;
+  if(tx > PAD + 8 * CW + 7 * GAP + span * 0.8) return null;
+
+  var k = Math.round((tx - PAD - CW / 2) / span);
+  if(k < 0) k = 0;
+  if(k > 7) k = 7;
+
+  if(ty < -CH) return null;
+  if(ty < COL_TOP - GAP * 0.5){                    /* 上面一行：暂存格 / 收牌堆 */
+    return k < 4 ? { kind:'free', i:k } : { kind:'found', i:k - 4 };
+  }
+  if(ty > TABLE_H + CH) return null;               /* 掉到牌桌下面老远，不算 */
+  return { kind:'col', i:k };
+}
+
+function applyDrop(t){
+  if(t.kind === 'col') return moveRunToCol(t.i);
+  if(t.kind === 'found') return tryFoundSel();
+  if(t.kind === 'free'){
+    /* 从暂存格拖出去又放回原处：当没事发生，别弹「这个格子里有牌了」 */
+    if(sel && sel.type === 'free' && sel.i === t.i){ sel = null; render(); return true; }
+    return tryFree(t.i);
+  }
+  return false;
+}
+
+/* 手势被打断（来电、系统手势）：牌飞回原位，别留下拖到一半的僵局 */
+function abortDrag(){
+  if(drag) drag.run.forEach(function(cc){ cardEl[cc].classList.remove('drag'); });
+  drag = null; press = null;
+  sel = null; render();
+}
+
+/* 绑事件：有 PointerEvent 就一路 Pointer（鼠标 / 手指 / 触控笔同一套），
+ * 老 WebView 没有 PointerEvent，退回 touch + mouse 两套 */
+function bindDrag(){
+  if(window.PointerEvent){
+    table.addEventListener('pointerdown', function(e){
+      if(e.pointerType === 'mouse' && e.button !== 0) return;
+      if(press) clearDrag();                    /* 上一根手指的 up 丢了，别被它拖住 */
+      pressAt(hitTest(e), evXY(e).x, evXY(e).y, e.pointerId);
+    }, false);
+
+    document.addEventListener('pointermove', function(e){
+      if(!press || e.pointerId !== press.id) return;
+      if(drag && e.cancelable) e.preventDefault();
+      moveTo(evXY(e).x, evXY(e).y);
+    }, false);
+
+    document.addEventListener('pointerup', function(e){
+      if(!press || e.pointerId !== press.id) return;
+      var p = evXY(e);
+      releaseAt(p.x, p.y);
+    }, false);
+
+    document.addEventListener('pointercancel', function(e){
+      if(!press || e.pointerId !== press.id) return;
+      abortDrag();
+    }, false);
+
+    return;
+  }
+
+  table.addEventListener('touchstart', function(e){
+    if(press) clearDrag();
+    var p = evXY(e);
+    pressAt(hitTest(e), p.x, p.y, 't');
+    if(e.cancelable) e.preventDefault();        /* 老 WebView 不认 touch-action，这里掐掉滚动 */
+  }, { passive:false });
+
+  document.addEventListener('touchmove', function(e){
+    if(!press) return;
+    if(drag && e.cancelable) e.preventDefault();
+    var p = evXY(e);
+    moveTo(p.x, p.y);
+  }, { passive:false });
+
+  document.addEventListener('touchend', function(e){
+    if(!press) return;
+    var p = evXY(e);
+    releaseAt(p.x, p.y);
+  }, false);
+
+  document.addEventListener('touchcancel', abortDrag, false);
+
+  table.addEventListener('mousedown', function(e){
+    if(e.button !== 0) return;
+    var p = evXY(e);
+    pressAt(hitTest(e), p.x, p.y, 'm');
+    if(e.cancelable) e.preventDefault();        /* 别让浏览器开始拖选文字 */
+  }, false);
+
+  document.addEventListener('mousemove', function(e){
+    if(!press) return;
+    moveTo(e.clientX, e.clientY);
+  }, false);
+
+  document.addEventListener('mouseup', function(e){
+    if(!press) return;
+    releaseAt(e.clientX, e.clientY);
+  }, false);
 }
 
 /* ============================================================================
@@ -760,6 +994,7 @@ function render(){
     el.style.display = hide ? 'none' : 'block';
     el.style.transform = 'translate3d(' + x + 'px,' + y + 'px,0)';
     el.style.zIndex = z;
+    POS[i] = { x:x, y:y };     /* 拖拽时从这里起算偏移量 */
     el.classList.toggle('sel', !!selSet[i]);
     el.classList.toggle('can', !!canCardSet[i]);
   }
@@ -1018,16 +1253,9 @@ function buildBoard(){
     cardEl.push(el);
   }
 
-  table.addEventListener('click', function(e){
-    var t = e.target;
-    var cardDom = t.closest ? t.closest('.card') : null;
-    if(cardDom){
-      tapCard(parseInt(cardDom.dataset.c, 10));
-      return;
-    }
-    var slot = t.closest ? t.closest('.slot') : null;
-    if(slot) tapSlot(slot.dataset.kind, parseInt(slot.dataset.i, 10));
-  }, false);
+  /* 点击和拖拽共用一套指针事件：按下时不立刻动作，等松手才知道是「点」还是「拖」。
+     这里不能再绑 click，否则一次点击会被处理两遍（点选一次、拖拽判定一次）。 */
+  bindDrag();
 }
 
 function bindUI(){
@@ -1107,6 +1335,13 @@ window.__fc = {
   checkWin: checkWin, validState: validState, fmt: fmt,
   bestRec: bestRec,
   getSel: function(){ return sel; },
+  /* 拖拽：给测试用坐标接口，绕开真实的 DOM 事件，逻辑走的是同一份代码 */
+  pressAt: pressAt, moveTo: moveTo, releaseAt: releaseAt,
+  dropTarget: dropTarget, applyDrop: applyDrop,
+  getPress: function(){ return press; },
+  geom: function(){ return { CW:CW, CH:CH, GAP:GAP, PAD:PAD, TOPPAD:TOPPAD, COL_TOP:COL_TOP, TABLE_H:TABLE_H }; },
+  getDrag: function(){ return drag; },
+  abortDrag: abortDrag,
   setSel: function(s){ sel = s; render(); },
   getHistLen: function(){ return hist.length; },
   setState: function(cols, free, found, moves, seed){
