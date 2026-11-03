@@ -106,7 +106,8 @@ wrap.appendChild(table);
  'toast','confetti','helpPanel','helpClose','mode1','mode3','modeNote',
  'dealPanel','dealInput','dealGo','dealRand','dealReplay','dealClose',
  'winPanel','winSub','winScore','winTime','winRec','winRecBox','winAgain','winClose',
- 'autoBtn','autoPanel','autoYes','autoNo']
+ 'autoBtn','autoPanel','autoYes','autoNo',
+ 'askPanel','askTitle','askSub','askYes','askNo']
   .forEach(id => makeEl(id));
 
 const doc = {
@@ -152,6 +153,10 @@ if(!kl){ console.log('\n无法继续，退出'); process.exit(1); }
 const C = (rank, suit) => (rank - 1) * 4 + suit;
 const CLUB = 0, DIAMOND = 1, HEART = 2, SPADE = 3;
 const names = arr => arr.map(kl.cardName);
+
+/* 会扣分的操作现在会先弹一张小卡片问一句：测试里统一用这两个函数回答 */
+const sayYes = () => kl.answerAsk(true);
+const sayNo = () => kl.answerAsk(false);
 
 /* ================= 1) 发牌 ================= */
 section('1) 发牌：7 列 1~7 张，每列只有最上面一张明牌');
@@ -254,6 +259,9 @@ section('3) ★ 点牌堆：翻 1 张 / 翻 3 张 / 翻完收回来重翻');
   const wasteBottom = kl.G.waste[0];
   kl.G.score = 100;
   kl.drawStock();
+  ok(kl.getAsk() === true, '★ 重翻会扣分 → 先弹小卡片问一句，不是直接扣');
+  ok(kl.G.score === 100 && kl.G.stock.length === 0, '还没答之前分没动、牌堆也没翻回来');
+  sayYes();
   ok(kl.G.stock.length === 24 && kl.G.waste.length === 0, '翻完后点一下 = 整叠收回来重翻');
   ok(kl.G.score === 80, '重翻扣 20 分（100 → ' + kl.G.score + '）');
   /* 整叠翻面：原来最上面那张现在在最底下，最先翻出来的还是它 */
@@ -263,7 +271,15 @@ section('3) ★ 点牌堆：翻 1 张 / 翻 3 张 / 翻完收回来重翻');
   kl.G.stock = [];
   kl.G.waste = [C(1, CLUB), C(2, CLUB)];
   kl.drawStock();
+  sayYes();
   ok(kl.G.score === 0, '扣分不会把分数扣成负数（10 → ' + kl.G.score + '）');
+
+  /* 已经 0 分：怎么扣都是 0，就不问了，免得白烦人一次 */
+  kl.G.waste = [C(1, CLUB), C(2, CLUB)];
+  kl.G.stock = [];
+  kl.drawStock();
+  ok(kl.getAsk() === false, '★ 0 分时不再问（扣不动，问了纯属添乱）');
+  ok(kl.G.stock.length === 2, '直接就把整叠翻回来了');
 }
 
 /* ================= 4) 移动 ================= */
@@ -318,7 +334,17 @@ section('4) 移动：列↔列、翻牌堆↔列、收牌堆的牌拿回来');
   kl.tapCard(C(1, CLUB));
   ok(!!kl.getSel() && kl.getSel().type === 'found', '收牌堆顶上的牌能选中（可以拿回来）');
   kl.tapSlot('col', 0);
-  ok(kl.G.found[0] === 0 && kl.G.tab[0][1] === C(1, CLUB), '拿回牌桌后收牌堆退了一张');
+  ok(kl.getAsk() === true, '★ 从收牌堆拿回来要扣 15 分 → 先问一句');
+  ok(kl.G.found[0] === 1 && kl.G.score === 100, '还没答之前牌还在收牌堆里、分也没动');
+  ok(!!kl.getSel() && kl.getSel().type === 'found', '问的时候选中还在（答完不用重新点一遍）');
+  sayNo();
+  ok(kl.G.found[0] === 1 && kl.G.score === 100 && kl.getSel() === null,
+     '★ 点「算了」= 什么都不发生，只是取消选中');
+
+  kl.tapCard(C(1, CLUB));
+  kl.tapSlot('col', 0);
+  sayYes();
+  ok(kl.G.found[0] === 0 && kl.G.tab[0][1] === C(1, CLUB), '点「继续」才真的拿回牌桌');
   ok(kl.G.score === 85, '从收牌堆拿回来 −15（100 → ' + kl.G.score + '）');
 }
 
@@ -386,6 +412,7 @@ section('6) 计分：+10 / +5 / −15 / −20，且不会变负');
 
   kl.setState({ tab:[[C(2, HEART)]], found:[1,0,0,0], score:5 });
   kl.tapCard(C(1, CLUB)); kl.tapSlot('col', 0);
+  sayYes();
   ok(kl.G.score === 0, '分数不会掉到 0 以下（5 − 15 → ' + kl.G.score + '）');
 }
 
@@ -555,9 +582,9 @@ section('11) ★ 拖拽：落点和点选等价');
   ok(kl.dropTarget(cx(0), 10) === null, '牌堆那一列不能当落点');
   ok(kl.dropTarget(cx(2), 10) === null, '中间空位不是落点');
   const ft = kl.dropTarget(cx(3), 10);
-  ok(!!ft && ft.kind === 'found' && ft.i === 0, '右上第一个格子是第 1 个收牌堆');
+  ok(!!ft && ft.kind === 'found' && ft.i === DIAMOND, '右上第一个格子是 ♦ 的收牌堆（顺序 ♦ ♣ ♥ ♠）');
   const ft3 = kl.dropTarget(cx(6), 10);
-  ok(!!ft3 && ft3.kind === 'found' && ft3.i === 3, '最右边是第 4 个收牌堆');
+  ok(!!ft3 && ft3.kind === 'found' && ft3.i === SPADE, '最右边是 ♠ 的收牌堆');
   const ct = kl.dropTarget(cx(4), cy);
   ok(!!ct && ct.kind === 'col' && ct.i === 4, '下面一行落点是第 5 列');
 
@@ -724,6 +751,7 @@ section('13a) 端到端：机器人用点牌接口乱打，每一步牌局都自
       }
       if(!kl.G.stock.length && !kl.G.waste.length) break;   /* 牌全摊在桌上也没得走了 */
       kl.drawStock();
+      if(kl.getAsk()) sayYes();                             /* 重翻要扣分，机器人一路点「继续」 */
       actions++;
       const e = stateErr();
       if(e.length){ errs.push('第 ' + seed + ' 局第 ' + s + ' 步：' + e[0]); break; }
@@ -761,6 +789,7 @@ section('13b) 端到端：一张张翻着把 52 张全收完');
       kl.tapSlot('found', kl.suitOf(c));
     } else {
       kl.drawStock();
+      if(kl.getAsk()) sayYes();
     }
   }
 
@@ -773,7 +802,7 @@ section('13b) 端到端：一张张翻着把 52 张全收完');
 }
 
 /* ================= 14) 自动完成 ================= */
-section('14) 自动完成：桌上全翻开才给按钮，然后一张张收光');
+section('14) 自动完成：没有扣着的牌（含左上牌堆）才给按钮，然后一张张收光');
 {
   /* 四条 13 张的合法长龙（点数降序 + 红黑交替），正好用掉 52 张。
      全翻开以后列里天然是合法的，不用额外摆 */
@@ -785,7 +814,7 @@ section('14) 自动完成：桌上全翻开才给按钮，然后一张张收光'
     });
   const allUp = () => dragons.map(d => d.slice());
 
-  /* ---- 判定：只看「桌上还有没有扣着的牌」 ---- */
+  /* ---- 判定：7 列全翻开 + 左上牌堆翻空 ---- */
   kl.newGame(7, true);
   ok(kl.noFaceDown() === false, '刚发完牌，桌上有扣着的牌');
   ok(kl.updateAuto() === false, '这时候不给「自动完成」');
@@ -820,15 +849,28 @@ section('14) 自动完成：桌上全翻开才给按钮，然后一张张收光'
   ok(kl.autoFinish() === false, '这时点也点不动（会提示先翻开）');
   ok(/翻开/.test(String(byId.toast.textContent)), '提示说的是「还有扣着的牌」（“' + byId.toast.textContent + '”）');
 
-  /* ---- 牌堆里还有牌也照样给：能无限重翻，不是障碍 ---- */
+  /* ---- 牌堆还压着牌：不给按钮（哪怕程序真能替他把那几张翻出来） ---- */
   const tab2 = dragons.map(d => d.slice(3));      /* 每列 10 → A */
   const moved = [];
   dragons.forEach(d => { moved.push(d[0], d[1], d[2]); });   /* 收出来的 K Q J */
+  const inStock = moved.slice().reverse();        /* 牌堆（末尾是顶） */
   kl.setState({
-    tab: tab2, up: [0, 0, 0, 0], stock: moved.slice().reverse(), waste: [],
+    tab: tab2, up: [0, 0, 0, 0], stock: inStock.slice(), waste: [],
     found: [0, 0, 0, 0], score: 0, moves: 0,
   });
-  ok(kl.updateAuto() === true, '★ 全翻开但牌堆还剩 12 张 → 也给按钮（牌堆不是障碍）');
+  ok(kl.noFaceDown() === false,
+     '★ 桌上全翻开了，但左上牌堆还压着 12 张 → 不算「没有扣着的牌」');
+  ok(kl.updateAuto() === false && byId.autoBtn.hidden === true,
+     '★ 牌堆没翻空就不给按钮 —— 牌桌和按钮说的必须是同一件事');
+  ok(kl.autoFinish() === false, '这时点也点不动');
+  ok(/扣着|翻开/.test(String(byId.toast.textContent)),
+     '提示说的是「还有扣着的牌」（“' + byId.toast.textContent + '”）');
+
+  /* 把牌堆翻空（真人也就是一张张点出来），按钮这时候才出来 */
+  while(kl.G.stock.length) kl.drawStock();
+  ok(kl.G.waste.length === 12, '牌堆翻空了，12 张全摊在翻牌堆里（都是明牌）');
+  ok(kl.noFaceDown() === true, '★ 牌堆空了 + 桌上全翻开 = 真的没有扣着的牌');
+  ok(kl.updateAuto() === true && byId.autoBtn.hidden === false, '★ 这才给按钮');
   ok(kl.autoFinish() === true, '点「自动完成」开始收');
   ok(kl.getAuto().busy === true, '收牌期间标成忙，挡住玩家输入');
 
@@ -837,7 +879,7 @@ section('14) 自动完成：桌上全翻开才给按钮，然后一张张收光'
 
   let ticks = 0;
   while(kl.getAuto().busy && ticks++ < 3000) kl.autoTick();
-  ok(kl.collected() === 52, '★ 连翻牌带收牌，52 张全收进去了（' + ticks + ' 步）');
+  ok(kl.collected() === 52, '★ 连摆牌带收牌，52 张全收进去了（' + ticks + ' 步）');
   ok(kl.getAuto().busy === false, '收完就放开输入');
   ok(kl.G.stock.length === 0 && kl.G.waste.length === 0, '收完时牌堆和翻牌堆都空了');
 
@@ -845,39 +887,48 @@ section('14) 自动完成：桌上全翻开才给按钮，然后一张张收光'
   kl.G.drawMode = 3;
   kl.setState({
     tab: dragons.map(d => d.slice(3)), up: [0, 0, 0, 0],
-    stock: moved.slice().reverse(), waste: [], found: [0, 0, 0, 0], score: 0, moves: 0,
+    stock: inStock.slice(), waste: [], found: [0, 0, 0, 0], score: 0, moves: 0,
   });
-  ok(kl.updateAuto() === true, '翻 3 张时同样给按钮');
+  ok(kl.updateAuto() === false, '翻 3 张时牌堆没翻空，一样不给按钮');
+  while(kl.G.stock.length) kl.drawStock();
+  ok(kl.updateAuto() === true, '翻 3 张也得把牌堆翻空才给按钮');
   ok(kl.autoFinish() === true, '翻 3 张开始收');
   ticks = 0;
   while(kl.getAuto().busy && ticks++ < 3000) kl.autoTick();
   ok(kl.collected() === 52, '★ 翻 3 张也收得完（' + ticks + ' 步）');
   kl.G.drawMode = 1;
 
-  /* ---- 抽测：全翻开 + 牌堆随手洗，每局都得给得住按钮（不能只是碰巧那几局能通） ---- */
+  /* ---- 抽测：全翻开、牌堆也翻空（剩下的牌随手洗进翻牌堆），每局都得给得住按钮 ---- */
   {
-    let seed = 7, bad = 0, n = 0;
+    let seed = 7, bad = 0, refused = 0, n = 0;
     const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
     [1, 3].forEach(draw => {
       kl.G.drawMode = draw;
       for(let t = 0; t < 10; t++){
         const tab = dragons.map(d => d.slice());
-        const stock = [];
+        const pile = [];
         for(let i = 0; i < 4; i++){
           const k = Math.floor(rnd() * 5);
-          for(let j = 0; j < k; j++) stock.push(tab[i].shift());
+          for(let j = 0; j < k; j++) pile.push(tab[i].shift());
         }
-        for(let i = stock.length - 1; i > 0; i--){
+        for(let i = pile.length - 1; i > 0; i--){
           const j = Math.floor(rnd() * (i + 1));
-          const tmp = stock[i]; stock[i] = stock[j]; stock[j] = tmp;
+          const tmp = pile[i]; pile[i] = pile[j]; pile[j] = tmp;
         }
-        kl.setState({ tab, up: [0, 0, 0, 0], stock, waste: [], found: [0, 0, 0, 0], score: 0, moves: 0 });
+        /* 同一个局面，牌还压在牌堆里 → 必须不给按钮 */
+        kl.setState({ tab: tab.map(c => c.slice()), up: [0, 0, 0, 0],
+                      stock: pile.slice().reverse(), waste: [], found: [0, 0, 0, 0], score: 0, moves: 0 });
+        if(kl.updateAuto() === false) refused++;
+        /* 牌堆翻空、全摊在翻牌堆里 → 应该给 */
+        kl.setState({ tab: tab.map(c => c.slice()), up: [0, 0, 0, 0],
+                      stock: [], waste: pile.slice(), found: [0, 0, 0, 0], score: 0, moves: 0 });
         n++;
         if(kl.updateAuto() !== true || kl.simFinish() !== true) bad++;
       }
     });
     kl.G.drawMode = 1;
-    ok(bad === 0, '★ 抽测 ' + n + ' 局「全翻开 + 牌堆随手洗」（翻 1 / 翻 3 各一半）都判成能收（' + bad + ' 局判错）');
+    ok(refused === n, '★ 抽测 ' + n + ' 局：牌还压在牌堆里时一律不给按钮（' + refused + ' 局都挡住了）');
+    ok(bad === 0, '★ 抽测 ' + n + ' 局「全翻开 + 牌堆翻空、剩下的随手洗进翻牌堆」都判成能收（' + bad + ' 局判错）');
   }
 
   /* ---- 收牌 + 计分 + 撤销：用老纸牌里最典型的收尾（只剩 4 张 K） ---- */
@@ -990,6 +1041,111 @@ section('15) ★ 牌桌放得下最长的那一列（初始 6 张扣着的 + K �
 
   wrap.clientHeight = 560;
   kl.layout();
+}
+
+/* ================= 16) 收牌堆的花色顺序 ================= */
+section('16) 收牌堆从左到右是 ♦ ♣ ♥ ♠');
+{
+  wrap.clientHeight = 560;
+  kl.layout();
+  kl.newGame(11, true);
+
+  const g = kl.geom();
+  const colX = k => g.PAD + k * (g.CW + g.GAP);
+  const xOf = el => parseFloat(/translate3d\(([-\d.]+)px/.exec(String(el.style.transform))[1]);
+  const cardOf = c => table.children.find(el => el.dataset && String(el.dataset.c) === String(c));
+  const foundSlots = () => table.children.filter(el =>
+    el.classList.contains('slot') && el.classList.contains('found'));
+
+  ok(kl.FOUND_ORDER.join() === '1,0,2,3', '花色顺序写在 FOUND_ORDER（♦ ♣ ♥ ♠）');
+  ok(kl.FOUND_SLOT[DIAMOND] === 0 && kl.FOUND_SLOT[CLUB] === 1 &&
+     kl.FOUND_SLOT[HEART] === 2 && kl.FOUND_SLOT[SPADE] === 3,
+     '反查表也对：♦ 第 1 格、♣ 第 2 格、♥ 第 3 格、♠ 第 4 格');
+
+  const slots = foundSlots();
+  ok(slots.length === 4, '牌桌上还是 4 个收牌堆格子');
+  const glyph = slots.map(el => String(el.innerHTML).replace(/<[^>]+>/g, ''));
+  ok(glyph.join('') === '♦♣♥♠', '★ 格子上的花色从左到右是 ♦ ♣ ♥ ♠（实际 ' + glyph.join('') + '）');
+  ok(xOf(slots[0]) === colX(3) && xOf(slots[3]) === colX(6),
+     '4 个格子还是贴着右上角排（第 4~7 列的正上方）');
+
+  /* 手指点哪一格 → 认成哪个花色（逻辑全都按花色走，只有这里要翻一下） */
+  ok(kl.hitTest({ target: slots[0] }).i === DIAMOND, '★ 点第 1 格 → 认成 ♦ 的收牌堆');
+  ok(kl.hitTest({ target: slots[1] }).i === CLUB, '点第 2 格 → 认成 ♣');
+  ok(kl.hitTest({ target: slots[2] }).i === HEART, '点第 3 格 → 认成 ♥');
+  ok(kl.hitTest({ target: slots[3] }).i === SPADE, '点第 4 格 → 认成 ♠');
+  ok(kl.hitTest({ target: slots[0] }).k === 'found', '落点类型仍然是 found（上层逻辑不用改）');
+
+  /* 牌飞进收牌堆的时候，也要飞到自己那个格子里 */
+  kl.setState({ tab: [[], [], [], [], [], [], []], found: [1, 0, 0, 0] });
+  ok(xOf(cardOf(C(1, CLUB))) === colX(4), '♣A 收在第 2 格（实际落在第 ' +
+     (Math.round((xOf(cardOf(C(1, CLUB))) - g.PAD) / (g.CW + g.GAP)) - 2) + ' 格）');
+
+  kl.setState({ tab: [[C(1, HEART)]], found: [0, 0, 0, 0] });
+  kl.tapCard(C(1, HEART));
+  kl.tapCard(C(1, HEART));
+  ok(kl.G.found[HEART] === 1, '♥A 连点两下收进收牌堆');
+  ok(xOf(cardOf(C(1, HEART))) === colX(5), '♥A 飞进第 3 格（♥ 的位置）');
+}
+
+/* ================= 17) 扣分确认 ================= */
+section('17) 扣分确认：牌桌底部的小卡片，不是全屏不透明弹窗');
+{
+  ok(/<div class="ask" id="askPanel">/.test(html), '★ 有自己的确认卡片，没去复用全屏弹窗 .over');
+  ok(/\.ask\.on\{display:flex\}/.test(html), '显示 / 隐藏靠 .on 切换');
+  const m = /\.ask\{[^}]*?background:rgba\(8,12,18,\.(\d+)\)/.exec(html);
+  const alpha = m ? Number('0.' + m[1]) : 1;
+  ok(!!m && alpha <= 0.45, '★ 遮罩是半透明的（alpha ' + alpha + ' ≤ 0.45），牌桌还看得见');
+  ok(/align-items:flex-end/.test(html.slice(html.indexOf('.ask{'), html.indexOf('.ask{') + 400)),
+     '卡片贴在底部滑出来（不是糊在整个屏幕上）');
+
+  /* 从收牌堆拿回来：−15 */
+  kl.setState({ found: [1, 0, 0, 0], tab: [[C(2, HEART)]], score: 100 });
+  kl.tapCard(C(1, CLUB));
+  kl.tapSlot('col', 0);
+  ok(byId.askPanel.classList.contains('on') === true, '★ 弹出确认卡片');
+  ok(/拿回/.test(byId.askTitle.textContent), '标题说清了是什么操作（“' + byId.askTitle.textContent + '”）');
+  ok(/15/.test(byId.askSub.innerHTML) && /扣/.test(byId.askSub.innerHTML),
+     '文案写清了扣多少分（“' + String(byId.askSub.innerHTML).replace(/<[^>]+>/g, '') + '”）');
+
+  /* 点卡片外面的暗处 = 算了 */
+  byId.askPanel.fire('click', { target: byId.askPanel });
+  ok(byId.askPanel.classList.contains('on') === false, '点旁边就把卡片收掉');
+  ok(kl.G.found[0] === 1 && kl.G.score === 100, '★ 点旁边等于「算了」，牌和分都没动');
+
+  /* 点「算了」按钮 */
+  kl.tapCard(C(1, CLUB));
+  kl.tapSlot('col', 0);
+  byId.askNo.fire('click');
+  ok(kl.G.found[0] === 1 && kl.G.score === 100, '★ 「算了」= 什么都没发生');
+
+  /* 点「继续」（走界面那条线，不是直接调 API） */
+  kl.tapCard(C(1, CLUB));
+  kl.tapSlot('col', 0);
+  byId.askYes.fire('click');
+  ok(kl.G.found[0] === 0 && kl.G.score === 85, '★ 「继续」才扣 15 分、牌退回列里');
+  ok(byId.askPanel.classList.contains('on') === false && kl.getAsk() === false, '做完卡片就收起来');
+
+  /* 整叠重翻：−20 */
+  kl.setState({ tab: [[C(5, HEART)]], stock: [], waste: [C(3, CLUB)], score: 40 });
+  kl.drawStock();
+  ok(byId.askPanel.classList.contains('on') === true, '★ 整叠重翻同样先问一句');
+  ok(/20/.test(byId.askSub.innerHTML), '写清了扣 20 分');
+  byId.askNo.fire('click');
+  ok(kl.G.score === 40 && kl.G.stock.length === 0 && kl.G.waste.length === 1,
+     '「算了」之后牌堆一点没动');
+
+  /* 0 分时不该再问（扣不动） */
+  kl.setState({ tab: [[C(5, HEART)]], stock: [], waste: [C(3, CLUB)], score: 0 });
+  kl.drawStock();
+  ok(kl.getAsk() === false && kl.G.stock.length === 1, '★ 0 分时直接重翻，不弹卡片');
+
+  /* 悬着的卡片不能带到下一局 */
+  kl.setState({ tab: [[C(5, HEART)]], stock: [], waste: [C(3, CLUB)], score: 40 });
+  kl.drawStock();
+  kl.newGame(3, true);
+  ok(byId.askPanel.classList.contains('on') === false && kl.getAsk() === false,
+     '★ 开新局顺手把悬着的卡片扔掉');
 }
 
 /* ================= 汇总 ================= */
