@@ -517,7 +517,7 @@ function runRound(maxSteps) {
 section('11.5) ★ 亮主、反主、扣底');
 {
   /* 玩家当庄家：先亮主，再扣底 */
-  kl.setInstant(false);
+  kl.setInstant(true);          /* 发牌阶段要走完才会亮主 */
   kl.startGame(kl.T_MODE, 99);
   let g = kl.G;
   ok(kl.UI.pick && kl.UI.pick.mode === 'bid', '玩家当庄家 → 先亮主');
@@ -561,7 +561,56 @@ section('11.5) ★ 亮主、反主、扣底');
   ok(g.trumpSuit === SPADE, '不反主 → 主花色不变');
 }
 
-/* ============ 11.8) 交互：真的点一下 ============ */
+/* ============ 11.6) 发牌阶段 + 换牌方向 ============ */
+section('11.6) ★ 发牌阶段与换牌方向');
+{
+  /* 发牌阶段：牌发完之前不该弹换牌面板 */
+  kl.setInstant(false);
+  kl.startGame(kl.H_MODE, 4242);
+  let g = kl.G;
+  ok(g.phase === 'deal', '★ 开局先进发牌阶段，不再一上来就换牌');
+  ok(kl.UI.deal && kl.UI.deal.total === 13, '发牌阶段记录每人 13 张');
+  ok(kl.UI.pick === null, '发牌阶段不弹换牌面板');
+  kl.render();
+  ok(doc.getElementById('hand').children.length === 0, '发牌刚开始，手里还没牌');
+  ok(doc.getElementById('dealTag').hidden === false, '发牌阶段显示中央发牌提示');
+  ok(/发牌中/.test(doc.getElementById('tip').innerHTML), '提示行说明正在发牌');
+
+  /* 走完发牌才进换牌 */
+  kl.setInstant(true);
+  kl.startGame(kl.H_MODE, 4242);
+  g = kl.G;
+  ok(doc.getElementById('dealTag').hidden === true, '发牌结束后收起中央提示');
+  ok(g.phase === 'pass', '★ 牌发完了才进换牌阶段');
+  ok(!!kl.UI.pick && kl.UI.pick.mode === 'pass', '换牌用统一的选择面板');
+  ok(kl.UI.pick.need === 3, '换牌要选 3 张');
+
+  /* 方向：第 1 局往左，给小林（左）、收圆圆（右） */
+  ok(kl.passDirOfRound(1) === 1 && kl.passDirOfRound(2) === -1 &&
+     kl.passDirOfRound(3) === 2 && kl.passDirOfRound(4) === 0, '★ 四局方向：左 → 右 → 对面 → 不换');
+  ok(kl.passTargetOf(0) === 1 && kl.passSourceOf(0) === 3, '第 1 局：给左边小林，收右边圆圆');
+  ok(/小林/.test(kl.UI.pick.why) && /圆圆/.test(kl.UI.pick.why), '★ 说明里写清了给谁 / 谁给你');
+  ok(/为什么/.test(kl.UI.pick.why), '★ 说明里讲了为什么要换牌');
+  ok(/<svg/.test(kl.UI.pick.why), '换牌说明里带方向示意图');
+  ok(/左边/.test(kl.UI.pick.title + kl.UI.pick.sub), '标题点出传给哪一边');
+
+  /* 四家同时传：每人还是 13 张，52 张不重不漏 */
+  const before0 = new Set(g.hands[0].map(kl.cardId));
+  const mine = kl.UI.pick.pool.slice(0, 3).map(kl.cardId);
+  kl.setInstant(false);                 /* 停掉 AI 出牌，只看换牌本身 */
+  kl.UI.pick.onOk(kl.UI.pick.pool.slice(0, 3));
+  ok(g.phase === 'play', '换完牌直接开打');
+  ok(g.hands.every(h => h.length === 13), '★ 换牌后四家都还是 13 张');
+  const allCards = [].concat.apply([], g.hands);
+  ok(allCards.length === 52 && new Set(allCards.map(kl.cardId)).size === 52, '换牌后 52 张不重不漏');
+  ok(g.hands[0].filter(c => !before0.has(kl.cardId(c))).length === 3, '★ 你收到 3 张别人传来的牌');
+  const toIds = g.hands[1].map(kl.cardId);
+  ok(mine.every(id => toIds.indexOf(id) >= 0), '★ 你挑的 3 张到了左边小林手里');
+  ok(kl.passDirOfRound(g.round + 1) === -1, '下一局方向自动换成右边');
+  kl.setInstant(false);
+}
+
+
 section('11.8) ★ 点牌交互');
 {
   kl.setInstant(false);
