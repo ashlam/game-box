@@ -95,6 +95,7 @@ const doc = {
   readyState: 'complete',
   getElementById(id) { return byId[id] || (byId[id] = mkEl('div')); },
   createElement(tag) { return mkEl(tag); },
+  createTextNode(txt) { const n = { nodeValue: String(txt), _text: String(txt) }; return n; },
   addEventListener() {},
   body: mkEl('body'),
 };
@@ -601,6 +602,63 @@ section('11.8) ★ 点牌交互');
   const hint = kl.playerHint();
   ok(Array.isArray(hint) && hint.length >= 1, '双升能算出建议出牌');
   kl.setInstant(true);
+}
+
+/* ============ 11.9) 牌面渲染 ============ */
+section('11.9) ★ 牌面 / 提示行渲染');
+{
+  /* 牌角必须有能看清的点数（曾经点数被外层 .panel b 刷成近白色，白底白字） */
+  const mk = (r, s) => kl.mkCard(s, r, 0);
+  const el = kl.__cardEl ? kl.__cardEl(mk(9, SPADE)) : null;
+
+  /* 用真实渲染出来的手牌来验：角标存在且带点数文字 */
+  const g = setupHearts({ hands: [[mk(9, SPADE), mk(10, HEART), mk(13, CLUB), mk(14, DIAMOND)],
+                                 [mk(2, SPADE)], [mk(3, SPADE)], [mk(4, SPADE)]], trickNo: 4 });
+  g.turn = 0;
+  kl.render();
+  const hand = doc.getElementById('hand');
+  const findCls = (node, cls) => (node.children || []).find(c =>
+    new RegExp('(^|\\s)' + cls + '(\\s|$)').test(c.className || ''));
+  const face0 = findCls(hand.children[0], 'face');
+  const c0 = face0 && findCls(face0, 'corner');
+  ok(!!c0, '手牌里有角标元素');
+  const rankEl = c0 && c0.children && c0.children[0];
+  ok(!!rankEl && rankEl.textContent === '9', '★ 角标里是点数本身（9）');
+  const suitEl = c0 && c0.children && c0.children[1];
+  ok(!!suitEl && suitEl.textContent === '♠', '角标里点数下面跟着花色');
+  ok(hand.children[0].className.indexOf('black') >= 0, '黑桃牌是黑色');
+  ok(hand.children[1].className.indexOf('red') >= 0, '红桃牌是红色');
+  /* 倒置角标会让 6 看起来像 9，已移除 */
+  ok(!face0 || !findCls(face0, 'corner.br'), '★ 牌上没有倒置的第二个角标');
+
+  /* 王牌：角标用「大 / 小」单字，大王红、小王黑 */
+  const gj = setupTractor({ hands: [[kl.mkCard(4, 17, 0), kl.mkCard(4, 16, 0)], [], [], []] });
+  gj.level = 2;
+  kl.render();
+  const hj = doc.getElementById('hand');
+  const jf0 = findCls(hj.children[0], 'face'), jc0 = jf0 && findCls(jf0, 'corner');
+  ok(!!jc0 && jc0.children[0].textContent === '大', '★ 大王角标写「大」而不是两个字');
+  ok(hj.children[0].className.indexOf('red') >= 0, '大王是红色');
+  const jf1 = findCls(hj.children[1], 'face'), jc1 = jf1 && findCls(jf1, 'corner');
+  ok(!!jc1 && jc1.children[0].textContent === '小', '小王角标写「小」');
+  ok(hj.children[1].className.indexOf('black') >= 0, '小王是黑色');
+
+  /* 提示行：paintTip 曾经用 className=cls 把 .tip 整个覆盖掉，导致文字不居中 */
+  kl.render();
+  const tipEl = doc.getElementById('tip');
+  ok(/(^|\s)tip(\s|$)/.test(tipEl.className), '★ 提示行保留了 tip 类（居中样式不丢）');
+
+  /* 中央淡印：双升显示主花色 + 打几 */
+  kl.startGame(kl.T_MODE, 99);
+  kl.UI.pick = null;
+  const gt = kl.G;
+  gt.trumpSuit = HEART; gt.level = 7; gt.phase = 'play';
+  kl.render();
+  const em = doc.getElementById('emblem');
+  const glyph = (em.children || [])[0], label = (em.children || [])[1];
+  ok(!!glyph && glyph.textContent === '♥', '双升淡印显示主花色 ♥');
+  ok(!!label && /打\s*7/.test(label.textContent), '双升淡印写着「打 7」');
+  ok(em.className.indexOf('red') >= 0, '红主花色时淡印标红');
 }
 
 /* ============ 11) 单文件自包含 ============ */
