@@ -661,6 +661,107 @@ section('11.9) ★ 牌面 / 提示行渲染');
   ok(em.className.indexOf('red') >= 0, '红主花色时淡印标红');
 }
 
+/* ============ 11.10) 得分显示：实时 + 颜色强调 ============ */
+section('11.10) ★ 得分显示与说明文案');
+{
+  const mk = (r, s2) => kl.mkCard(s2, r, 0);
+  const textOf = n => (n.nodeValue || n.textContent || '') + (n.children || []).map(textOf).join('');
+  const all = n => [n].concat((n.children || []).map(all).flat());
+  const withCls = (n, cls) => all(n).filter(c =>
+    new RegExp('(^|\\s)' + cls + '(\\s|$)').test(c.className || ''));
+
+  const g = setupHearts({
+    hands: [[mk(9, SPADE), mk(8, HEART)], [mk(2, SPADE), mk(3, SPADE)],
+            [mk(4, SPADE), mk(5, SPADE)], [mk(6, SPADE), mk(7, SPADE)]],
+    trickNo: 4,
+  });
+  g.roundPts = [0, 0, 0, 0]; g.scores = [10, 20, 30, 40]; g.round = 2; g.turn = 0;
+  kl.render();
+
+  /* —— 信息条：标签必须说清是「罚分」，不是「得分」 —— */
+  const hud = doc.getElementById('hud');
+  ok(hud.children.length === 4, '信息条是四格');
+  const labels = hud.children.map(c => (c.children[1] || {}).textContent || '');
+  ok(labels.join('|') === '局数|还剩几圈|你本局罚分|累计罚分',
+     '★ 四格标签讲清了罚分口径（' + labels.join('/') + '）');
+  ok(hud.children[2].children[0].textContent === '0', '第三格是你本局罚分');
+  ok(hud.children[3].children[0].textContent === '10', '第四格是你自己的累计罚分');
+  ok(hud.children[3].children[0].children.length === 1 &&
+     hud.children[3].children[0].children[0].textContent === '/100',
+     '累计罚分后面跟着 /100，一眼知道离终点多远');
+
+  /* —— 实时：分数一变，重绘就得跟着变 —— */
+  g.roundPts = [5, 0, 3, 0]; g.scores = [15, 20, 30, 40];
+  kl.render();
+  ok(hud.children[2].children[0].textContent === '5', '★ 本局罚分实时更新（0 → 5）');
+  const seat1 = doc.getElementById('seat1');
+  ok(/本局0/.test(textOf(seat1)) && /累计20/.test(textOf(seat1)),
+     '座位同时显示「本局」和「累计」，不再只有累计');
+  g.roundPts = [5, 3, 3, 0];
+  kl.render();
+  ok(/本局3/.test(textOf(doc.getElementById('seat1'))), '★ 对手吃进罚分后，座位上数字立刻变');
+
+  /* —— 快满 100 要变红警示 —— */
+  g.scores = [15, 85, 30, 40];
+  kl.render();
+  const dangerB = all(doc.getElementById('seat1')).filter(c =>
+    c.tagName === 'B' && c.textContent === '85')[0];
+  ok(!!dangerB, '座位里找得到累计 85');
+  ok(!!dangerB && dangerB.className === 'danger', '★ 累计到 85 分用危险色标出来');
+
+  /* —— 一句话规则：颜色区分好坏 —— */
+  kl.render();
+  const motto = doc.getElementById('motto').innerHTML;
+  ok(/越少越好/.test(motto), '★ 规则行明说「吃进越少越好」');
+  ok(/罚分/.test(motto), '规则行点明这是罚分');
+  ok(/class="good"[^>]*>吃进越少越好/.test(motto), '★「越少越好」用了绿色强调');
+  ok(/class="bad"[^>]*>罚分/.test(motto), '「罚分」用了警示色');
+  ok(/class="bad"[^>]*>100/.test(motto), '「100 分」用了警示色');
+
+  /* —— 双升：座位显示级别，且不会出现 undefined —— */
+  kl.startGame(kl.T_MODE, 77);
+  kl.UI.pick = null;
+  const gt = kl.G;
+  gt.levels = [2, 1]; gt.roundPts = [10, 5, 0, 0];
+  gt.trumpSuit = SPADE; gt.level = 2; gt.phase = 'play'; gt.turn = 0;
+  kl.render();
+  const tSeat = textOf(doc.getElementById('seat1'));
+  ok(!/undefined/.test(tSeat), '★ 双升座位不会出现 undefined');
+  ok(/级别2/.test(tSeat), '双升座位显示对方级别（1 级也显示成「2」）');
+  ok(/级别/.test(tSeat), '双升座位带「级别」标签');
+  const thud = doc.getElementById('hud');
+  ok(/我方抓分/.test((thud.children[2].children[1] || {}).textContent || ''),
+     '双升信息条给出我方本局抓分');
+  ok(thud.children[2].children[0].textContent === '10',
+     '双升我方抓分 = 同队两人之和（10+0）');
+  ok(/越多越好/.test(doc.getElementById('motto').innerHTML),
+     '★ 双升规则行说「抓分越多越好」');
+
+  /* —— 玩法说明：讲清楚方向和算法 —— */
+  kl.startGame(kl.H_MODE, 55);
+  kl.UI.pick = null; kl.G.phase = 'play';
+  doc.getElementById('btnHow').fire('click');
+  const hb = doc.getElementById('helpBody').innerHTML;
+  ok(/怎么算分/.test(hb), '★ 玩法说明里有「怎么算分」一节');
+  ok(/罚分/.test(hb) && /越少越好/.test(hb), '说明里讲清了罚分越少越好');
+  ok(/不是抢分/.test(hb), '说明里直接点出「不是抢分」这个误会');
+  ok(/class="good"/.test(hb) && /class="bad"/.test(hb), '说明正文用了两种强调色');
+  doc.getElementById('helpClose').fire('click');
+
+  kl.startGame(kl.T_MODE, 56);
+  kl.UI.pick = null; kl.G.phase = 'play';
+  doc.getElementById('btnHow').fire('click');
+  const ht = doc.getElementById('helpBody').innerHTML;
+  ok(/越多越好/.test(ht), '双升说明也点明「抓分越多越好」');
+  ok(/80 分/.test(ht), '双升说明写清 80 分这条线');
+  doc.getElementById('helpClose').fire('click');
+
+  /* —— 结算面板：表头也得是罚分口径 —— */
+  ok(/本局罚分/.test(html) && /累计罚分/.test(html), '结算表头用的是「罚分」');
+  ok(/罚分最少的人赢/.test(html), '结算文案说明谁赢');
+  ok(!/你的总分/.test(html), '★ 已经不再出现「你的总分」这种反方向的说法');
+}
+
 /* ============ 11) 单文件自包含 ============ */
 section('11) 单文件自包含');
 {
