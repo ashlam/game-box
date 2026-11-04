@@ -151,6 +151,14 @@
   .seat .mt .k b.good{color:#7fe0b0}
   .seat .mt .k b.danger{color:#ff8b78}
   .seat .mt .k b.lv{color:var(--brass)}
+  /* 窄屏：只收边距和留白，字号不动（手机上字体大小比紧凑更值钱） */
+  @media (max-width:382px){
+    .seat{gap:6px;padding:4px 7px 4px 4px}
+    .seat .av{width:28px;height:28px;font-size:12px}
+    .seat .cc{padding:1px 4px;font-size:10.5px}
+    .seat .mt .k+.k{margin-left:8px;padding-left:8px}
+    .seat .nm{gap:4px}
+  }
   .seat.s2{top:7px;left:50%;transform:translateX(-50%)}
   .seat.s1{top:23%;left:6px}
   .seat.s3{top:23%;right:6px;flex-direction:row-reverse;padding:5px 5px 5px 10px;text-align:right}
