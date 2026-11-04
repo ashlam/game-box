@@ -585,11 +585,11 @@ section('11.6) ★ 发牌阶段与换牌方向');
   ok(!!kl.UI.pick && kl.UI.pick.mode === 'pass', '换牌用统一的选择面板');
   ok(kl.UI.pick.need === 3, '换牌要选 3 张');
 
-  /* 方向：第 1 局往左，给小林（左）、收圆圆（右） */
+  /* 方向：第 1 局往左，给西方大侠（左）、收东方不败（右） */
   ok(kl.passDirOfRound(1) === 1 && kl.passDirOfRound(2) === -1 &&
      kl.passDirOfRound(3) === 2 && kl.passDirOfRound(4) === 0, '★ 四局方向：左 → 右 → 对面 → 不换');
-  ok(kl.passTargetOf(0) === 1 && kl.passSourceOf(0) === 3, '第 1 局：给左边小林，收右边圆圆');
-  ok(/小林/.test(kl.UI.pick.why) && /圆圆/.test(kl.UI.pick.why), '★ 说明里写清了给谁 / 谁给你');
+  ok(kl.passTargetOf(0) === 1 && kl.passSourceOf(0) === 3, '第 1 局：给左边西方大侠，收右边东方不败');
+  ok(/西方大侠/.test(kl.UI.pick.why) && /东方不败/.test(kl.UI.pick.why), '★ 说明里写清了给谁 / 谁给你');
   ok(/为什么/.test(kl.UI.pick.why), '★ 说明里讲了为什么要换牌');
   ok(/<svg/.test(kl.UI.pick.why), '换牌说明里带方向示意图');
   ok(/左边/.test(kl.UI.pick.title + kl.UI.pick.sub), '标题点出传给哪一边');
@@ -605,11 +605,71 @@ section('11.6) ★ 发牌阶段与换牌方向');
   ok(allCards.length === 52 && new Set(allCards.map(kl.cardId)).size === 52, '换牌后 52 张不重不漏');
   ok(g.hands[0].filter(c => !before0.has(kl.cardId(c))).length === 3, '★ 你收到 3 张别人传来的牌');
   const toIds = g.hands[1].map(kl.cardId);
-  ok(mine.every(id => toIds.indexOf(id) >= 0), '★ 你挑的 3 张到了左边小林手里');
+  ok(mine.every(id => toIds.indexOf(id) >= 0), '★ 你挑的 3 张到了左边西方大侠手里');
   ok(kl.passDirOfRound(g.round + 1) === -1, '下一局方向自动换成右边');
   kl.setInstant(false);
 }
 
+
+/* ============ 11.12) 对手名字 / 头像 / 花色图标 ============ */
+section('11.12) ★ 对手名字、头像、花色图标');
+{
+  const n = kl.NAMES;
+  ok(n.length === 4 && n[0] === '你', '四个座位仍是 0=你 + 3 个对手');
+  ok(n[1] === '西方大侠' && n[2] === '北冥教主' && n[3] === '东方不败',
+     '★ 对手按方位起名：左=西、对面=北、右=东');
+
+  const a1 = kl.seatAvatar(1), a2 = kl.seatAvatar(2), a3 = kl.seatAvatar(3);
+  ok(/<svg/.test(a1) && /<svg/.test(a2) && /<svg/.test(a3), '★ 三个对手各有内联 SVG 头像');
+  ok(a1 !== a2 && a2 !== a3 && a1 !== a3, '三个头像图案互不相同');
+  ok(!/<(img|image|use)\b/i.test(a1 + a2 + a3), '头像不含图片引用，纯矢量');
+
+  /* 座位渲染：头像位置画的是图案，不再是名字首字 */
+  const g = setupHearts({ hands: [[A2], [SA], [HA], [D5]], trickNo: 4 });
+  kl.render();
+  const s1 = doc.getElementById('seat1');
+  ok(/<svg/.test((s1.children[0] || {}).innerHTML || ''), '★ 座位上渲染的是图案，不是名字首字');
+  const flat = node => (node.textContent || '') + (node.children || []).map(flat).join('');
+  ok(flat(s1).indexOf('西方大侠') >= 0, '座位写着新名字');
+
+  /* 花色图标 */
+  ok(kl.suitIcon(HEART) === '<i class="su r">♥</i>', '♥ 图标带红色样式');
+  ok(/<i class="su">♠<\/i>/.test(kl.suitIcon(SPADE)), '♠ 图标是默认样式');
+  ok(/黑桃/.test(kl.suitLabel(SPADE)), 'suitLabel 连花色名字一起给');
+  ok(/class="su"/.test(kl.cardChip(K(12, SPADE))) && /Q♠/.test(kl.cardChip(K(12, SPADE))),
+     '小牌图标是「Q♠」这种点数+花色');
+
+  /* 提示行：跟牌时把花色画出来 */
+  const gt = setupTractor({
+    hands: [[K(9, HEART), K(9, HEART, 1), K(14, CLUB)], [K(8, HEART)], [K(7, HEART)], [K(6, HEART)]],
+    lead: { cards: [K(10, HEART), K(10, HEART, 1)] },
+  });
+  gt.turn = 0;
+  kl.render();
+  const tip = doc.getElementById('tip').innerHTML;
+  ok(/class="su/.test(tip), '★ 提示行的「这一圈」带花色图标');
+  ok(/一对/.test(tip) && /必须跟/.test(tip), '提示行说清这一圈的形状和跟牌要求');
+
+  /* 提示气泡：必须跟 xx */
+  const msg = kl.legalPlay(0, [K(14, CLUB)]).msg;
+  ok(/必须跟/.test(msg) && /class="su/.test(msg), '★ 出牌被拦时，提示带花色图标');
+  kl.toast(msg);
+  ok(/class="su/.test(doc.getElementById('toast').innerHTML), '提示气泡用 innerHTML 渲染图标');
+
+  /* 手里没有这门花色时，别再说「必须跟」 */
+  const gn = setupHearts({ hands: [[K(3, CLUB), K(5, HEART)], [K(2, SPADE)], [], []],
+                           lead: K(10, SPADE), trickNo: 8 });
+  gn.turn = 0;
+  kl.render();
+  const tip2 = doc.getElementById('tip').innerHTML;
+  ok(/可以垫/.test(tip2) && !/必须跟/.test(tip2), '★ 绝门时不写「必须跟」，直接说可以垫牌');
+
+  /* 红心：同样带图标 */
+  const gh = setupHearts({ hands: [[K(3, SPADE), K(5, HEART)], [K(2, SPADE)], [], []],
+                           lead: K(10, SPADE), trickNo: 8 });
+  const why = kl.heartsWhy(0, K(5, HEART));
+  ok(/必须跟/.test(why) && /class="su/.test(why), '★ 红心的「必须跟」也带花色图标');
+}
 
 section('11.8) ★ 点牌交互');
 {
