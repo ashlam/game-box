@@ -570,6 +570,9 @@ section('11.6) ★ 发牌阶段与换牌方向');
   let g = kl.G;
   ok(g.phase === 'deal', '★ 开局先进发牌阶段，不再一上来就换牌');
   ok(kl.UI.deal && kl.UI.deal.total === 13, '发牌阶段记录每人 13 张');
+  ok(kl.UI.deal.step === 1, '★ 发牌一张一张摊（不是几段一闪而过）');
+  ok(kl.PACE_DEAL >= 150, '★ 每张之间留足停顿（≥150ms）');
+  ok(kl.PACE_DEAL_END >= 500, '★ 最后一张后还停一下才进换牌');
   ok(kl.UI.pick === null, '发牌阶段不弹换牌面板');
   kl.render();
   ok(doc.getElementById('hand').children.length === 0, '发牌刚开始，手里还没牌');
@@ -607,6 +610,30 @@ section('11.6) ★ 发牌阶段与换牌方向');
   const toIds = g.hands[1].map(kl.cardId);
   ok(mine.every(id => toIds.indexOf(id) >= 0), '★ 你挑的 3 张到了左边西方大侠手里');
   ok(kl.passDirOfRound(g.round + 1) === -1, '下一局方向自动换成右边');
+
+  /* 发牌进行中：进度数字一直变；发完那一拍牌堆定住并写「发牌完毕」 */
+  const keepPhase = g.phase;
+  g.phase = 'deal';
+  kl.UI.deal = { shown: 5, total: 13, step: 1, done: false };
+  kl.render();
+  ok(/5 \/ 13/.test(doc.getElementById('dealNum').textContent), '★ 中央实时显示发到第几张（5 / 13）');
+  ok(/已发 5 \/ 13 张/.test(doc.getElementById('tip').innerHTML), '提示行同步报进度');
+  kl.UI.deal = { shown: 13, total: 13, step: 1, done: true };
+  kl.render();
+  const dt = doc.getElementById('dealTag');
+  ok(dt.hidden === false && /(^|\s)done(\s|$)/.test(dt.className), '★ 发完牌堆定住（done 态）');
+  ok(/发牌完毕/.test(doc.getElementById('dealTip').textContent), '中央写「发牌完毕」');
+  ok(/发牌完毕/.test(doc.getElementById('tip').innerHTML), '★ 提示行说发牌完毕、马上开始');
+  kl.UI.deal = null;
+  g.phase = keepPhase;
+
+  /* 双升 25 张一次摊两张，总时长不至于翻倍 */
+  kl.setInstant(false);
+  const keepDealId = kl.UI.dealId;
+  kl.dealPhase(25, function () {});
+  ok(kl.UI.deal && kl.UI.deal.total === 25 && kl.UI.deal.step === 2, '★ 双升 25 张一次摊两张');
+  kl.UI.dealId = keepDealId + 100;     /* 作废这一轮，别串到后面的用例 */
+  kl.UI.deal = null;
   kl.setInstant(false);
 }
 

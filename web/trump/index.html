@@ -167,6 +167,10 @@
             font-variant-numeric:tabular-nums}
   .deal .dt{font-size:10.5px;letter-spacing:.20em;text-indent:.20em;color:#b9c9c0}
   @keyframes dealFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+  /* 发完：牌堆定住、数字转绿，视觉上「停一拍」 */
+  .deal.done .stack{animation:none}
+  .deal.done .dn{color:#9fe8c3}
+  .deal.done .dt{color:#9fe8c3}
 
   /* ===== 三个 AI 座位 ===== */
   .seat{position:absolute;display:flex;align-items:center;gap:8px;line-height:1.2;
@@ -627,7 +631,8 @@ var AVA_FLOWER =
 var AVA = [null, AVA_SWORD, AVA_SNOW, AVA_FLOWER];
 var PACE = 620;        /* AI 出牌之间的停顿 */
 var PACE_WIN = 950;    /* 一圈结束后的停顿 */
-var PACE_DEAL = 120;   /* 发牌动画每一段的间隔 */
+var PACE_DEAL = 160;      /* 发牌：每摊一张的间隔（一张一张来，别一闪而过） */
+var PACE_DEAL_END = 680;  /* 最后一张之后的停顿，让人看清「发完了」再进下一步 */
 
 /* ==================== 牌的小工具 ==================== */
 function mkCard(s,r,c){ return {s:s, r:r, c:c}; }
@@ -1187,22 +1192,28 @@ function later(fn, ms){
   setTimeout(fn, ms);
 }
 
-/* ---------- 发牌阶段：一段一段摊牌，发完再进换牌 / 亮主 ---------- */
+/* ---------- 发牌阶段：一张一张摊牌，发完再进换牌 / 亮主 ---------- */
 function dealPhase(total, cb){
   var id=(UI.dealId||0)+1;
   UI.dealId=id;
-  UI.deal={ shown:0, total:total };
+  /* 一手一张地发：红心 13 张，双升 25 张一次两张（不然太久） */
+  var step = total<=14 ? 1 : 2;
+  UI.deal={ shown:0, total:total, step:step, done:false };
   G.phase='deal';
   render();
-  var step=Math.max(1, Math.ceil(total/5));
   function tick(){
     if(UI.dealId!==id) return;          /* 中途重开，这一轮作废 */
     UI.deal.shown=Math.min(total, UI.deal.shown+step);
+    UI.deal.done=(UI.deal.shown>=total);
     render();
-    if(UI.deal.shown>=total){
-      UI.deal=null;
-      render();
-      cb();
+    if(UI.deal.done){
+      /* 最后一张停一下：让玩家看清「发完了」，再进换牌 / 亮主 */
+      later(function(){
+        if(UI.dealId!==id) return;
+        UI.deal=null;
+        render();
+        cb();
+      }, PACE_DEAL_END);
     } else {
       later(tick, PACE_DEAL);
     }
@@ -1711,14 +1722,19 @@ function paintDeal(){
   var d=UI.deal;
   if(G.phase!=='deal' || !d){ el.hidden=true; return; }
   el.hidden=false;
+  el.className='deal'+(d.done?' done':'');
   var n=E('dealNum'), t=E('dealTip');
   if(n) n.textContent=d.shown+' / '+d.total;
-  if(t) t.textContent=(G.mode===H_MODE)? '发牌中 · 每人 13 张' : '发牌中 · 每人 25 张';
+  if(t) t.textContent = d.done ? '发牌完毕' :
+      ((G.mode===H_MODE)? '发牌中 · 每人 13 张' : '发牌中 · 每人 25 张');
 }
 function paintTip(){
   var t=E('tip'), txt='', cls='';
   if(G.phase==='deal'){
-    txt='<b>发牌中</b> · 牌发完了才开始换牌';
+    var dd=UI.deal;
+    txt = !dd ? '<b>发牌中</b>'
+        : dd.done ? '<b>发牌完毕</b> · 马上开始'
+        : '<b>发牌中</b> · 已发 '+dd.shown+' / '+dd.total+' 张';
   } else if(G.phase==='play'){
     if(G.turn===0){
       txt = (G.mode===H_MODE)? '<b>该你出牌</b> · 点一张牌就出' :
@@ -2250,6 +2266,7 @@ window.__trump = {
   startKitty:startKitty, startBid:startBid, afterBid:afterBid,
   passDirOfRound:passDirOfRound, passTargetOf:passTargetOf, passSourceOf:passSourceOf,
   openPassPanel:openPassPanel, doPass:doPass, dealPhase:dealPhase,
+  PACE_DEAL:PACE_DEAL, PACE_DEAL_END:PACE_DEAL_END,
   seatAvatar:seatAvatar, suitIcon:suitIcon, suitLabel:suitLabel, cardChip:cardChip,
   setInstant:function(v){ UI.instant=!!v; },
   cardName:cardName, cardText:cardText, cardPoints:cardPoints, cardId:cardId,
