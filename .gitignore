@@ -20,3 +20,10 @@ __pycache__/
 *.pyc
 .DS_Store
 Thumbs.db
+
+# 本地验证产物：无头 Chrome 截图 / 生成的临时页面，不进版本库
+ops/shots/
+ops/tmp/
+
+# WorkBuddy 运行时文件
+.wbapp_*.genie
