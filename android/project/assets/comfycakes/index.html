@@ -80,7 +80,7 @@
   .pickLabel b{color:var(--pink);font-weight:800}
   .timer{flex:1;height:7px;border-radius:99px;background:#f5e4cf;overflow:hidden;box-shadow:inset 0 1px 2px rgba(120,80,50,.12)}
   .timer i{
-    display:block;height:100%;width:100%;border-radius:99px;
+    display:block;height:100%;width:0;border-radius:99px;
     background:linear-gradient(90deg,#7fe0c6,#4fc3a1);
     transition:background .2s;
   }
@@ -99,10 +99,24 @@
   .opt[disabled]{opacity:.5;pointer-events:none}
   .opts .idle{color:var(--dim);font-size:12.5px;letter-spacing:3px}
 
+  /* ===== 横屏 / 矮屏：把竖着占的地方全压扁，高度让给舞台 ===== */
+  @media (max-height: 470px){
+    .app{max-width:700px;gap:5px;padding-top:calc(env(safe-area-inset-top) + 4px);padding-bottom:4px}
+    .top h1{font-size:13px}
+    .top .back{width:28px;height:28px;font-size:16px}
+    .orders{height:58px;gap:6px}
+    .ord.now{width:54px;height:54px;border-radius:12px}
+    .ord.next{width:34px;height:34px;border-radius:9px}
+    .pickTop{margin-bottom:4px}
+    .opts{min-height:54px;gap:6px}
+    .opt{width:52px;height:52px;border-radius:14px}
+    .stage{border-radius:14px}
+  }
+
   /* ===== 弹层 ===== */
   .ov{
     position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:18px;
-    background:rgba(74,46,28,.46);
+    background:rgba(70,44,27,.52);
   }
   .ov[hidden]{display:none}
   .sheet{
@@ -661,13 +675,14 @@ function computeLayout(){
   var beltH = clamp(h*0.095, 28, 44);
   var r = clamp(Math.min(w*0.100, h*0.082), 24, 46);
   var beltY = h*0.58;
-  beltY = Math.min(beltY, h - beltH - 58);
+  beltY = Math.min(beltY, h - beltH - Math.min(58, h*0.20));
 
   var baseY = beltY - r*0.95;
   var mw = clamp(w*0.175, 56, 92);
   // 机器高宽比固定，屏幕上才不会变成细长条
   var mh = clamp(mw*1.95, 96, 190);
-  if(baseY - mh < 24) mh = Math.max(80, baseY - 24);
+  if(baseY - mh < 24) mh = Math.max(64, baseY - 24);
+  if(baseY - mh < 10) mh = Math.max(56, baseY - 10);
 
   layout = {
     W: w, H: h,
@@ -1146,6 +1161,8 @@ function drawBunting(){
   if(y0 < 16) return;
 
   var sag = Math.min(26, y0*0.55);
+  // 旗子尾巴会压到机器头上的话，这屏就别挂了
+  if(y0 + sag + Math.min(W*0.062, 26) > layout.topY - 8) return;
   var p0 = [-8, y0], c = [W/2, y0 + sag*2], p1 = [W + 8, y0];
 
   function pt(t){
@@ -1504,9 +1521,12 @@ function drawCakeNow(){
       scale = 1 + p*0.22;
       alpha = 1 - p*0.62;
     } else {
-      dy = p*88;
-      scale = 1 - p*0.42;
-      alpha = 1 - p*0.72;
+      // 掉进垃圾桶：终点要算到桶口，不然会悬在半空
+      var tth = Math.min(46, layout.H - layout.beltY - layout.beltH - 24);
+      var trashTop = layout.H - tth - 12;
+      dy = (trashTop - layout.cakeY + layout.cakeR*0.25) * p;
+      scale = 1 - p*0.45;
+      alpha = 1 - p*0.78;
       cx = cx + (layout.W - 40 - layout.deliverX) * p;
     }
   }
