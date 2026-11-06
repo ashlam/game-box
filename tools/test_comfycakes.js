@@ -414,8 +414,65 @@ section('8. 绘制');
   ok(!threw, '五个形状 × 四层半成品 × 五种花纹都能画', threw && threw.message);
 }
 
-/* ================= 9. 自包含 ================= */
-section('9. 单文件自包含');
+/* ================= 9. 控制台与反馈 ================= */
+section('9. 控制台与反馈');
+{
+  CC.start();
+  untilPh('waiting');
+
+  const cells = () => els.optsEl.children.filter(c =>
+    c.classList.contains('opt') || c.classList.contains('slot'));
+
+  ok(cells().length === 5, '控制台永远是 5 个位置，按钮不会挪来挪去', String(cells().length));
+
+  const n = G.orders[0].pool[G.station].length;
+  ok(cells().filter(c => c.classList.contains('opt')).length === n,
+     '能按的按钮数正好等于候选数');
+  ok(cells().filter(c => c.classList.contains('slot')).length === 5 - n,
+     '候选不够就用虚线空位补齐');
+
+  const lyr = els.ordersEl.querySelectorAll('.lyr');
+  ok(lyr.length === 4, '订单卡把蛋糕拆成四行', String(lyr.length));
+  ok(lyr.filter(l => l.classList.contains('on')).length === 1, '同时只点亮一行');
+  ok(lyr[G.station] && lyr[G.station].classList.contains('on'),
+     '点亮的就是当前工位那一行');
+
+  const st0 = G.station;
+  station(true);
+  untilPh('waiting');
+  ok(G.station === st0 + 1, '做完一层，蛋糕走到下一站', String(G.station));
+  const lyr2 = els.ordersEl.querySelectorAll('.lyr');
+  ok(lyr2.filter(l => l.classList.contains('on')).length === 1 &&
+     lyr2[G.station].classList.contains('on'), '高亮跟着工位一起走');
+
+  // 做错的那一层也得照样高亮，不能提前泄漏答案
+  ok(lyr2[st0].classList.contains('on') === false, '上一站那一行已经熄灭');
+}
+
+section('10. 结果反馈');
+{
+  CC.start();
+  makeCake();
+  untilPh('result');
+  ok(els.optsEl.children.some(c => c.classList.contains('resultFace') && c.classList.contains('ok')),
+     '送出去了，底部换成大绿勾');
+  ok(els.optsEl.children.filter(c => c.classList.contains('opt')).length === 0,
+     '结算时按钮全部撤掉，不会误按');
+  ok(G.layerOk && G.layerOk.every(Boolean), '四层都记成对的', JSON.stringify(G.layerOk));
+}
+{
+  CC.start();
+  makeCake([false, true, true, true]);
+  untilPh('result');
+  ok(els.optsEl.children.some(c => c.classList.contains('resultFace') && c.classList.contains('bad')),
+     '没送出去，底部换成大红叉');
+  ok(G.layerOk && G.layerOk[0] === false && G.layerOk[1] === true,
+     '错在第几层记得清清楚楚', JSON.stringify(G.layerOk));
+  ok(G.resultT < 0.6, '结果先原地停一会儿再走', String(G.resultT.toFixed(2)));
+}
+
+/* ================= 11. 自包含 ================= */
+section('11. 单文件自包含');
 {
   ok(!/https?:\/\//.test(html), '没有 http(s) 外链');
   ok(!/<img\b/i.test(html), '没有 <img>');

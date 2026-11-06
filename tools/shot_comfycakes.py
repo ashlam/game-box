@@ -39,6 +39,17 @@ window.addEventListener('load', function(){
       if(po[i].id !== c[f[st]].id){ window.__cc.choose(po[i].id); return; }
     }
   }
+  function failOrder(){
+    until('waiting'); wrong(0); run(1.2);
+    until('waiting'); wrong(1); run(1.2);
+    until('waiting'); wrong(2); run(1.2);
+    until('waiting'); wrong(3);
+    // 交付 + 展示结果 + 进下一单（或结算）时长会变，死等帧数比算秒数靠谱
+    for(var k = 0; k < 500; k++){
+      if(window.__cc.state.phase === 'waiting' || window.__cc.state.over) break;
+      window.__cc.tick(1, 1/60);
+    }
+  }
   try{
     window.__cc.start();
 """ % (FIELD, FIELD)
@@ -59,21 +70,16 @@ SCENES = {
     until('waiting'); pick(3); run(1.2);
     until('result'); run(0.42);
     """,
-    # 只剩一条命时做错，出结算页
+    # 三条命全错光，出结算页
     'over': """
-    until('waiting'); wrong(0); run(1.2);
-    until('waiting'); wrong(1); run(1.2);
-    until('waiting'); wrong(2); run(1.2);
-    until('waiting'); wrong(3); run(1.2);
-    until('result'); run(1.7);
+    failOrder(); failOrder(); failOrder();
     """,
-    # 前三层错、最后一层也对不上，逐层打叉
+    # 四层全错，送到窗口逐层打叉
     'bad': """
     until('waiting'); wrong(0); run(1.2);
     until('waiting'); wrong(1); run(1.2);
     until('waiting'); wrong(2); run(1.2);
-    until('waiting'); wrong(3); run(1.2);
-    until('result'); run(0.95);
+    until('waiting'); wrong(3); run(0.5);
     """,
 }
 

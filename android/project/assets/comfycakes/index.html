@@ -53,17 +53,29 @@
   .snd[aria-pressed="false"]{opacity:.45}
 
   /* ===== 订单队列 ===== */
-  .orders{display:flex;align-items:center;gap:8px;flex:0 0 auto;height:84px;padding-left:2px}
+  /* 大卡＝整只蛋糕 ＋ 四层拆解。四行的颜色和上下顺序，跟下面四台机器一一对应，
+     孩子不用认字也能看出「订单的第 3 层，就是第 3 台机器要做的那个」。 */
+  .orders{display:flex;align-items:center;gap:8px;flex:0 0 auto;height:112px;padding-left:2px}
   .ord{
-    background:var(--card);border:2px solid var(--line);border-radius:15px;
-    display:grid;place-items:center;flex:0 0 auto;position:relative;
+    background:var(--card);border:2px solid var(--line);border-radius:16px;
+    display:flex;align-items:center;flex:0 0 auto;position:relative;
     transition:transform .2s cubic-bezier(.3,1.4,.5,1),border-color .2s,box-shadow .2s;
   }
-  .ord.now{width:76px;height:76px;border-color:var(--pink);box-shadow:0 5px 16px rgba(255,127,168,.26)}
-  .ord.next{width:48px;height:48px;opacity:.55;border-width:1.5px;border-radius:12px}
-  .ord.ok{border-color:var(--mint);box-shadow:0 0 0 4px rgba(79,195,161,.22);transform:scale(1.06)}
+  .ord.now{padding:4px 10px 4px 3px;gap:8px;border-color:var(--pink);box-shadow:0 5px 16px rgba(255,127,168,.26)}
+  .ord.next{width:46px;height:46px;justify-content:center;opacity:.5;border-width:1.5px;border-radius:13px}
+  .ord.ok{border-color:var(--mint);box-shadow:0 0 0 4px rgba(79,195,161,.22);transform:scale(1.05)}
   .ord.bad{border-color:#ff6b6b;box-shadow:0 0 0 4px rgba(255,107,107,.2);animation:shk .34s}
   @keyframes shk{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+
+  .ordLayers{display:flex;flex-direction:column;gap:2px}
+  .lyr{
+    width:24px;height:24px;border-radius:50%;background:#fff;
+    border:2px solid var(--line);display:grid;place-items:center;
+    opacity:.55;
+    transition:transform .18s cubic-bezier(.3,1.5,.5,1),box-shadow .18s,opacity .18s;
+  }
+  .lyr.on{opacity:1;transform:scale(1.24);box-shadow:0 0 0 3px rgba(255,192,67,.32)}
+  .lyr canvas{display:block}
 
   /* ===== 舞台 ===== */
   .stage{
@@ -85,31 +97,57 @@
     transition:background .2s;
   }
   .timer.warn i{background:linear-gradient(90deg,#ffb03a,#ff6b6b)}
-  .opts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;min-height:66px;align-items:center}
-  .opt{
-    flex:0 0 auto;width:64px;height:64px;padding:0;border-radius:17px;
-    background:var(--card);border:2px solid var(--line);cursor:pointer;
-    display:grid;place-items:center;
-    transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease;
-    box-shadow:0 3px 8px rgba(150,100,60,.10);
+  /* 一排五个固定槽位：候选不够时空着，按钮位置永远不变，手不会点错 */
+  .opts{display:flex;gap:5px;justify-content:center;align-items:center;min-height:76px}
+  .slot{
+    width:64px;height:64px;border-radius:50%;flex:0 0 auto;
+    border:2px dashed rgba(190,150,110,.20);background:rgba(255,255,255,.25);
   }
-  .opt:active{transform:scale(.93)}
-  .opt.sel{border-color:var(--pink);box-shadow:0 0 0 3px rgba(255,127,168,.25)}
+  .opt{
+    flex:0 0 auto;width:64px;height:64px;padding:0;border-radius:50%;
+    background:radial-gradient(circle at 50% 32%,#fff 0%,#fff8ec 62%,#f6e7d1 100%);
+    border:3px solid var(--line);cursor:pointer;display:grid;place-items:center;
+    box-shadow:0 5px 0 rgba(178,133,92,.26), 0 9px 16px rgba(150,100,60,.14);
+    transition:transform .09s ease,box-shadow .09s ease,border-color .16s ease;
+  }
+  .opt:active{transform:translateY(4px);box-shadow:0 1px 0 rgba(178,133,92,.26),0 3px 7px rgba(150,100,60,.12)}
+  .opt.sel{
+    transform:translateY(4px);
+    box-shadow:0 1px 0 rgba(178,133,92,.26),inset 0 0 0 3px rgba(255,255,255,.9);
+  }
   .opt canvas{display:block}
-  .opt[disabled]{opacity:.5;pointer-events:none}
+  .opt[disabled]{opacity:.42;pointer-events:none}
   .opts .idle{color:var(--dim);font-size:12.5px;letter-spacing:3px}
+  .resultFace{
+    width:74px;height:74px;border-radius:50%;display:grid;place-items:center;
+    color:#fff;font-size:40px;font-weight:900;line-height:1;
+    animation:pop .3s cubic-bezier(.3,1.5,.5,1);
+  }
+  .resultFace.ok{
+    background:linear-gradient(180deg,#6fd8b6,#3aa88a);
+    box-shadow:0 6px 0 rgba(58,168,138,.34),0 10px 22px rgba(58,168,138,.30);
+  }
+  .resultFace.bad{
+    background:linear-gradient(180deg,#ff8a8a,#e2554f);
+    box-shadow:0 6px 0 rgba(226,85,79,.34),0 10px 22px rgba(226,85,79,.28);
+  }
+  .opts .resultFace{animation:pop .3s cubic-bezier(.3,1.5,.5,1)}
 
   /* ===== 横屏 / 矮屏：把竖着占的地方全压扁，高度让给舞台 ===== */
   @media (max-height: 470px){
     .app{max-width:700px;gap:5px;padding-top:calc(env(safe-area-inset-top) + 4px);padding-bottom:4px}
     .top h1{font-size:13px}
     .top .back{width:28px;height:28px;font-size:16px}
-    .orders{height:58px;gap:6px}
-    .ord.now{width:54px;height:54px;border-radius:12px}
-    .ord.next{width:34px;height:34px;border-radius:9px}
-    .pickTop{margin-bottom:4px}
-    .opts{min-height:54px;gap:6px}
-    .opt{width:52px;height:52px;border-radius:14px}
+    .orders{height:56px;gap:6px}
+    .ord.now{padding:2px 4px 2px 2px;gap:0;border-radius:12px}
+    .ord.now>canvas{width:46px!important;height:46px!important}
+    .ordLayers{display:none}
+    .ord.next{width:30px;height:30px;border-radius:9px}
+    .ord.next>canvas{width:26px!important;height:26px!important}
+    .pickTop{margin-bottom:3px}
+    .opts{min-height:50px;gap:4px}
+    .slot,.opt{width:46px;height:46px}
+    .opt>canvas{width:36px!important;height:36px!important}
     .stage{border-radius:14px}
   }
 
@@ -189,7 +227,7 @@
     <p class="lead">照着订单卡，把蛋糕一层层做出来</p>
     <div class="howto">
       <div><span>📋</span>看上面的订单</div>
-      <div><span>👆</span>蛋糕停在机器下就点选</div>
+      <div><span>🔘</span>蛋糕停下就按大按钮</div>
       <div><span>✅</span>四层全对才送出</div>
     </div>
     <button class="bigBtn" id="startBtn">开始做蛋糕</button>
@@ -241,21 +279,32 @@ var SHAPES = [
   { id:'flower', name:'花朵' }
 ];
 
+/* 蛋糕体一律压得「浊」一点、糖霜一律提亮：这两层在小尺寸下必须一眼分得开，
+   否则孩子看不出这颗蛋糕是做到哪一步了。 */
 var BATTERS = [
-  { id:'vanilla', name:'香草',  color:'#f2cf94' },
-  { id:'choco',   name:'巧克力', color:'#8a5a38' },
-  { id:'straw',   name:'草莓',  color:'#ef93ad' },
-  { id:'matcha',  name:'抹茶',  color:'#a8c877' },
-  { id:'blue',    name:'蓝莓',  color:'#9db4e8' }
+  { id:'vanilla', name:'香草',  color:'#e2b46b' },
+  { id:'choco',   name:'巧克力', color:'#7d5033' },
+  { id:'straw',   name:'草莓',  color:'#dd7d99' },
+  { id:'matcha',  name:'抹茶',  color:'#8fb35c' },
+  { id:'blue',    name:'蓝莓',  color:'#8da2d6' }
 ];
 
 var ICINGS = [
-  { id:'white', name:'奶油',  color:'#fffaf0' },
-  { id:'pink',  name:'粉糖',  color:'#ffa8c6' },
-  { id:'choco', name:'巧克力', color:'#6d452c' },
-  { id:'mint',  name:'薄荷',  color:'#9fe6cf' },
-  { id:'lemon', name:'柠檬',  color:'#ffe07a' }
+  { id:'white', name:'奶油',  color:'#fffdf4' },
+  { id:'pink',  name:'粉糖',  color:'#ffb0cb' },
+  { id:'choco', name:'巧克力', color:'#6b4227' },
+  { id:'mint',  name:'薄荷',  color:'#8ce8cd' },
+  { id:'lemon', name:'柠檬',  color:'#ffe57a' }
 ];
+
+/* 同色相撞车：黄配黄、粉配粉，小尺寸下就剩一团糊。一对一禁掉。 */
+var CLASH = {
+  vanilla: ['lemon'],
+  choco:   [],
+  straw:   ['pink'],
+  matcha:  ['mint'],
+  blue:    ['mint']
+};
 
 var PATTERNS = [
   { id:'dots',    name:'圆点' },
@@ -414,6 +463,43 @@ function drawPattern(g, cx, cy, r, id, color){
   g.strokeStyle = color;
   var i, x, y, a;
 
+  // 小尺寸（订单卡上那几行）撒五个小星星等于一团糊，改成一两个大的
+  if(r < 9){
+    if(id === 'dots'){
+      var dd = r*0.30;
+      var pos = [[-0.36,-0.36],[0.36,-0.36],[-0.36,0.36],[0.36,0.36]];
+      for(i = 0; i < pos.length; i++){
+        g.beginPath();
+        g.arc(cx + pos[i][0]*r*1.6, cy + pos[i][1]*r*1.6, dd, 0, Math.PI*2);
+        g.fill();
+      }
+    } else if(id === 'stripes'){
+      g.save();
+      g.translate(cx, cy);
+      g.rotate(-Math.PI/4);
+      g.fillRect(-r*2, -r*0.46, r*4, r*0.34);
+      g.fillRect(-r*2,  r*0.28, r*4, r*0.34);
+      g.restore();
+    } else if(id === 'stars'){
+      starFill(g, cx, cy, r*0.54);
+    } else if(id === 'hearts'){
+      shapePath(g, cx, cy, r*0.52, 'heart');
+      g.fill();
+    } else {
+      g.lineWidth = Math.max(2, r*0.28);
+      g.lineJoin = 'round';
+      g.lineCap = 'round';
+      g.beginPath();
+      g.moveTo(cx - r*0.78, cy + r*0.14);
+      g.lineTo(cx - r*0.22, cy - r*0.14);
+      g.lineTo(cx + r*0.22, cy + r*0.14);
+      g.lineTo(cx + r*0.78, cy - r*0.14);
+      g.stroke();
+    }
+    g.restore();
+    return;
+  }
+
   if(id === 'dots'){
     var step = r*0.46, rad = Math.max(1.6, r*0.082);
     for(y = -r*1.1; y <= r*1.1; y += step){
@@ -476,7 +562,7 @@ function starFill(g, cx, cy, r){
 
 /* cake 里的字段可能是 null（还没做），done 指明哪几层做完了。
    俯视 + 一点厚度：先画向下偏移的暗色侧壁，再盖顶面，就有立体感。 */
-function drawCake(g, cx, cy, r, cake, done, scale){
+function drawCake(g, cx, cy, r, cake, done, scale, tray){
   if(!cake) return;
   if(!done) done = [true, true, true, true];
   scale = scale === undefined ? 1 : scale;
@@ -488,14 +574,14 @@ function drawCake(g, cx, cy, r, cake, done, scale){
     g.translate(-cx, -cy);
   }
 
-  var th = r*0.20;
+  var th = r*0.30;
   var hasShape = !!(done[0] && cake.shape);
 
   // 落在传送带上的影子
   g.save();
-  g.fillStyle = 'rgba(110,70,40,.18)';
+  g.fillStyle = 'rgba(110,70,40,.13)';
   g.beginPath();
-  g.ellipse(cx, cy + th + r*0.20, r*1.0, r*0.30, 0, 0, Math.PI*2);
+  g.ellipse(cx, cy + th + r*0.16, r*0.84, r*0.24, 0, 0, Math.PI*2);
   g.fill();
   g.restore();
 
@@ -514,8 +600,23 @@ function drawCake(g, cx, cy, r, cake, done, scale){
   }
 
   var shapeId = cake.shape.id;
+
+  // 纸托：深色蛋糕压在深色传送带上会糊成一团，垫一圈浅色隔开
+  if(tray){
+    var th0 = r*0.30;
+    g.save();
+    g.shadowColor = 'rgba(50,25,10,.28)';
+    g.shadowBlur = Math.max(3, r*0.16);
+    g.shadowOffsetY = Math.max(1, r*0.06);
+    g.fillStyle = '#fbf1df';
+    g.beginPath();
+    g.ellipse(cx, cy + th0*0.95, r*1.10, r*0.40, 0, 0, Math.PI*2);
+    g.fill();
+    g.restore();
+  }
+
   var filled = !!(done[1] && cake.batter);
-  var sideCol = filled ? shade(cake.batter.color, -0.26) : '#e6d8c6';
+  var sideCol = filled ? shade(cake.batter.color, -0.34) : '#e0d0bc';
   var topCol  = filled ? cake.batter.color : '#f4ead9';
 
   // 侧壁
@@ -547,12 +648,19 @@ function drawCake(g, cx, cy, r, cake, done, scale){
 
   // 糖霜
   if(done[2] && cake.icing){
-    var ir = r*0.84;
+    var ir = r*0.76;
     var iy = cy + th*0.12;
     g.save();
+    g.shadowColor = 'rgba(70,40,20,.32)';
+    g.shadowBlur = Math.max(3, r*0.16);
+    g.shadowOffsetY = Math.max(1, r*0.06);
     shapePath(g, cx, iy, ir, shapeId);
     g.fillStyle = cake.icing.color;
     g.fill();
+    g.restore();
+
+    g.save();
+    shapePath(g, cx, iy, ir, shapeId);
     g.clip();
     var lg = g.createLinearGradient(cx-ir, iy-ir, cx+ir*0.9, iy+ir);
     lg.addColorStop(0, 'rgba(255,255,255,.46)');
@@ -584,49 +692,66 @@ function drawCake(g, cx, cy, r, cake, done, scale){
 
 /* ---------------------------------------------------------------- 按钮上的小样 */
 
-function drawSwatch(g, cx, cy, r, station, val){
+/* 一个「层的样本」：把这一层加到蛋糕顶上的样子。
+   四站的图标是同一颗蛋糕在逐层加料 —— 空模具 → 灌蛋糕体 → 淋糖霜 → 撒花纹，
+   孩子看到的是「蛋糕又多了一层」，不是四个互不相干的色块。
+   model 给这一单已经定下来的那几步（形状 / 蛋糕体色 / 糖霜色）。 */
+function drawSwatch(g, cx, cy, r, station, val, model){
+  model = model || {};
+  var shapeId = model.shapeId || 'circle';
+  var batter  = model.batterColor || '#e2b46b';
+  var icing   = model.icingColor || '#fffdf4';
+
+  g.save();
+
   if(station === 0){
-    g.fillStyle = '#f4e8d7';
-    shapePath(g, cx, cy, r*0.92, val.id);
+    // 空模具：只有形状，里面还没料
+    g.fillStyle = '#ffeacd';
+    shapePath(g, cx, cy, r*0.94, val.id);
     g.fill();
-    g.strokeStyle = '#c9a98a';
-    g.lineWidth = Math.max(1.5, r*0.09);
+    g.strokeStyle = '#a9764c';
+    g.lineWidth = Math.max(1.6, r*0.13);
     g.stroke();
-  } else if(station === 1){
-    roundRect(g, cx-r*0.84, cy-r*0.84, r*1.68, r*1.68, r*0.44);
-    g.fillStyle = val.color;
-    g.fill();
-    g.save();
-    roundRect(g, cx-r*0.84, cy-r*0.84, r*1.68, r*1.68, r*0.44);
-    g.clip();
-    var lg = g.createLinearGradient(cx-r, cy-r, cx+r, cy+r);
-    lg.addColorStop(0, 'rgba(255,255,255,.55)');
-    lg.addColorStop(0.5, 'rgba(255,255,255,.02)');
-    lg.addColorStop(1, 'rgba(60,30,10,.16)');
-    g.fillStyle = lg;
-    g.fillRect(cx-r, cy-r, r*2, r*2);
     g.restore();
-  } else if(station === 2){
-    g.beginPath();
-    g.arc(cx, cy, r*0.94, 0, Math.PI*2);
-    g.fillStyle = '#e8d3b4';
-    g.fill();
-    g.beginPath();
-    g.arc(cx, cy, r*0.79, 0, Math.PI*2);
-    g.fillStyle = val.color;
-    g.fill();
-    g.strokeStyle = 'rgba(90,60,35,.16)';
-    g.lineWidth = 1.5;
-    g.stroke();
-  } else {
+    return;
+  }
+
+  // 底盘永远是模具压出来的形状
+  g.fillStyle = (station === 1 ? val.color : batter);
+  shapePath(g, cx, cy, r*0.94, shapeId);
+  g.fill();
+  g.strokeStyle = 'rgba(90,55,30,.36)';
+  g.lineWidth = Math.max(1.2, r*0.085);
+  g.stroke();
+
+  if(station >= 2){
+    // 淋上去的糖霜：带一点投影，看起来是「盖在上面」而不只是换了颜色
+    var iy = cy - r*0.04, ir = r*0.72;
     g.save();
-    roundRect(g, cx-r*0.94, cy-r*0.94, r*1.88, r*1.88, r*0.40);
-    g.fillStyle = shade(val.base, 0.02);
+    g.shadowColor = 'rgba(70,40,20,.28)';
+    g.shadowBlur = Math.max(2, r*0.16);
+    g.shadowOffsetY = Math.max(1, r*0.05);
+    g.fillStyle = (station === 3 ? icing : val.color);
+    shapePath(g, cx, iy, ir, shapeId);
     g.fill();
+    g.restore();
+
+    g.strokeStyle = 'rgba(90,55,30,.34)';
+    g.lineWidth = Math.max(1.2, r*0.07);
+    shapePath(g, cx, iy, ir, shapeId);
+    g.stroke();
+  }
+
+  if(station === 3){
+    // 撒在糖霜上的花纹
+    g.save();
+    shapePath(g, cx, cy - r*0.04, r*0.72, shapeId);
     g.clip();
-    drawPattern(g, cx, cy, r*0.92, val.id, patternColor('#f5e8d6'));
+    drawPattern(g, cx, cy - r*0.04, r*0.68, val.id, patternColor(icing));
     g.restore();
   }
+
+  g.restore();
 }
 
 /* ---------------------------------------------------------------- DOM */
@@ -678,9 +803,9 @@ function computeLayout(){
   beltY = Math.min(beltY, h - beltH - Math.min(58, h*0.20));
 
   var baseY = beltY - r*0.95;
-  var mw = clamp(w*0.175, 56, 92);
+  var mw = clamp(w*0.19, 56, 96);
   // 机器高宽比固定，屏幕上才不会变成细长条
-  var mh = clamp(mw*1.95, 96, 190);
+  var mh = clamp(mw*2.3, 100, 230);
   if(baseY - mh < 24) mh = Math.max(64, baseY - 24);
   if(baseY - mh < 10) mh = Math.max(56, baseY - 10);
 
@@ -695,7 +820,7 @@ function computeLayout(){
     xs: [0.09, 0.30, 0.51, 0.72].map(function(p){ return w*p; })
   };
   layout.baseY = baseY;
-  layout.cakeY = layout.beltY + layout.beltH*0.52 - r*0.15;
+  layout.cakeY = layout.beltY + r*0.06;
   layout.topY = layout.baseY - layout.machineH;
 }
 
@@ -741,8 +866,9 @@ function makeOrder(level){
     pool.push(shuffle(all.slice()));
   }
   // 蛋糕体和糖霜撞色的话，小尺寸下根本看不出是「两层」——换一个糖霜
-  if(cake.icing.id === cake.batter.id){
-    var alt = pool[2].filter(function(v){ return v.id !== cake.batter.id; });
+  var clash = (CLASH[cake.batter.id] || []).concat([cake.batter.id]);
+  if(clash.indexOf(cake.icing.id) >= 0){
+    var alt = pool[2].filter(function(v){ return clash.indexOf(v.id) < 0; });
     if(alt.length) cake.icing = choice(alt);
   }
   return { cake: cake, pool: pool };
@@ -754,12 +880,41 @@ function renderOrders(){
   shown.forEach(function(o, i){
     var d = document.createElement('div');
     d.className = 'ord ' + (i === 0 ? 'now' : 'next');
-    var size = i === 0 ? 68 : 42;
+    var size = i === 0 ? 72 : 42;
     var oc = makeCanvas(size, size);
-    drawCake(oc.g, size/2, size*0.44, size*0.36, o.cake, null, 1);
+    drawCake(oc.g, size/2, size*0.42, size*0.34, o.cake, null, 1);
     d.appendChild(oc.c);
+
+    // 右边这四行是同一只蛋糕拆开来看：第几层、什么颜色，跟四台机器一一对应。
+    // 不用写字，看颜色和图标就能对上。
+    if(i === 0){
+      var mdl = { shapeId: o.cake.shape.id,
+                  batterColor: o.cake.batter.color,
+                  icingColor: o.cake.icing.color };
+      var box = document.createElement('div');
+      box.className = 'ordLayers';
+      for(var st = 0; st < 4; st++){
+        var row = document.createElement('div');
+        row.className = 'lyr';
+        row.style.borderColor = MC[st].dark;
+        var sc = makeCanvas(19, 19);
+        drawSwatch(sc.g, 9.5, 9.5, 7.7, st, o.cake[FIELDS[st]], mdl);
+        row.appendChild(sc.c);
+        box.appendChild(row);
+      }
+      d.appendChild(box);
+    }
     ordersEl.appendChild(d);
   });
+}
+
+/* 蛋糕停在哪台机器，订单卡上对应的那一行就亮起来 */
+function highlightLayer(station){
+  var all = ordersEl.querySelectorAll('.lyr');
+  for(var i = 0; i < all.length; i++){
+    if(i === station) all[i].classList.add('on');
+    else all[i].classList.remove('on');
+  }
 }
 
 function markOrder(ok){
@@ -782,25 +937,51 @@ function clearOpts(){
   optsEl.innerHTML = '<span class="idle">· · ·</span>';
 }
 
+/* 结算时底下那排按钮没得按了，换成一个大徽章，别留一块空白 */
+function showResultFace(ok){
+  optsEl.innerHTML = '';
+  var d = document.createElement('div');
+  d.className = 'resultFace ' + (ok ? 'ok' : 'bad');
+  d.textContent = ok ? '✓' : '✗';
+  optsEl.appendChild(d);
+}
+
+/* 控制台上永远是这五个位置。候选不够时空着，位置绝不动 ——
+   孩子按肌肉记忆按下去，不会因为按钮重排而按错。 */
+var OPT_SLOTS = 5;
+
 function buildOpts(station){
   var order = G.orders[0];
   if(!order) return;
   var vals = order.pool[station];
+  // 底盘用传送带上这颗蛋糕的现状 —— 按钮显示的就是「在这颗蛋糕上加这一层」
+  var cur = G.cake || {};
+  var mdl = {
+    shapeId: (cur.shape || order.cake.shape).id,
+    batterColor: (cur.batter || order.cake.batter).color,
+    icingColor: (cur.icing || order.cake.icing).color
+  };
   optsEl.innerHTML = '';
 
-  vals.forEach(function(v){
+  for(var k = 0; k < OPT_SLOTS; k++){
+    if(k >= vals.length){
+      var empty = document.createElement('span');
+      empty.className = 'slot';
+      optsEl.appendChild(empty);
+      continue;
+    }
+    var v = vals[k];
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'opt';
+    btn.style.borderColor = MC[station].dark;
     btn.setAttribute('aria-label', STATION_LABEL[station] + ' ' + v.name);
-    var oc = makeCanvas(46, 46);
-    var shown = v;
-    if(station === 3) shown = { id: v.id, name: v.name, base: '#f5e8d6' };
-    drawSwatch(oc.g, 23, 23, 17, station, shown);
+    var oc = makeCanvas(48, 48);
+    drawSwatch(oc.g, 24, 24, 20, station, v, mdl);
     btn.appendChild(oc.c);
     btn.addEventListener('click', function(){ onChoose(v, btn); }, false);
     optsEl.appendChild(btn);
-  });
+  }
 }
 
 function setPickLabel(station){
@@ -828,12 +1009,14 @@ function beginOrder(){
   G.procVal = null;
   G.procApplied = false;
   G.ok = false;
+  G.layerOk = null;
   G.x = -layout.cakeR*2.2;
   G.mv = null;
 
   renderOrders();
   paintHud();
   clearOpts();
+  highlightLayer(-1);
   setPickLabel(-1);
   timerBox.classList.remove('warn');
   timerBar.style.width = '100%';
@@ -850,6 +1033,7 @@ function arrive(i){
   G.x = layout.xs[i];
   buildOpts(i);
   setPickLabel(i);
+  highlightLayer(i);
   timerBox.classList.remove('warn');
   sndArrive();
 }
@@ -879,6 +1063,7 @@ function applyProc(){
 
 function nextAfterStation(i){
   G.station = -1;
+  highlightLayer(-1);
   if(i < 3){
     moveTo(layout.xs[i+1], 0.62, function(){ arrive(i+1); }, 'station');
   } else {
@@ -909,7 +1094,8 @@ function deliver(){
   G.resultT = 0;
   G.station = -1;
   G.layerOk = layers;
-  clearOpts();
+  showResultFace(ok);
+  highlightLayer(-1);
   timerBar.style.width = '0%';
   setPickMsg(ok ? '✓ 送出去了' : '✗ 不是这一个',
              ok ? '#3aa88a' : '#e2554f');
@@ -957,6 +1143,7 @@ function gameOver(){
     '一个都没送出去，先看看订单再下手';
 
   clearOpts();
+  highlightLayer(-1);
   setPickMsg('', '');
   timerBar.style.width = '0%';
 
@@ -1038,7 +1225,7 @@ function update(dt){
     }
   } else if(G.phase === 'result'){
     G.resultT += dt;
-    if(G.resultT >= 1.55) afterResult();
+    if(G.resultT >= 1.95) afterResult();
   }
 
   // 计时条
@@ -1085,6 +1272,19 @@ function drawBackdrop(){
   ctx.fillRect(0, counterY, W, H - counterY);
   ctx.fillStyle = 'rgba(255,255,255,.28)';
   ctx.fillRect(0, counterY, W, 2);
+
+  // 木纹：几道很淡的弧线，这块木板就不至于像一块塑料
+  ctx.save();
+  ctx.strokeStyle = 'rgba(140,95,55,.13)';
+  ctx.lineWidth = 1.4;
+  for(var k = 1; k <= 4; k++){
+    var gy = counterY + (H - counterY)*(k/5);
+    ctx.beginPath();
+    ctx.moveTo(-10, gy);
+    ctx.bezierCurveTo(W*0.3, gy - 5, W*0.68, gy + 6, W + 10, gy - 2);
+    ctx.stroke();
+  }
+  ctx.restore();
 
   drawOven(counterY);
 }
@@ -1157,12 +1357,11 @@ function drawOven(counterY){
 
 function drawBunting(){
   var W = layout.W;
-  var y0 = Math.min(layout.topY - 40, layout.beltY*0.34);
-  if(y0 < 16) return;
-
+  // 挂在天花板下方一点，正好填机器头顶那块白墙
+  var y0 = Math.max(12, layout.topY - 78);
   var sag = Math.min(26, y0*0.55);
   // 旗子尾巴会压到机器头上的话，这屏就别挂了
-  if(y0 + sag + Math.min(W*0.062, 26) > layout.topY - 8) return;
+  if(y0 + sag + Math.min(W*0.062, 26) > layout.topY - 6) return;
   var p0 = [-8, y0], c = [W/2, y0 + sag*2], p1 = [W + 8, y0];
 
   function pt(t){
@@ -1207,7 +1406,7 @@ function drawBelt(){
 
   ctx.save();
   roundRect(ctx, -6, y, W + 12, h, h*0.28);
-  ctx.fillStyle = '#533f36';
+  ctx.fillStyle = '#5d585e';
   ctx.fill();
   ctx.clip();
 
@@ -1225,15 +1424,15 @@ function drawBelt(){
   ctx.restore();
 
   // 上下金属边
-  ctx.fillStyle = '#8e7561';
+  ctx.fillStyle = '#948d95';
   roundRect(ctx, -6, y - 2, W + 12, 4, 2); ctx.fill();
-  ctx.fillStyle = '#6d5748';
+  ctx.fillStyle = '#8b848c';
   roundRect(ctx, -6, y + h - 3, W + 12, 4, 2); ctx.fill();
 
   // 两端滚轮
   [0, W].forEach(function(rx){
     ctx.save();
-    ctx.fillStyle = '#6d5748';
+    ctx.fillStyle = '#6f6a72';
     ctx.beginPath();
     ctx.arc(rx, y + h/2, h*0.52, 0, Math.PI*2);
     ctx.fill();
@@ -1246,7 +1445,7 @@ function drawBelt(){
 }
 
 function machineState(i){
-  if(G.phase === 'result') return G.layerOk && G.layerOk[i] ? 'done' : (G.started ? 'plain' : 'plain');
+  if(G.phase === 'result' && G.layerOk) return G.layerOk[i] ? 'done' : 'bad';
   if(i === G.station && (G.phase === 'waiting' || G.phase === 'processing')) return 'active';
   if(G.doneLayers && G.doneLayers[i]) return 'done';
   return 'plain';
@@ -1310,25 +1509,27 @@ function drawMachine(i){
     ctx.shadowBlur = 18;
   }
   roundRect(ctx, wx, wy, ww, wh, w*0.10);
-  ctx.fillStyle = '#fffaf1';
+  ctx.fillStyle = '#fdf1de';
   ctx.fill();
   ctx.restore();
 
-  ctx.strokeStyle = 'rgba(90,55,30,.22)';
-  ctx.lineWidth = 1.5;
+  // 边框用这台机器的颜色 —— 订单卡右边同一行也是这个色，一眼对得上
+  ctx.strokeStyle = active ? col.dark : shade(col.dark, 0.42);
+  ctx.lineWidth = active ? 3 : 2;
   roundRect(ctx, wx, wy, ww, wh, w*0.10);
   ctx.stroke();
 
-  // 窗口里显示这一层已经做成了什么
-  var val = G.cake ? G.cake[FIELDS[i]] : null;
+  // 窗口里画的是「这一台该做出什么」，跟订单卡右边同行的图标一模一样，
+  // 照着它去下面那排按钮里找，不用记也不用认字
+  var want = G.orders[0] ? G.orders[0].cake[FIELDS[i]] : null;
   var got = G.doneLayers && G.doneLayers[i];
   var sx = wx + ww/2, sy = wy + wh/2;
   var sr = Math.min(ww, wh)*0.34;
 
-  if(got && val){
-    var shown = val;
-    if(i === 3) shown = { id: val.id, name: val.name, base: '#f5e8d6' };
-    drawSwatch(ctx, sx, sy, sr, i, shown);
+  if(want){
+    var m0 = G.orders[0].cake;
+    drawSwatch(ctx, sx, sy, sr, i, want,
+               { shapeId: m0.shape.id, batterColor: m0.batter.color, icingColor: m0.icing.color });
   } else {
     ctx.save();
     ctx.fillStyle = 'rgba(150,120,95,.45)';
@@ -1336,6 +1537,31 @@ function drawMachine(i){
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('?', sx, sy + 1);
+    ctx.restore();
+  }
+
+  // 这一层的结果：做成打勾；送到窗口判错就打叉，好回头看出是哪一步错了
+  var badLayer = G.phase === 'result' && G.layerOk && !G.layerOk[i];
+  if(got || badLayer){
+    var bx = wx + ww*0.87, by = wy + wh*0.13, br = Math.max(5, w*0.085);
+    ctx.save();
+    ctx.fillStyle = badLayer ? '#ff5f5f' : '#4fc3a1';
+    ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = Math.max(1.4, br*0.30);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    if(badLayer){
+      ctx.moveTo(bx - br*0.34, by - br*0.34);
+      ctx.lineTo(bx + br*0.34, by + br*0.34);
+      ctx.moveTo(bx + br*0.34, by - br*0.34);
+      ctx.lineTo(bx - br*0.34, by + br*0.34);
+    } else {
+      ctx.moveTo(bx - br*0.44, by + br*0.02);
+      ctx.lineTo(bx - br*0.10, by + br*0.36);
+      ctx.lineTo(bx + br*0.48, by - br*0.34);
+    }
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -1348,6 +1574,8 @@ function drawMachine(i){
     ctx.fillStyle = '#ffc043';
   } else if(st === 'done'){
     ctx.fillStyle = '#4fc3a1';
+  } else if(st === 'bad'){
+    ctx.fillStyle = '#ff5f5f';
   } else {
     ctx.fillStyle = 'rgba(255,255,255,.55)';
   }
@@ -1515,7 +1743,8 @@ function drawCakeNow(){
   }
 
   if(G.phase === 'result'){
-    var p = Math.min(1, G.resultT / 1.05);
+    // 先原地停半秒让眼睛跟上，再飘走或掉落
+    var p = Math.min(1, Math.max(0, G.resultT - 0.55) / 1.0);
     if(G.ok){
       dy = -p*20;
       scale = 1 + p*0.22;
@@ -1533,35 +1762,9 @@ function drawCakeNow(){
 
   g.save();
   g.globalAlpha = alpha;
-  drawCake(g, cx, cy + dy, r, G.cake, G.doneLayers, scale);
+  drawCake(g, cx, cy + dy, r, G.cake, G.doneLayers, scale, true);
   g.restore();
 
-  // 失败时逐层打勾/打叉，告诉孩子错在第几步
-  if(G.phase === 'result' && !G.ok && G.layerOk && G.resultT > 0.35){
-    var a = Math.min(1, (G.resultT - 0.35)/0.25);
-    for(var i = 0; i < 4; i++){
-      var bx = layout.xs[i];
-      var by = layout.beltY + layout.beltH + 22;
-      g.save();
-      g.globalAlpha = a;
-      g.fillStyle = G.layerOk[i] ? 'rgba(79,195,161,.95)' : 'rgba(255,107,107,.95)';
-      g.beginPath();
-      g.arc(bx, by, 9, 0, Math.PI*2);
-      g.fill();
-      g.strokeStyle = '#fff';
-      g.lineWidth = 2;
-      g.lineCap = 'round';
-      g.beginPath();
-      if(G.layerOk[i]){
-        g.moveTo(bx-3.6, by+0.2); g.lineTo(bx-1, by+3); g.lineTo(bx+3.8, by-2.6);
-      } else {
-        g.moveTo(bx-2.8, by-2.8); g.lineTo(bx+2.8, by+2.8);
-        g.moveTo(bx+2.8, by-2.8); g.lineTo(bx-2.8, by+2.8);
-      }
-      g.stroke();
-      g.restore();
-    }
-  }
 }
 
 function drawFX(){
@@ -1646,6 +1849,19 @@ document.getElementById('startBtn').addEventListener('click', function(){
 document.getElementById('againBtn').addEventListener('click', function(){
   audio();
   startGame();
+}, false);
+
+/* 键盘 / 手柄式操作：1~5 直接按，跟按实体按钮一样 */
+window.addEventListener('keydown', function(e){
+  if(e.key === 'Enter' || e.key === ' '){
+    if(!G.started){ e.preventDefault(); audio(); startGame(); }
+    return;
+  }
+  if(!G.started || G.phase !== 'waiting') return;
+  var n = parseInt(e.key, 10);
+  if(!(n >= 1 && n <= OPT_SLOTS)) return;
+  var btns = optsEl.querySelectorAll('.opt');
+  if(btns[n-1]){ e.preventDefault(); btns[n-1].click(); }
 }, false);
 
 sndBtn.addEventListener('click', function(){
