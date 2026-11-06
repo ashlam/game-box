@@ -27,8 +27,20 @@ PROJ="$PROJECT/android/project"
 OUT="${GAMEBOX_OUT:-$PROJECT/android/output}"
 KS="${GAMEBOX_KS:-$PROJECT/private/gamebox-release.jks}"
 KS_ALIAS="${GAMEBOX_KS_ALIAS:-gamebox}"
-VERSION_NAME="${GAMEBOX_VERSION_NAME:-1.0.0}"
+VERSION_NAME="${GAMEBOX_VERSION_NAME:-}"
 APP_NAME="${GAMEBOX_APK_NAME:-小游戏盒子离线版}"
+
+# ---- 版本号（决定「能不能覆盖安装」）---------------------------------------
+# versionCode 用 git 提交数当基线：先提交再打包，就一定单调递增。
+# 同一提交重复打包得到同一个 code —— 内容也一样，装不上不影响什么。
+# 需要手动指定时：GAMEBOX_VERSION_CODE=300 bash android/build_apk.sh
+SRC_COUNT="$(git -C "$PROJECT" rev-list --count HEAD 2>/dev/null || echo 0)"
+VERSION_CODE="${GAMEBOX_VERSION_CODE:-$SRC_COUNT}"
+case "$VERSION_CODE" in
+  ''|*[!0-9]*) VERSION_CODE=2 ;;            # 不是数字（比如不在 git 仓库里）
+esac
+if [ "$VERSION_CODE" -lt 2 ]; then VERSION_CODE=2; fi
+if [ -z "${GAMEBOX_VERSION_NAME:-}" ]; then VERSION_NAME="1.$VERSION_CODE"; fi
 
 export JAVA_HOME="$JDK"
 export PATH="$JDK/bin:$BUILD:$PATH"
@@ -78,15 +90,39 @@ mkdir -p "$OUT/compiled" "$OUT/R" "$OUT/classes" "$OUT/dex"
 echo "==> 0/8 同步 web/ -> android/project/assets/（避免新游戏漏进 APK）"
 python3 "$PROJECT/android/sync_assets.py"
 
+echo "==> 0.5/8 写入默认更新源 assets/update_source.txt"
+# App 第一次启动时读这个文件当默认更新源；用户在 App 里改过就以用户填的为准。
+# 不进版本库（每台机器 IP 不同），见 .gitignore。
+if [ -z "${GAMEBOX_UPDATE_URL:-}" ]; then
+  BUILD_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  if [ -n "${BUILD_IP:-}" ]; then
+    GAMEBOX_UPDATE_URL="http://${BUILD_IP}:4321/update.json"
+  fi
+fi
+mkdir -p "$PROJ/assets"
+printf '%s\n' "${GAMEBOX_UPDATE_URL:-}" > "$PROJ/assets/update_source.txt"
+echo "  默认更新源: ${GAMEBOX_UPDATE_URL:-（空 —— 装好后在 App 里手动填）}"
+
 echo "==> 1/8 aapt2 编译资源（逐文件；compile --dir 会把输出目录误当输入）"
 "$BUILD/aapt2" compile "$PROJ/res/values/strings.xml"      -o "$OUT/compiled"
 "$BUILD/aapt2" compile "$PROJ/res/drawable/ic_launcher.xml" -o "$OUT/compiled"
 
 echo "==> 2/8 aapt2 link（未签名 APK + R.java）"
+# 版本号不改源清单，而是在输出目录生成一份带版本号的副本 —— 源文件保持干净（diff 好看），
+# 也不依赖 aapt2 的 --version-code 参数（不同 build-tools 版本行为不一致）。
+python3 - "$PROJ/AndroidManifest.xml" "$OUT/AndroidManifest.xml" "$VERSION_CODE" "$VERSION_NAME" <<'PY'
+import re, sys
+src, dst, code, name = sys.argv[1:5]
+t = open(src, encoding='utf-8').read()
+t = re.sub(r'android:versionCode="[^"]*"', 'android:versionCode="%s"' % code, t, count=1)
+t = re.sub(r'android:versionName="[^"]*"', 'android:versionName="%s"' % name, t, count=1)
+open(dst, 'w', encoding='utf-8').write(t)
+print('  manifest versionCode=%s versionName=%s' % (code, name))
+PY
 FLATS=()
 while IFS= read -r f; do FLATS+=("-R" "$f"); done < <(find "$OUT/compiled" -name '*.flat' | sort)
 "$BUILD/aapt2" link -o "$OUT/unsigned.apk" \
-  --manifest "$PROJ/AndroidManifest.xml" \
+  --manifest "$OUT/AndroidManifest.xml" \
   -I "$ANDROID_JAR" \
   -A "$PROJ/assets" \
   "${FLATS[@]}" \
@@ -143,4 +179,15 @@ p = sys.argv[1]
 print('  sha256', hashlib.sha256(open(p, 'rb').read()).hexdigest())
 print('  产物  ', p)
 PY
-echo "==> 构建完成"
+
+# ---- 升级清单：App 的「检查更新」读的就是它 ---------------------------------
+# file 固定写 ASCII 文件名 gamesbox-latest.apk（中文名在 URL 里要编码，局域网
+# 静态服务对非 ASCII 路径支持参差）；发布时把包复制成这个名字即可。
+echo "==> 生成升级清单 releases/update.json"
+python3 "$PROJECT/android/gen_update_json.py" \
+  --apk "$PROJECT/releases/${APP_NAME}.apk" \
+  --code "$VERSION_CODE" \
+  --name "$VERSION_NAME" \
+  --file gamesbox-latest.apk \
+  --out "$PROJECT/releases/update.json"
+echo "==> 构建完成（versionCode ${VERSION_CODE} / ${VERSION_NAME}）"

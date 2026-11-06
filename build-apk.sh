@@ -36,7 +36,13 @@ if [ ! -x /opt/data/android-build/tools/jdk-17/bin/javac ]; then
   if command -v docker >/dev/null 2>&1; then
     CID="${GAMEBOX_CONTAINER:-hermes-official}"
     echo "==> 当前环境没有 Android 工具链，转由容器 [$CID] 执行…"
-    exec docker exec -i "$CID" bash -lc "cd '$ROOT' && ./build-apk.sh $*"
+    # 环境变量不会自动进容器，得显式 -e 传：否则在外面设的 GAMEBOX_UPDATE_URL
+    # 到了容器里是空的，只能靠 hostname -I 猜 —— 容器里的 IP 手机根本连不上。
+    exec docker exec -i \
+      -e GAMEBOX_UPDATE_URL="${GAMEBOX_UPDATE_URL:-}" \
+      -e GAMEBOX_VERSION_CODE="${GAMEBOX_VERSION_CODE:-}" \
+      -e GAMEBOX_VERSION_NAME="${GAMEBOX_VERSION_NAME:-}" \
+      "$CID" bash -lc "cd '$ROOT' && ./build-apk.sh $*"
   fi
   echo "找不到 Android 工具链（/opt/data/android-build/tools），且本机没有 docker 可用。" >&2
   echo "请在 NAS 上执行：docker exec -it hermes-official bash -lc 'cd $ROOT && ./build-apk.sh'" >&2
@@ -74,7 +80,13 @@ fi
 if [ "$DO_SERVE" = "1" ]; then
   cp -f "$APK" "$SERVE_APK"
   chmod 644 "$SERVE_APK"
+  # 应用内升级要用的两个文件：ASCII 文件名的包 + 版本清单
+  # （清单里 file 写的相对路径就是 gamesbox-latest.apk，所以它必须叫这个名）
+  cp -f "$APK" "$ROOT/web/gamesbox-latest.apk"
+  cp -f "$ROOT/releases/update.json" "$ROOT/web/update.json"
+  chmod 644 "$ROOT/web/gamesbox-latest.apk" "$ROOT/web/update.json"
   echo "==> 已发布到站点根: web/${APP_NAME}.apk"
+  echo "==> 已发布升级源  : web/gamesbox-latest.apk + web/update.json"
 fi
 
 # ---- 3) 汇报 -----------------------------------------------------------------
@@ -105,6 +117,7 @@ HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 [ -n "$HOST_IP" ] || HOST_IP="192.168.101.42"
 echo
 echo "  下载地址: http://${HOST_IP}:4321/$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote('$APP_NAME'))").apk"
+echo "  升级源  : http://${HOST_IP}:4321/update.json   ← App 里「检查更新」读这个"
 echo "  本地文件: $APK"
 [ "$DO_SERVE" = "1" ] && echo "  站点副本: $SERVE_APK"
 

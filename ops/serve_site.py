@@ -19,7 +19,9 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 class NoCacheHTML(SimpleHTTPRequestHandler):
     def end_headers(self):
         p = self.path.split("?")[0]
-        if p.endswith("/") or p.endswith(".html"):
+        # .json 也要 no-store：它承载升级清单 update.json。
+        # 刚打完包、手机上「检查更新」却还读到上一版的清单，就是这里缓存造成的。
+        if p.endswith("/") or p.endswith(".html") or p.endswith(".json"):
             self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
             self.send_header("Pragma", "no-cache")
             self.send_header("Expires", "0")

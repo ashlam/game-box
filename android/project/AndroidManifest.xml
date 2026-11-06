@@ -6,6 +6,13 @@
 
     <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="35" />
 
+    <!-- 升级用：从更新源（局域网 HTTP 或站点）读清单、下 APK。
+         注意：这是 App 里唯一一条联网通道，游戏本身仍然零请求。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- 把下载好的包交给系统安装器（Android 8+ 还要用户手动允许一次） -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
         android:allowBackup="false"
         android:extractNativeLibs="true"
@@ -15,7 +22,7 @@
         android:roundIcon="@drawable/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"
@@ -28,5 +35,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 把 cacheDir 里的 APK 包成 content:// 交给安装器（见 ApkProvider 注释） -->
+        <provider
+            android:name=".ApkProvider"
+            android:authorities="com.nous.gamesbox.apk"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

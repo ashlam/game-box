@@ -5,6 +5,14 @@ ops/logs/
 # APK 构建中间产物
 android/output/
 
+# 打包时生成的「默认更新源」：写的是打包那台机器的局域网 IP，
+# 换台机器就变了，所以不进版本库（build_apk.sh 每次都会重写）
+android/project/assets/update_source.txt
+
+# 升级用的包：内容就是 web/小游戏盒子离线版.apk 的副本，只是名字必须是 ASCII。
+# 同一个包在库里存两份太浪费，所以在服务器上生成、不进版本库。
+web/gamesbox-latest.apk
+
 # 签名密钥：不进版本库，必须单独备份（丢了就无法覆盖安装升级）
 private/
 

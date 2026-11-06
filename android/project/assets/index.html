@@ -95,6 +95,51 @@
   }
   .empty .big{font-size:34px;display:block;margin-bottom:6px}
   .empty[hidden]{display:none}
+
+  /* ===== 应用内升级：只在 APK 里出现，网页版整块隐藏 =====
+     这个 App 不上架，没有商店帮忙推新版。所以自己造一条通道：
+     App 去一个普通 HTTP 地址读清单（局域网 NAS、或站点根都行），
+     versionCode 比本机大就下载 + 交给系统安装器。
+     没有网 / 没配更新源 → 这段代码完全不启动，游戏照常离线玩。 */
+  .upd{margin-top:16px;display:flex;flex-direction:column;align-items:center;gap:10px;width:100%}
+  .upd[hidden]{display:none}
+  .manage.new{border-color:rgba(56,211,159,.6);background:rgba(56,211,159,.16);color:#d7fff2}
+  .updpanel{
+    width:100%;max-width:460px;text-align:left;
+    background:linear-gradient(180deg,var(--card2),var(--card));
+    border:1px solid var(--line);border-radius:16px;padding:14px 15px;
+    font-size:13px;color:#c6cedd;box-shadow:0 10px 26px rgba(0,0,0,.45);
+  }
+  .updpanel[hidden]{display:none}
+  .updrow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .updtitle{font-size:14px;font-weight:600;color:var(--txt)}
+  .updx{background:none;border:0;color:var(--dim);font:inherit;font-size:15px;padding:2px 6px;cursor:pointer}
+  .updmsg{margin-top:9px;line-height:1.7;color:#aab5c7;white-space:pre-line}
+  .updver{display:flex;align-items:baseline;gap:8px;margin-top:11px;flex-wrap:wrap}
+  .updver .new{color:var(--acc2);font-size:17px;font-weight:700}
+  .updver .old{color:var(--dim);text-decoration:line-through}
+  .updver .arrow{color:#5a6478}
+  .updver .sz{color:var(--dim);font-size:12px;margin-left:auto}
+  .updnotes{margin:9px 0 0;padding-left:17px;line-height:1.75;color:#a9b4c6;font-size:12.5px}
+  .bar{height:8px;border-radius:99px;background:#0d1017;border:1px solid var(--line);overflow:hidden;margin:12px 0 7px}
+  .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .2s linear}
+  .updacts{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    border-radius:10px;padding:9px 15px;font:inherit;font-size:13.5px;cursor:pointer;
+    border:1px solid var(--line);background:var(--card2);color:var(--txt);
+    transition:transform .1s ease;
+  }
+  .btn:active{transform:scale(.97)}
+  .btn[disabled]{opacity:.5}
+  .btn.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+  .btn.ghost{background:transparent;color:var(--dim);border-color:transparent;padding-left:0}
+  .updsrc{margin-top:13px;padding-top:11px;border-top:1px dashed var(--line);font-size:12px;color:var(--dim)}
+  .updsrc input{
+    width:100%;margin-top:8px;padding:8px 10px;border-radius:9px;border:1px solid var(--line);
+    background:#0d1017;color:var(--txt);font:inherit;font-size:12px;
+  }
+  .updsrc code{word-break:break-all;display:block;margin-top:5px;color:#9fb0c8}
 </style>
 </head>
 <body>
@@ -102,7 +147,7 @@
   <h1>🎲 小游戏盒子</h1>
   <div class="sub" id="sub">21 个游戏 · 做给小孩路上玩 · 断网也能玩</div>
 
-  <p class="intro">候车室、饭前十分钟、飞机上没网的那两小时 —— 孩子伸手要手机的时候，随手塞给他一个能玩的东西。<b>这里面没有一个网络请求</b>，所以弹不出广告、推不了充值，也不会突然跳出个说不清的东西。</p>
+  <p class="intro">候车室、饭前十分钟、飞机上没网的那两小时 —— 孩子伸手要手机的时候，随手塞给他一个能玩的东西。<b>游戏里没有一个网络请求</b>，所以弹不出广告、推不了充值，也不会突然跳出个说不清的东西。</p>
   <div class="chips">
     <span><b>21</b> 个游戏</span>
     <span><b>0</b> 个外部请求</span>
@@ -363,9 +408,17 @@
   </div>
 </div>
 
+<!-- 应用内升级：只在 APK 里显示（脚本检测到 GamesBoxNative 才把 hidden 去掉）。
+     内容全由脚本渲染，这里只放容器，保证网页版和离线版是同一份 HTML。 -->
+<section class="upd" id="upd" hidden>
+  <button class="manage" id="updBtn" type="button">⬆️ 检查更新</button>
+  <div class="updpanel" id="updPanel" hidden></div>
+</section>
+
 <footer>
   地址：<code id="addr"></code><br>
   <span id="hint">建议「添加到主屏幕」，像 App 一样全屏玩</span>
+  <span id="verline"></span>
 </footer>
 
 <script>
@@ -484,6 +537,320 @@
   });
 
   paint();
+})();
+</script>
+
+<script>
+/* ============================================================================
+ * 应用内升级（只在离线 APK 里生效）
+ *
+ * 这个 App 不上应用商店，没有商店帮忙推新版。所以自己造一条通道：
+ *   点「检查更新」→ 原生去更新源读一份 JSON 清单 → versionCode 比大小
+ *   → 有新版就下载 → 交给系统安装器覆盖安装
+ *
+ * 为什么网络和文件操作全在原生侧：WebView 加载的是 file:// 页面，
+ * 这里 fetch 一个 http 地址会被 CORS 挡掉，也没有写文件的权限。
+ * 网页这边只负责画界面。
+ *
+ * 网页版没有 window.GamesBoxNative，函数第一行就 return —— 行为和老版本完全一样。
+ * ========================================================================== */
+(function(){
+  var N = window.GamesBoxNative;
+  var sec = document.getElementById('upd');
+  var btn = document.getElementById('updBtn');
+  var panel = document.getElementById('updPanel');
+  var verline = document.getElementById('verline');
+  if(!N || !sec || !btn || !panel) return;
+
+  var info = {};
+  try{ info = JSON.parse(N.info()) || {}; }catch(e){ info = {}; }
+
+  var curCode = info.versionCode || 0;
+  var curName = info.versionName || ('code ' + curCode);
+  var source = info.source || '';
+
+  var open = false;
+  var last = {type: 'idle'};
+  var editing = false;
+  var draft = '';
+  var watchdog = null;
+
+  sec.hidden = false;
+  if(verline) verline.innerHTML = '<br>版本 ' + esc(curName);
+
+  /* 上一次下载过但没装（或者装完又开了旧包）留下的残骸，进 App 先扫掉 */
+  try{ N.cleanup(); }catch(e){}
+
+  function esc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function size(n){
+    n = Number(n) || 0;
+    if(n <= 0) return '';
+    if(n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+    return Math.round(n / 1024) + ' KB';
+  }
+
+  function setBtn(text, hot){
+    btn.textContent = text;
+    btn.className = 'manage' + (hot ? ' new' : '');
+  }
+
+  function head(title){
+    return '<div class="updrow"><span class="updtitle">' + esc(title) + '</span>' +
+      '<button class="updx" data-act="close" type="button" aria-label="关闭">✕</button></div>';
+  }
+
+  /* 更新源那一块：平时只显示一行地址，点开才能改 —— 家长用不上，别占视线 */
+  function srcBlock(){
+    var h = '<div class="updsrc"><button class="btn ghost" data-act="src" type="button">⚙ 更新源</button>';
+    if(editing){
+      h += '<input id="srcInput" type="text" autocomplete="off" spellcheck="false"' +
+        ' placeholder="http://192.168.1.10:4321/update.json" value="' + esc(draft || source) + '">' +
+        '<div class="updacts"><button class="btn primary" data-act="save" type="button">保存</button>' +
+        '<button class="btn" data-act="src" type="button">取消</button></div>';
+    }else{
+      h += '<code>' + esc(source || '（还没设置，点上面那行填一个）') + '</code>';
+    }
+    return h + '</div>';
+  }
+
+  function html(st){
+    var notes, li, i, p;
+    switch(st.type){
+      case 'checking':
+        return head('检查更新') + '<div class="updmsg">正在连接更新源…</div>';
+
+      case 'latest':
+        return head('已经是最新版') +
+          '<div class="updmsg">当前 ' + esc(curName) + ' 就是这个 App 最新的版本了。</div>' + srcBlock();
+
+      case 'found':
+        notes = st.notes || [];
+        li = '';
+        for(i = 0; i < notes.length; i++) li += '<li>' + esc(notes[i]) + '</li>';
+        return head('有新版本') +
+          '<div class="updver"><span class="old">' + esc(curName) + '</span>' +
+          '<span class="arrow">→</span>' +
+          '<span class="new">' + esc(st.versionName || ('code ' + st.remote)) + '</span>' +
+          '<span class="sz">' + esc(size(st.size)) + '</span></div>' +
+          (li ? '<ul class="updnotes">' + li + '</ul>' : '') +
+          '<div class="updacts">' +
+          '<button class="btn primary" data-act="download" type="button">下载并安装</button>' +
+          '<button class="btn" data-act="close" type="button">稍后</button></div>' +
+          '<div class="updmsg" style="font-size:12px">下载完会弹系统安装界面。覆盖安装不会丢游戏存档。</div>';
+
+      case 'progress':
+        p = Number(st.percent);
+        if(isNaN(p) || p < 0) p = 0;
+        p = Math.max(0, Math.min(100, p));
+        return head('正在下载') +
+          '<div class="updmsg">' + (p > 0 ? '已下载 ' + p + '%' : '开始下载…') + '</div>' +
+          '<div class="bar"><i style="width:' + p + '%"></i></div>' +
+          '<div class="updacts"><button class="btn" data-act="cancel" type="button">取消</button></div>';
+
+      case 'ready':
+        return head('下载完成') +
+          '<div class="updmsg">安装包已经准备好了' + (size(st.size) ? '（' + esc(size(st.size)) + '）' : '') +
+          '，点下面的按钮交给系统安装器。</div>' +
+          '<div class="updacts">' +
+          '<button class="btn primary" data-act="install" type="button">立即安装</button>' +
+          '<button class="btn" data-act="browser" type="button">用浏览器装</button></div>';
+
+      case 'needPermission':
+        return head('需要允许一次') +
+          '<div class="updmsg">系统要求先允许「安装未知应用」，才肯装非商店来源的包。\n' +
+          '已经帮你跳到设置页了 —— 打开那个开关再按返回，会自动接着装。</div>' +
+          '<div class="updacts"><button class="btn primary" data-act="install" type="button">我开好了，重试</button></div>';
+
+      case 'installing':
+        return head('交给系统了') +
+          '<div class="updmsg">在系统弹出的界面点「安装」。装完这个 App 会自己关掉，\n' +
+          '重新打开就是新版本，游戏和存档都还在。</div>';
+
+      case 'cancelled':
+        return head('已取消') + '<div class="updmsg">下载停掉了，半截的安装包也删掉了。</div>' + srcBlock();
+
+      case 'error':
+        return head('没成功') +
+          '<div class="updmsg">' + esc(st.message || '出错了') + '</div>' +
+          '<div class="updacts">' +
+          '<button class="btn primary" data-act="check" type="button">重试</button>' +
+          '<button class="btn" data-act="src" type="button">改更新源</button>' +
+          '<button class="btn" data-act="browser" type="button">用浏览器打开</button></div>';
+
+      case 'source':
+        return head('更新源已保存') +
+          '<div class="updmsg">' + esc(st.source || '已清空。要升级得先填一个地址。') + '</div>' +
+          srcBlock();
+
+      default:
+        return head('检查更新') +
+          '<div class="updmsg">从更新源读一下有没有新版本。\n' +
+          '没联网的时候点它只会说连不上，不影响玩。</div>' + srcBlock();
+    }
+  }
+
+  function paint(st){
+    last = st || {type: 'idle'};
+    if(!open) return;               // 面板没展开就只改按钮，别动 DOM
+    panel.innerHTML = html(last);
+  }
+
+  function openPanel(){
+    open = true;
+    panel.hidden = false;
+  }
+  function closePanel(){
+    open = false;
+    panel.hidden = true;
+    editing = false;
+    if(watchdog){ clearTimeout(watchdog); watchdog = null; }
+  }
+
+  function doCheck(){
+    openPanel();
+    setBtn('检查中…', false);
+    paint({type: 'checking'});
+    try{ N.check(); }catch(e){
+      window.__gboxUpdate({type: 'error', message: '调不动原生接口：' + e});
+      return;
+    }
+    /* 原生有 8s 连接超时 + 20s 读超时，这里再兜一层，免得界面永远停在「检查中」 */
+    if(watchdog) clearTimeout(watchdog);
+    watchdog = setTimeout(function(){
+      if(last.type === 'checking'){
+        window.__gboxUpdate({type: 'error', message: '等太久了，八成连不上更新源。\n确认手机和它（电脑/NAS）在同一个局域网里。'});
+      }
+    }, 16000);
+  }
+
+  /* ---- 原生回调：Updater.emit() 最终调到这里 ---- */
+  window.__gboxUpdate = function(st){
+    if(!st || !st.type) return;
+    if(watchdog){ clearTimeout(watchdog); watchdog = null; }
+
+    switch(st.type){
+      case 'checking':
+        setBtn('检查中…', false);
+        paint(st);
+        break;
+
+      case 'found':
+        setBtn('⬆️ 有新版本 ' + (st.versionName || ''), true);
+        paint(st);
+        if(open) openPanel();
+        break;
+
+      case 'latest':
+        setBtn('✓ 已是最新', false);
+        paint(st);
+        break;
+
+      case 'progress':
+        last = st;
+        if(!open) break;
+        var bar = panel.querySelector('.bar i');
+        if(!bar){ panel.innerHTML = html(st); break; }
+        /* 局部更新：整块重绘会让进度条每次从 0 重新跑一遍 */
+        var p = Math.max(0, Math.min(100, Number(st.percent) || 0));
+        bar.style.width = p + '%';
+        var msg = panel.querySelector('.updmsg');
+        if(msg) msg.textContent = p > 0 ? ('已下载 ' + p + '%') : '开始下载…';
+        break;
+
+      case 'ready':
+        setBtn('⬆️ 待安装', true);
+        paint(st);
+        break;
+
+      case 'installing':
+        setBtn('✓ 交给安装器了', false);
+        paint(st);
+        break;
+
+      case 'cancelled':
+        setBtn('⬆️ 检查更新', false);
+        paint(st);
+        break;
+
+      case 'error':
+        setBtn('⬆️ 检查更新', false);
+        paint(st);
+        if(!open) openPanel();
+        break;
+
+      case 'source':
+        source = st.source || '';
+        editing = false;
+        draft = '';
+        paint(st);
+        break;
+
+      default:
+        paint(st);
+    }
+  };
+
+  /* ---- 交互 ---- */
+  btn.addEventListener('click', function(){
+    if(open){ closePanel(); return; }
+    /* 已经在某个中间态（下载中 / 待安装 / 报错），点开就直接接着看，别重来一遍 */
+    var reuse = {found: 1, ready: 1, progress: 1, checking: 1, installing: 1,
+                 needPermission: 1, error: 1};
+    if(reuse[last.type]){
+      openPanel();
+      panel.innerHTML = html(last);
+    }else{
+      doCheck();
+    }
+  });
+
+  panel.addEventListener('input', function(e){
+    if(e.target && e.target.id === 'srcInput') draft = e.target.value;
+  });
+
+  panel.addEventListener('click', function(e){
+    var el = e.target;
+    while(el && el !== panel && el.nodeType === 1 && !el.hasAttribute('data-act')){
+      el = el.parentNode;
+    }
+    if(!el || el === panel || !el.getAttribute) return;
+    var act = el.getAttribute('data-act');
+    if(!act) return;
+
+    if(act === 'close'){ closePanel(); }
+    else if(act === 'check'){ doCheck(); }
+    else if(act === 'download'){
+      setBtn('下载中…', false);
+      paint({type: 'progress', percent: 0});
+      try{ N.download(); }catch(err){
+        window.__gboxUpdate({type: 'error', message: '开始下载失败：' + err});
+      }
+    }
+    else if(act === 'install'){ try{ N.install(); }catch(err){ window.__gboxUpdate({type: 'error', message: '调不动安装器：' + err}); } }
+    else if(act === 'cancel'){ try{ N.cancelDownload(); }catch(err){} }
+    else if(act === 'browser'){ try{ N.openInBrowser(); }catch(err){ window.__gboxUpdate({type: 'error', message: '打不开浏览器'}); } }
+    else if(act === 'src'){
+      editing = !editing;
+      draft = '';
+      paint(last);
+    }
+    else if(act === 'save'){
+      var inp = panel.querySelector('#srcInput');
+      var v = inp ? inp.value.replace(/^\s+|\s+$/g, '') : '';
+      source = v;
+      editing = false;
+      draft = '';
+      try{ N.setSource(v); }catch(err){}
+      paint({type: 'source', source: v});
+    }
+  }, false);
+
+  paint({type: 'idle'});
 })();
 </script>
 </body>

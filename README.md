@@ -123,17 +123,85 @@ python -m http.server 4321 --directory web --bind 0.0.0.0
 > 站点根必须是 `web/`（游戏内返回键是绝对路由 `href="/"`）。用 `http.server` 的话改完代码要**强刷**，
 > 因为它只发 `Last-Modified`，浏览器会按启发式规则缓存 HTML。
 
+## 应用内升级（不上应用商店怎么发新版）
+
+这个 App 不上架，没有商店帮忙推更新。所以自己造了一条通道：**App 自己读一份清单、自己下载、交给系统安装器**。
+
+```
+手机 App                      局域网的 4321 服务（或任何静态托管）
+  │                                   │
+  │  GET update.json  ───────────────▶│  {"versionCode":208,"file":"gamesbox-latest.apk", ...}
+  │  ◀── versionCode 比本机大？         │
+  │  GET gamesbox-latest.apk  ───────▶│
+  │  ◀── 下载 → 校验 sha256 → 安装      │
+```
+
+清单和包都是 `build-apk.sh` 顺手产出的，**不需要单独维护**。
+
+### 发布一次新版，就三步
+
+```bash
+git add -A && git commit -m "feat(xxx): ..."   # ① 先提交 —— versionCode 取的是提交数
+./build-apk.sh                                  # ② 打包（自动生成 update.json + 复制成 ASCII 名）
+# ③ 手机打开 App → 「⬆️ 检查更新」→ 下载并安装
+```
+
+`versionCode` 的规则：取 `git rev-list --count HEAD`（提交数），`versionName` 是 `1.<那个数>`。
+所以**先提交再打包**就会单调递增；不提交直接打包，装上去也会提示"签名冲突/版本更低"。
+要手动指定：`GAMEBOX_VERSION_CODE=300 ./build-apk.sh`。
+
+### 更新源放哪
+
+打包机上有 `hostname -I` 的话，`build_apk.sh` 会自动写一个默认值
+`http://<打包机局域网IP>:4321/update.json` 进 `assets/update_source.txt`。只要这个 4321 服务在跑
+（`python ops/serve_site.py 4321 web`），手机连同一个 WiFi 就能升级。
+
+换网络 / 换机器了，NAT 里 IP 变了怎么办：**不用重新打包** —— App 里点「⚙ 更新源」直接改。
+这个值存在 SharedPreferences，改过之后以你填的为准，`assets` 里的默认值不再生效。
+
+也可以指定别的地址（打包时）：
+
+```bash
+GAMEBOX_UPDATE_URL=https://example.com/box/update.json ./build-apk.sh
+```
+
+### 几个必须知道的约束
+
+| 事情 | 为什么 |
+| --- | --- |
+| **签名密钥不能换** | 覆盖安装要求同一个签名。`private/gamebox-release.jks` 丢了就再也升不上去了，只能卸载重装（存档全丢） |
+| **versionCode 只能变大** | App 里判断 `remote > current` 才提示；装比自己低的包系统直接拒 |
+| **Android 8+ 要允许一次「安装未知应用」** | 系统限制，App 会自动跳到那个设置页，打开开关返回就接着装 |
+| **`minSdk` 抬高了要留心** | 清单里带 `minSdk`，低于它的机器会被提前劝退，不会下到一半才失败 |
+| **第一次必须手动装** | 现在手机上那个包（versionCode=1）没有升级代码，它不会自己升级自己。装一次新包之后才有「检查更新」 |
+
+> 网页版没有 `window.GamesBoxNative`，这段代码整块不启动，「检查更新」按钮也不会出现 —— 浏览器里玩和以前完全一样。
+
+### 相关文件
+
+| 文件 | 作用 |
+| --- | --- |
+| `android/project/src/.../Updater.java` | 读清单 / 下载 / 校验 / 拉起安装器；对网页只暴露 `@JavascriptInterface` 那几个方法 |
+| `android/project/src/.../ApkProvider.java` | 自己写的 FileProvider（工程不带 AndroidX），把 cacheDir 里的 APK 包成 `content://` |
+| `android/gen_update_json.py` | 生成 `update.json`（versionCode / size / sha256 / notes） |
+| `docs/release-notes.txt` | 更新说明，一行一条（空着就退回 git log 最近几条提交） |
+| `tools/test_update.js` | 回归测试：钉住 JS↔Java 的方法名、状态名、文件名三处口径 |
+| `tools/shot_update.py` | 给「检查更新」各状态截图（`ops/shots/upd-*.png`） |
+
 ## 目录结构
 
 ```
 games-box/
 ├── web/                     # 静态站点根（直接被托管）
-│   ├── index.html           # 主页索引（卡片式）+ 管理游戏（隐藏 / 显示入口）
+│   ├── index.html           # 主页索引（卡片式）+ 管理游戏 + 应用内升级
+│   ├── update.json          # 升级清单（打包时自动生成）
+│   ├── gamesbox-latest.apk  # 升级用的包（ASCII 名，打包时自动复制）
 │   ├── racer/               # 火箭车：index.html + editor.html（调参页）
 │   └── <其余 13 个游戏>/index.html
 ├── android/
 │   ├── project/             # 最小 WebView 工程：AndroidManifest + res/ + src/ + assets/
 │   ├── sync_assets.py       # 把 web/ 同步成 assets/ 的离线版（链接改写），构建前自动跑
+│   ├── gen_update_json.py   # 生成升级清单 update.json
 │   ├── build_apk.sh         # 可重复 APK 构建脚本（aapt2/javac/d8/zipalign/apksigner）
 │   └── output/              # 构建中间产物（已 gitignore）
 ├── tools/                   # 关卡生成 / 求解器 / 验证 / 回归测试（约 80 个脚本）
