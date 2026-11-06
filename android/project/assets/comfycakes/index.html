@@ -74,7 +74,7 @@
     opacity:.55;
     transition:transform .18s cubic-bezier(.3,1.5,.5,1),box-shadow .18s,opacity .18s;
   }
-  .lyr.on{opacity:1;transform:scale(1.24);box-shadow:0 0 0 3px rgba(255,192,67,.32)}
+  .lyr.on{opacity:1;transform:scale(1.26);box-shadow:0 0 0 3px rgba(255,168,24,.62),0 0 10px rgba(255,168,24,.45)}
   .lyr canvas{display:block}
 
   /* ===== 舞台 ===== */
@@ -1514,8 +1514,9 @@ function drawMachine(i){
   ctx.restore();
 
   // 边框用这台机器的颜色 —— 订单卡右边同一行也是这个色，一眼对得上
-  ctx.strokeStyle = active ? col.dark : shade(col.dark, 0.42);
-  ctx.lineWidth = active ? 3 : 2;
+  // 轮到这台时用金色描边：机器本身就是这个色，再用同色边框等于没提示
+  ctx.strokeStyle = active ? '#ffab1f' : shade(col.dark, 0.42);
+  ctx.lineWidth = active ? 3.5 : 2;
   roundRect(ctx, wx, wy, ww, wh, w*0.10);
   ctx.stroke();
 
