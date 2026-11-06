@@ -79,7 +79,8 @@ SCENES = {
     until('waiting'); wrong(0); run(1.2);
     until('waiting'); wrong(1); run(1.2);
     until('waiting'); wrong(2); run(1.2);
-    until('waiting'); wrong(3); run(0.5);
+    until('waiting'); wrong(3);
+    until('result'); run(0.40);
     """,
 }
 

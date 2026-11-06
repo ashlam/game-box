@@ -43,8 +43,8 @@ function mkCtx(){
     translate: NOP, scale: NOP, rotate: NOP, setTransform: NOP, transform: NOP,
     setLineDash: NOP, fillText: NOP, strokeText: NOP,
     measureText(){ return { width: 10 }; },
-    createLinearGradient(){ return { addColorStop: NOP }; },
-    createRadialGradient(){ return { addColorStop: NOP }; },
+    createLinearGradient(){ return { addColorStop: checkColor }; },
+    createRadialGradient(){ return { addColorStop: checkColor }; },
     createPattern(){ return null; },
     drawImage: NOP,
     getImageData(){ return { data: [0,0,0,0] }; },
@@ -110,10 +110,17 @@ function byTag(root, tag){
   return allDesc(root).filter(e => e.tagName === String(tag).toUpperCase());
 }
 
+/* 浏览器认的颜色写法：hex / rgb() / rgba() / 关键字。其它一律算错。
+   这条守着 shade() 叠着用时的解析问题。 */
+const COLOR_RE = /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\)|[a-z]+)$/i;
+function checkColor(pos, col){
+  if(!COLOR_RE.test(String(col))) throw new Error('addColorStop 收到无法解析的颜色：' + col);
+}
+
 const els = {};
 ['stage','cv','ordersEl','optsEl','pickLabel','timerBox','timerBar','scoreEl','livesEl',
  'sndBtn','ov','sheetStart','sheetOver','bestStart','startBtn','againBtn','overScore',
- 'overCakes','overBest','overLead','newBest'].forEach(id => { els[id] = mkEl('div'); });
+ 'overCakes','overBest','overLead','newBest','pickEl'].forEach(id => { els[id] = mkEl('div'); });
 els.cv = mkEl('canvas');
 els.stage.clientWidth = 370;
 els.stage.clientHeight = 620;
@@ -447,6 +454,23 @@ section('9. 控制台与反馈');
 
   // 做错的那一层也得照样高亮，不能提前泄漏答案
   ok(lyr2[st0].classList.contains('on') === false, '上一站那一行已经熄灭');
+}
+
+section('9b. 轮到你了');
+{
+  CC.start();
+  untilPh('waiting');
+  ok(els.pickEl.classList.contains('your-turn'),
+     '蛋糕到站，操作台亮起来叫人');
+
+  const btns = els.optsEl.children.filter(c => c.classList.contains('opt'));
+  ok(btns.length > 0, '有按钮可按');
+  ok(btns.filter(b => b.classList.contains('hint')).length === 1,
+     '第一单把正确的那个按钮点亮（只亮一个）', String(btns.filter(b => b.classList.contains('hint')).length));
+
+  btns[0].fire('click');
+  ok(!els.pickEl.classList.contains('your-turn'),
+     '按下去之后操作台退回收起状态');
 }
 
 section('10. 结果反馈');
