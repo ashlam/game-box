@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>数织 · 小游戏盒子</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#191d26; --card2:#202632; --line:#2b3242;
+    --txt:#e8ecf3; --dim:#8b95a7; --acc:#5b8cff; --acc2:#38d39f; --hot:#ffd45e;
+    --ink:#9fb6dc;             /* 已经涂上的格子 */
+    --bad:#ff5f6d;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  html,body{margin:0;height:100%}
+  body{
+    height:100%;overflow:hidden;
+    background:radial-gradient(1200px 600px at 50% -10%,#1b2233 0%,var(--bg) 60%);
+    color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+    padding:calc(env(safe-area-inset-top) + 8px) 10px calc(env(safe-area-inset-bottom) + 8px);
+  }
+  #app{height:100%;display:flex;flex-direction:column;align-items:center}
+  .screen{width:100%;max-width:520px;flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+  [hidden]{display:none !important}
+
+  /* ===== 顶栏 ===== */
+  .top{display:flex;align-items:center;gap:10px;flex:0 0 auto;margin-bottom:8px}
+  .top .back,.top .ic{
+    flex:0 0 auto;width:36px;height:36px;display:grid;place-items:center;
+    background:var(--card);border:1px solid var(--line);border-radius:11px;
+    color:var(--dim);text-decoration:none;font-size:16px;line-height:1;padding:0;font-family:inherit;
+  }
+  .top .back:active,.top .ic:active{background:var(--card2);color:var(--txt)}
+  .ttl{flex:1 1 auto;min-width:0;line-height:1.25}
+  .ttl b{display:block;font-size:15px;font-weight:700;letter-spacing:.5px}
+  .ttl span{display:block;font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* ===== 菜单 ===== */
+  .lead{flex:0 0 auto;margin:2px 0 12px;font-size:12.5px;line-height:1.7;color:#b9c2d1}
+  .lead b{color:var(--txt)}
+  #groups{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px}
+  .grp{margin-bottom:16px}
+  .grpT{display:flex;align-items:baseline;gap:8px;margin:0 2px 8px}
+  .grpT b{font-size:13px;letter-spacing:.6px}
+  .grpT span{font-size:11px;color:var(--dim)}
+  .lvs{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+  .lv{
+    position:relative;display:flex;flex-direction:column;gap:2px;text-align:left;
+    background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);
+    border-radius:13px;padding:10px 10px 9px;color:var(--txt);font:inherit;cursor:pointer;
+    transition:transform .1s ease,border-color .1s ease;
+  }
+  .lv:active{transform:scale(.97);border-color:var(--acc)}
+  .lv .no{font-size:10.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .lv .nm{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lv .st{font-size:10px;color:#3f4a5e;letter-spacing:1px;margin-top:1px}
+  .lv .st.on{color:var(--hot)}
+  .lv.cleared{border-color:rgba(91,140,255,.4)}
+  .lv.cleared:after{
+    content:"";position:absolute;top:8px;right:8px;width:6px;height:6px;border-radius:50%;
+    background:var(--acc2);box-shadow:0 0 6px rgba(56,211,159,.8)
+  }
+
+  /* ===== 游戏页数据条 ===== */
+  .hud{display:flex;gap:7px;flex:0 0 auto;margin-bottom:8px}
+  .h{flex:1;background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);
+     border-radius:11px;padding:6px 4px;text-align:center;min-width:0}
+  .h b{display:block;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.2}
+  .h span{display:block;font-size:10px;color:var(--dim);margin-top:1px}
+  .h b.warn{color:var(--bad)}
+
+  /* ===== 棋盘 =====
+     整个棋盘是一个 CSS Grid：第 1 行是「左上角空位 + n 个列提示」，
+     之后每行是「1 个行提示 + n 个格子」。这样提示和格子天然像素对齐，
+     不需要任何手工算宽度。--lw / --th 由 JS 按「最多几个数字」算出来。 */
+  #boardWrap{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;overflow:auto}
+  #board{
+    --cell:22px; --n:5; --lw:60px; --th:60px;
+    flex:0 0 auto;display:grid;touch-action:none;
+    grid-template-columns: var(--lw) repeat(var(--n), var(--cell));
+    grid-template-rows: var(--th) repeat(var(--n), var(--cell));
+    background:#0d1017;border-radius:8px;padding:0;
+    box-shadow:0 12px 30px rgba(0,0,0,.5);
+  }
+  .corner{grid-column:1;grid-row:1}
+  .cclue,.rclue{font-variant-numeric:tabular-nums;font-weight:700;color:#bcc8da;
+    font-size:calc(var(--cell) * .48);line-height:1;letter-spacing:-.02em}
+  .cclue{display:flex;flex-direction:column;justify-content:flex-end;align-items:center;
+    gap:calc(var(--cell) * .08);padding-bottom:calc(var(--cell) * .12);transition:opacity .2s}
+  .rclue{display:flex;align-items:center;justify-content:flex-end;
+    gap:calc(var(--cell) * .18);padding-right:calc(var(--cell) * .12);transition:opacity .2s}
+  .cclue i,.rclue i{font-style:normal;display:block;min-width:calc(var(--cell) * .5);text-align:center}
+  .cclue i.z,.rclue i.z{color:#333d51;font-weight:500}
+  /* 整行/整列都填对了 → 数字自动淡出（Pictopix 的「难度」其实就是这个开关） */
+  #board.fade .cclue.done,#board.fade .rclue.done{opacity:.28}
+  .cclue.done,.rclue.done{color:#454f66}
+  .cclue.hl,.rclue.hl{color:#fff;text-shadow:0 0 8px rgba(91,140,255,.9)}
+
+  .c{
+    border-right:1px solid #212a39;border-bottom:1px solid #212a39;
+    position:relative;display:grid;place-items:center;
+    background:#141924;
+  }
+  .c.c5{border-right:2px solid #3b465c}
+  .c.r5{border-bottom:2px solid #3b465c}
+  /* 十字高亮：手指/鼠标停在某一格，同行同列淡淡亮一下，方便数格子 */
+  .c.hx{background:#1a2130}
+  .c.hy{background:#1a2130}
+  .c.fill{background:var(--ink)}
+  /* 打叉：一个淡淡的 × ，不能太抢眼，不然满屏都是叉 */
+  .c.cross:before,.c.cross:after{
+    content:"";position:absolute;left:50%;top:50%;
+    width:calc(var(--cell) * .46);height:2px;border-radius:2px;
+    background:#3d4759;transform:translate(-50%,-50%) rotate(45deg);
+  }
+  .c.cross:after{transform:translate(-50%,-50%) rotate(-45deg)}
+  .c.bad{animation:badShake .45s ease}
+  .c.bad:after{content:"";position:absolute;inset:0;border:2px solid var(--bad);border-radius:2px;
+    box-shadow:0 0 10px rgba(255,95,109,.6)}
+  @keyframes badShake{
+    0%,100%{transform:translateX(0)} 20%{transform:translateX(-2px)}
+    40%{transform:translateX(2px)} 60%{transform:translateX(-1px)} 80%{transform:translateX(1px)}
+  }
+  /* 通关：格线消失、行列数字淡出，一幅图才连得起来 */
+  #board.solved .c{border-color:transparent !important}
+  #board.solved .cclue,#board.solved .rclue{opacity:.12}
+  #board.solved{box-shadow:0 0 44px rgba(255,255,255,.10), 0 12px 30px rgba(0,0,0,.5)}
+
+  /* 通关：格子按对角线一格格亮起来，黑白图变成彩色画 */
+  .c.reveal{animation:reveal .5s ease both}
+  .c.done-look{background:var(--art) !important;box-shadow:none}
+  @keyframes reveal{
+    from{transform:scale(.55);opacity:.3}
+    to{transform:scale(1);opacity:1}
+  }
+
+  /* ===== 底部操作 ===== */
+  .pad{flex:0 0 auto;display:flex;gap:8px;align-items:center;margin-top:9px}
+  .seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:13px;padding:3px;gap:3px}
+  .pm{
+    font:inherit;font-size:13px;padding:9px 15px;border:0;border-radius:10px;
+    background:transparent;color:var(--dim);line-height:1;display:flex;align-items:center;gap:5px;
+  }
+  .pm.on{background:var(--acc);color:#fff;font-weight:700}
+  .pm.on[data-mode="cross"]{background:#5a6480}
+  .sp{flex:1}
+  .pb{
+    font:inherit;font-size:16px;width:44px;height:44px;display:grid;place-items:center;
+    background:var(--card);border:1px solid var(--line);border-radius:13px;color:var(--txt);
+    padding:0;position:relative;
+  }
+  .pb:active{background:var(--card2)}
+  .pb:disabled{opacity:.35}
+  .pb .badge{position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;border-radius:9px;
+    background:var(--hot);color:#2a2000;font-size:11px;font-weight:800;line-height:18px;text-align:center;padding:0 4px}
+
+  /* ===== 弹层 ===== */
+  .sheet{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:16px}
+  .sheet .veil{position:absolute;inset:0;background:rgba(6,8,12,.72);backdrop-filter:blur(3px)}
+  .panel{
+    position:relative;width:100%;max-width:400px;max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    background:linear-gradient(180deg,#1d232f,#161b25);border:1px solid var(--line);
+    border-radius:18px;padding:20px 18px;box-shadow:0 24px 60px rgba(0,0,0,.6);
+    animation:pop .22s ease both;
+  }
+  @keyframes pop{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
+  .panel h2{margin:0 0 4px;font-size:18px}
+  .panel .sub2{margin:0 0 10px;font-size:11.5px;color:var(--dim);line-height:1.5}
+  .panel p{font-size:12.5px;line-height:1.68;color:#c6cfdd;margin:8px 0}
+  .panel b{color:var(--txt)}
+  .panel .k{display:inline-block;background:#0d1017;border:1px solid var(--line);border-radius:6px;
+    padding:0 5px;font-size:12px;font-weight:700;color:var(--acc2)}
+  .panel ul{margin:6px 0;padding-left:17px;font-size:12.5px;line-height:1.68;color:#c6cfdd}
+  .panel li{margin:1px 0}
+  .demo{display:flex;justify-content:center;margin:6px 0 2px}
+  #help .panel{max-height:92vh;padding:17px 16px}
+  .demo svg{display:block}
+  .demoCap{margin:8px 0 2px;text-align:center;font-size:11.5px;color:var(--dim)}
+  .demoCap b{color:var(--acc2)}
+  .btn{
+    display:block;width:100%;margin-top:10px;font:inherit;font-size:14.5px;font-weight:700;
+    padding:13px;border-radius:12px;border:1px solid var(--acc);background:var(--acc);color:#fff;
+  }
+  .btn.ghost{background:transparent;color:var(--dim);border-color:var(--line);font-weight:500}
+  .btn:active{filter:brightness(1.12)}
+  .opt{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:13px;color:#c6cfdd}
+  .opt input{width:18px;height:18px;accent-color:var(--acc)}
+
+  /* 结算 */
+  #win .panel{text-align:center}
+  #winTitle{font-size:20px;margin:2px 0 2px}
+  #winStars{font-size:30px;letter-spacing:5px;color:#3f4a5e;margin:6px 0 2px;height:38px}
+  #winStars i{font-style:normal;display:inline-block}
+  #winStars i.on{color:var(--hot);text-shadow:0 0 16px rgba(255,212,94,.55)}
+  #winStars i.pop{animation:starPop .4s cubic-bezier(.2,1.6,.5,1) both}
+  @keyframes starPop{from{transform:scale(0) rotate(-40deg)}to{transform:scale(1) rotate(0)}}
+  .winRow{display:flex;gap:8px;margin:12px 0 4px}
+  .winRow div{flex:1;background:#0f141c;border:1px solid var(--line);border-radius:10px;padding:7px 4px}
+  .winRow b{display:block;font-size:15px;font-variant-numeric:tabular-nums}
+  .winRow span{display:block;font-size:10px;color:var(--dim)}
+
+  /* ===== 横屏：棋盘放不下就让它滚，提示转竖屏 ===== */
+  @media (orientation:landscape) and (max-height:520px){
+    .rotateme{display:none !important}
+    body:after{content:"把手机竖过来玩 →";position:fixed;inset:0;display:grid;place-items:center;
+      background:var(--bg);color:var(--dim);font-size:15px;z-index:99}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ================= 选关 ================= -->
+  <section id="menu" class="screen">
+    <div class="top">
+      <a class="back" href="/" aria-label="返回">←</a>
+      <div class="ttl"><b>数织</b><span>按数字涂格子，涂完是一幅画</span></div>
+      <button class="ic" id="helpBtn" type="button" aria-label="玩法说明">?</button>
+    </div>
+
+    <div class="lead">
+      每行左边的数字说：<b>这一类有几段连续的黑格</b>，按顺序排。
+      比如 <b>2 1</b> 就是「先 2 连、空一下、再 1 个」。列也一样，从上面看。
+      两边一起推，就能确定哪些格子一定是黑的 —— <b>不用猜</b>。
+    </div>
+
+    <div id="groups"></div>
+  </section>
+
+  <!-- ================= 游戏 ================= -->
+  <section id="play" class="screen" hidden>
+    <div class="top">
+      <button class="back" id="backBtn" type="button" aria-label="返回">←</button>
+      <div class="ttl"><b id="lvTitle">十字</b><span id="lvSize">5 × 5</span></div>
+      <button class="ic" id="restartBtn" type="button" aria-label="重来">↻</button>
+    </div>
+
+    <div class="hud">
+      <div class="h"><b id="timeV">0:00</b><span>用时</span></div>
+      <div class="h"><b id="errV">0</b><span>填错</span></div>
+      <div class="h"><b id="hintV">3</b><span>剩余提示</span></div>
+    </div>
+
+    <div id="boardWrap"><div id="board"></div></div>
+
+    <div class="pad">
+      <div class="seg">
+        <button class="pm on" data-mode="fill" type="button">✏️ 填色</button>
+        <button class="pm" data-mode="cross" type="button">✕ 打叉</button>
+      </div>
+      <span class="sp"></span>
+      <button class="pb" id="undoBtn" type="button" aria-label="撤销">↶</button>
+      <button class="pb" id="hintBtn2" type="button" aria-label="提示">💡</button>
+    </div>
+  </section>
+</div>
+
+<!-- ================= 玩法说明 ================= -->
+<div class="sheet" id="help" hidden>
+  <div class="veil" data-close="help"></div>
+  <div class="panel">
+    <h2>怎么玩</h2>
+    <p class="sub2">数织 · Nonogram · Picross · 像素拼图</p>
+
+    <div class="demo" id="demo"></div>
+    <p class="demoCap">数字 = 一段有几格 · 左边 <b>1 1 2</b>，上面 <b>3 1 0</b>（<b>0</b> = 整列空）</p>
+
+    <p><b>数字 = 这一行连续黑格的长度</b>，从左到右按顺序。列的数字从上面开始。</p>
+    <ul>
+      <li><b>3</b> → 这行有一段 3 连</li>
+      <li><b>2 1</b> → 先 2 连，中间至少空一格，再来 1 个</li>
+      <li><b>0</b> → 这行整行是空的</li>
+    </ul>
+    <p><b>用手指直接划</b>就能连着一片涂完；划歪了也没关系，它会沿直线走。在已经涂色的格子上再划一遍，就是擦掉。</p>
+    <p>拿不准的地方用 <b>✕</b> 标成空格，省得反复数。整行填对了，那行数字会自己变暗。填错会闪红并计数；卡住了点右下角 <b>💡</b>。</p>
+
+    <div style="margin-top:14px">
+      <label class="opt"><input type="checkbox" id="optFade" checked> 填对的行列，数字自动变暗</label>
+      <label class="opt"><input type="checkbox" id="optErr" checked> 填错时闪红提醒</label>
+    </div>
+
+    <button class="btn" type="button" data-close="help">知道了</button>
+  </div>
+</div>
+
+<!-- ================= 通关 ================= -->
+<div class="sheet" id="win" hidden>
+  <div class="veil"></div>
+  <div class="panel">
+    <div id="winTitle">画出来了！</div>
+    <p class="sub2" id="winName">十字</p>
+    <div id="winStars"><i>★</i><i>★</i><i>★</i></div>
+    <div class="winRow">
+      <div><b id="wTime">0:00</b><span>用时</span></div>
+      <div><b id="wErr">0</b><span>填错</span></div>
+      <div><b id="wHint">0</b><span>用提示</span></div>
+    </div>
+    <button class="btn" id="nextBtn" type="button">下一关</button>
+    <button class="btn ghost" id="againBtn" type="button">再玩一次</button>
+    <button class="btn ghost" id="toMenuBtn" type="button">回到选关</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+ * 数织（Nonogram / Picross）
+ *
+ * 玩法核心只有一条：**每行/列的数字 = 连续黑格的长度序列**。
+ * 但「好不好玩」全在操作手感上，所以照 Pictopix 的几条关键体验做了：
+ *   · 按住拖拽连续涂色，并且**锁方向**（手划歪了也走直线，不会画成锯齿）
+ *   · 在已涂的格子上起手 = 擦除；在已打叉的格子上起手 = 取消叉
+ *   · 填错立刻闪红并计数（可关），不会静默出错
+ *   · 整行/列填对后，那组数字自动变暗 —— 这是玩家判断"这行搞定了"的唯一依据
+ *   · 手指停在某格时，同行同列底色微亮，方便横向对数字
+ *   · 通关时整幅图按对角线一格格亮起来，变成彩色
+ *
+ * 关卡数据 LEVELS 只存图案（# = 涂、. = 空），行列数字在运行时算出来。
+ * 手写数字一定会和图对不上，所以宁可每次现算 —— tools/solve_nonogram.js
+ * 也是从这份数据里抽图案，验证「唯一解、不用猜」。
+ * ========================================================================== */
+(function(){
+'use strict';
+
+/* ---------------------------------------------------------------- 关卡 */
+var LEVELS = [
+  /* ---- 5 × 5 ---- */
+  { n:5, name:'十字', hint:'路口的标志', color:'#7cc4ff', art:[
+    '..#..',
+    '..#..',
+    '#####',
+    '..#..',
+    '..#..'
+  ]},
+  { n:5, name:'心', hint:'喜欢的东西', color:'#ff7a9c', art:[
+    '.#.#.',
+    '#####',
+    '#####',
+    '.###.',
+    '..#..'
+  ]},
+  { n:5, name:'小花', hint:'开在春天', color:'#ff9ec4', art:[
+    '..#..',
+    '#.#.#',
+    '.###.',
+    '#.#.#',
+    '..#..'
+  ]},
+  { n:5, name:'小星星', hint:'晚上的天上', color:'#ffd45e', art:[
+    '..#..',
+    '.###.',
+    '#####',
+    '..#..',
+    '.#.#.'
+  ]},
+
+  /* ---- 10 × 10 ---- */
+  { n:10, name:'小鸭', hint:'池塘里游的', color:'#ffd45e', art:[
+    '..........',
+    '....##....',
+    '...####...',
+    '...#.#....',
+    '...####...',
+    '..######..',
+    '.########.',
+    '##########',
+    '.########.',
+    '..######..'
+  ]},
+  { n:10, name:'房子', hint:'住的地方', color:'#ff9f43', art:[
+    '....##....',
+    '...####...',
+    '..######..',
+    '.########.',
+    '##########',
+    '#........#',
+    '#..####..#',
+    '#..#..#..#',
+    '#..#..#..#',
+    '##########'
+  ]},
+  { n:10, name:'蘑菇', hint:'森林里长的', color:'#ff8a8a', art:[
+    '...####...',
+    '..######..',
+    '.########.',
+    '##########',
+    '.########.',
+    '..........',
+    '...####...',
+    '...####...',
+    '...####...',
+    '..........'
+  ]},
+  { n:10, name:'猫', hint:'会喵的那种', color:'#b39dff', art:[
+    '..#....#..',
+    '..##..##..',
+    '..######..',
+    '..#....#..',
+    '..#.##.#..',
+    '..#....#..',
+    '..######..',
+    '...####...',
+    '..........',
+    '..........'
+  ]},
+  { n:10, name:'帆船', hint:'水上走的', color:'#63d2ff', art:[
+    '....#.....',
+    '...##.....',
+    '..###.....',
+    '.########.',
+    '.########.',
+    '....#.....',
+    '....#.....',
+    '.########.',
+    '..######..',
+    '..........'
+  ]},
+  { n:10, name:'雨伞', hint:'下雨天带', color:'#8fd6ff', art:[
+    '....##....',
+    '..######..',
+    '.########.',
+    '##########',
+    '..######..',
+    '....##....',
+    '....#.....',
+    '....#.....',
+    '....##....',
+    '..........'
+  ]},
+  { n:10, name:'热气球', hint:'飘在天上', color:'#ff8a5b', art:[
+    '...####...',
+    '..######..',
+    '.########.',
+    '.########.',
+    '##########',
+    '.########.',
+    '..######..',
+    '...####...',
+    '....##....',
+    '...####...'
+  ]},
+
+  /* ---- 15 × 15 ---- */
+  { n:15, name:'大爱心', hint:'送给谁呢', color:'#ff7a9c', art:[
+    '...............',
+    '..####...####..',
+    '.######.######.',
+    '###############',
+    '###############',
+    '.#############.',
+    '.#############.',
+    '..###########..',
+    '...#########...',
+    '....#######....',
+    '.....#####.....',
+    '......###......',
+    '.......#.......',
+    '...............',
+    '...............'
+  ]},
+  { n:15, name:'大星星', hint:'亮晶晶的', color:'#ffd45e', art:[
+    '.......#.......',
+    '.......#.......',
+    '......###......',
+    '......###......',
+    '.....#####.....',
+    '###############',
+    '.#############.',
+    '..###########..',
+    '...#########...',
+    '...#########...',
+    '..####...####..',
+    '..###.....###..',
+    '..##.......##..',
+    '...............',
+    '...............'
+  ]},
+  { n:15, name:'火箭', hint:'飞上天', color:'#ff8a5b', art:[
+    '.......#.......',
+    '......###......',
+    '......###......',
+    '.....#####.....',
+    '.....##.##.....',
+    '.....##.##.....',
+    '.....##.##.....',
+    '.....##.##.....',
+    '.....##.##.....',
+    '.....##.##.....',
+    '.....#####.....',
+    '....#######....',
+    '...###.#.###...',
+    '....#..#..#....',
+    '.......#.......'
+  ]},
+  { n:15, name:'钥匙', hint:'开门用的', color:'#e0b45c', art:[
+    '...............',
+    '..####.........',
+    '.##..##........',
+    '.##..##........',
+    '..####.........',
+    '....##.........',
+    '....##.........',
+    '....##.........',
+    '....##.........',
+    '....######.....',
+    '....##..##.....',
+    '....######.....',
+    '....##.........',
+    '....##.........',
+    '...............'
+  ]}
+];
+
+/* ---------------------------------------------------------------- 存档 */
+var SAVE_KEY = 'gbox_nonogram_v1';
+var OPT_KEY  = 'gbox_nonogram_opt_v1';
+var save = {}, opt = { fade:true, err:true };
+
+try{
+  var raw = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
+  if(raw && typeof raw === 'object') save = raw;
+}catch(e){ save = {}; }
+try{
+  var o = JSON.parse(localStorage.getItem(OPT_KEY) || '{}');
+  if(o && typeof o === 'object'){
+    if(typeof o.fade === 'boolean') opt.fade = o.fade;
+    if(typeof o.err  === 'boolean') opt.err  = o.err;
+  }
+}catch(e){}
+function persist(){
+  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(save)); }catch(e){}
+}
+function persistOpt(){
+  try{ localStorage.setItem(OPT_KEY, JSON.stringify(opt)); }catch(e){}
+}
+
+/* ---------------------------------------------------------------- 工具 */
+function $(id){ return document.getElementById(id); }
+function el(tag, cls){
+  var d = document.createElement(tag);
+  if(cls) d.className = cls;
+  return d;
+}
+function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
+
+/** 把一列真假值压成线索序列。全空返回 [0]（界面上就显示一个 0，跟纸面数织一样） */
+function clueOf(vals){
+  var out = [], run = 0;
+  for(var i = 0; i < vals.length; i++){
+    if(vals[i]){ run++; }
+    else if(run){ out.push(run); run = 0; }
+  }
+  if(run) out.push(run);
+  return out.length ? out : [0];
+}
+
+/* ---------------------------------------------------------------- 构建关卡 */
+var LV = [];        /* 预处理过的关卡 */
+function buildLevels(){
+  LV = LEVELS.map(function(L, idx){
+    var n = L.n, ans = [], rows = [], cols = [], j, i;
+    for(i = 0; i < n; i++){
+      if(L.art[i].length !== n){
+        throw new Error('关卡「' + L.name + '」第 ' + (i+1) + ' 行长度 ' + L.art[i].length + '，应为 ' + n);
+      }
+      var r = [];
+      for(j = 0; j < n; j++) r.push(L.art[i].charAt(j) === '#' ? 1 : 0);
+      ans.push(r);
+      rows.push(clueOf(r));
+    }
+    for(j = 0; j < n; j++){
+      var c = [];
+      for(i = 0; i < n; i++) c.push(ans[i][j]);
+      cols.push(clueOf(c));
+    }
+    var mr = 1, mc = 1;
+    rows.forEach(function(a){ if(a.length > mr) mr = a.length; });
+    cols.forEach(function(a){ if(a.length > mc) mc = a.length; });
+    return {
+      idx: idx, n: n, name: L.name, hint: L.hint || '', color: L.color || '#5b8cff',
+      ans: ans, rows: rows, cols: cols, mr: mr, mc: mc, total: 0
+    };
+  });
+  /* 每关要涂多少格（算进度、也用来判断完成） */
+  LV.forEach(function(L){
+    var t = 0;
+    L.ans.forEach(function(r){ r.forEach(function(v){ if(v) t++; }); });
+    L.total = t;
+  });
+}
+
+/* ---------------------------------------------------------------- 游戏状态 */
+var G = null;            /* 当前局 */
+var LAY = { x:0, y:0, cell:22, lw:0, th:0 };  /* 棋盘在屏幕上的几何，供坐标→格子换算 */
+var cells = [];          /* 格子 DOM，按 index 排 */
+var rowEls = [], colEls = [];
+var mode = 'fill';
+var timer = null;
+
+/* ---------------------------------------------------------------- 渲染棋盘
+   第 1 行是「左上角空位 + n 个列提示」，之后每行是「1 个行提示 + n 个格子」。
+   grid 自动排布，所以提示和格子天然对齐，不用算任何偏移。 */
+function renderBoard(){
+  var b = $('board');
+  b.innerHTML = '';
+  var n = G.L.n, i, j, k;
+  b.style.setProperty('--n', n);
+
+  b.appendChild(el('div', 'corner'));
+
+  colEls = [];
+  for(j = 0; j < n; j++){
+    var d = el('div', 'cclue');
+    var arr = G.L.cols[j];
+    for(k = 0; k < arr.length; k++){
+      var s = el('i'); s.textContent = arr[k];
+      if(arr[k] === 0) s.className = 'z';      /* 整列全空，数字不该抢眼 */
+      d.appendChild(s);
+    }
+    b.appendChild(d);
+    colEls.push(d);
+  }
+
+  cells = [];
+  rowEls = [];
+  for(i = 0; i < n; i++){
+    var r = el('div', 'rclue');
+    var ra = G.L.rows[i];
+    for(k = 0; k < ra.length; k++){
+      var s2 = el('i'); s2.textContent = ra[k];
+      if(ra[k] === 0) s2.className = 'z';
+      r.appendChild(s2);
+    }
+    b.appendChild(r);
+    rowEls.push(r);
+
+    for(j = 0; j < n; j++){
+      var c = el('div', 'c');
+      if(j % 5 === 4) c.classList.add('c5');
+      if(i % 5 === 4) c.classList.add('r5');
+      c.dataset.i = i * n + j;
+      b.appendChild(c);
+      cells.push(c);
+    }
+  }
+  b.style.setProperty('--art', G.L.color);
+  b.classList.remove('solved');
+  b.classList.toggle('fade', !!opt.fade);
+  paintAll();
+  layout();
+}
+
+/* ---------------------------------------------------------------- 尺寸 */
+function layout(){
+  var board = $('board');
+  var wrap = $('boardWrap');
+  var n = G.L.n, mr = G.L.mr, mc = G.L.mc;
+
+  var W = wrap.clientWidth  - 2;
+  var H = wrap.clientHeight - 2;
+  if(W <= 0 || H <= 0) return;
+
+  /* 线索区宽度 ≈ 数字个数 × 0.66 × cell，跟 cell 成正比 → 直接解不等式，
+     不用反复试探。0.66 是单个数字宽度的经验值（含间距）。 */
+  var KW = 0.70;
+  var cw = (W - 8) / (n + mr * KW);
+  var ch = (H - 8) / (n + mc * 0.62);
+  var cell = Math.floor(Math.min(cw, ch));
+  cell = clamp(cell, 13, 64);
+
+  board.style.setProperty('--cell', cell + 'px');
+  var lw = Math.round(6 + mr * cell * KW);
+  var th = Math.round(6 + mc * cell * 0.62);
+  board.style.setProperty('--lw', lw + 'px');
+  board.style.setProperty('--th', th + 'px');
+
+  board.style.gridTemplateColumns = lw + 'px repeat(' + n + ', ' + cell + 'px)';
+  board.style.gridTemplateRows = th + 'px repeat(' + n + ', ' + cell + 'px)';
+
+  var rect = board.getBoundingClientRect();
+  LAY = { x: rect.left, y: rect.top, cell: cell, lw: lw, th: th, n: n };
+}
+
+/* ---------------------------------------------------------------- 画面同步 */
+function paintAll(){
+  var n = G.L.n, i, j;
+  for(i = 0; i < n * n; i++){
+    var c = cells[i], v = G.cell[i];
+    c.classList.toggle('fill', v === 1);
+    c.classList.toggle('cross', v === 2);
+  }
+  for(i = 0; i < n; i++){
+    rowEls[i].classList.toggle('done', lineDone('r', i));
+    colEls[i].classList.toggle('done', lineDone('c', i));
+  }
+}
+
+function paintCell(i){
+  var c = cells[i], v = G.cell[i];
+  c.classList.toggle('fill', v === 1);
+  c.classList.toggle('cross', v === 2);
+}
+
+/** 这一行 / 列是否已经填得跟答案一模一样（空格没打叉也算完成） */
+function lineDone(kind, i){
+  var n = G.L.n, j, ans = G.L.ans, cell = G.cell;
+  if(kind === 'r'){
+    for(j = 0; j < n; j++){
+      var want = ans[i][j];
+      var got  = cell[i * n + j] === 1 ? 1 : 0;
+      if(want !== got) return false;
+    }
+  }else{
+    for(j = 0; j < n; j++){
+      var want2 = ans[j][i];
+      var got2  = cell[j * n + i] === 1 ? 1 : 0;
+      if(want2 !== got2) return false;
+    }
+  }
+  return true;
+}
+
+/* ---------------------------------------------------------------- 落子 */
+/** 涂/擦一格。返回 true 表示状态真的变了。 */
+function setCell(i, v){
+  if(G.cell[i] === v) return false;
+  G.cell[i] = v;
+  paintCell(i);
+  var n = G.L.n;
+  rowEls[(i / n) | 0].classList.toggle('done', lineDone('r', (i / n) | 0));
+  colEls[i % n].classList.toggle('done', lineDone('c', i % n));
+  return true;
+}
+
+function snapshot(){
+  G.hist.push(G.cell.slice());
+  if(G.hist.length > 120) G.hist.shift();
+  $('undoBtn').disabled = false;
+}
+
+function undo(){
+  if(!G.hist.length) return;
+  G.cell = G.hist.pop();
+  paintAll();
+  $('undoBtn').disabled = G.hist.length === 0;
+}
+
+/* ---------------------------------------------------------------- 胜负 */
+function filledOk(){
+  var n = G.L.n, ans = G.L.ans, cell = G.cell, i, j;
+  for(i = 0; i < n; i++){
+    for(j = 0; j < n; j++){
+      var want = ans[i][j] === 1;
+      var got  = cell[i * n + j] === 1;
+      if(want !== got) return false;
+    }
+  }
+  return true;
+}
+
+/* ---------------------------------------------------------------- 计时 */
+function fmt(ms){
+  var s = Math.floor(ms / 1000);
+  var m = Math.floor(s / 60);
+  s = s % 60;
+  return m + ':' + (s < 10 ? '0' : '') + s;
+}
+function tick(){
+  if(!G || G.finished) return;
+  if(!G.startedAt) return;
+  $('timeV').textContent = fmt(Date.now() - G.startedAt);
+}
+function startTimer(){
+  if(timer) clearInterval(timer);
+  timer = setInterval(tick, 500);
+}
+function stopTimer(){
+  if(timer){ clearInterval(timer); timer = null; }
+}
+
+/* ---------------------------------------------------------------- 开局 */
+function startLevel(idx){
+  var L = LV[idx];
+  G = {
+    li: idx, L: L,
+    cell: new Uint8Array(L.n * L.n),
+    hist: [],
+    errors: 0, hints: 0,
+    startedAt: 0, finished: false
+  };
+  $('menu').hidden = true;
+  $('play').hidden = false;
+  $('lvTitle').textContent = L.name + (L.hint ? ' · ' + L.hint : '');
+  $('lvSize').textContent = L.n + ' × ' + L.n + ' · ' + L.total + ' 格要涂';
+  $('timeV').textContent = '0:00';
+  $('errV').textContent = '0';
+  $('errV').classList.remove('warn');
+  $('hintV').textContent = '3';
+  $('undoBtn').disabled = true;
+  setMode('fill');
+  drag = null;
+  renderBoard();
+  /* 布局依赖 flex 高度，等一帧再量一次（旋屏 / 键盘也会走到这） */
+  requestAnimationFrame(layout);
+  startTimer();
+  $('play').scrollTop = 0;
+}
+
+/* ---------------------------------------------------------------- 交互 */
+var drag = null;    /* {axis:'', start, last, target, moved} */
+
+function hitCell(clientX, clientY){
+  var x = clientX - LAY.x - LAY.lw;
+  var y = clientY - LAY.y - LAY.th;
+  if(x < 0 || y < 0) return -1;
+  var c = Math.floor(x / LAY.cell);
+  var r = Math.floor(y / LAY.cell);
+  if(c < 0 || c >= LAY.n || r < 0 || r >= LAY.n) return -1;
+  return r * LAY.n + c;
+}
+
+function hlClear(){
+  if(!hlOn.rowEls) return;
+  hlOn.rowEls.forEach(function(e){ e.classList.remove('hx'); });
+  hlOn.colEls.forEach(function(e){ e.classList.remove('hy'); });
+  if(hlOn.rEl) hlOn.rEl.classList.remove('hl');
+  if(hlOn.cEl) hlOn.cEl.classList.remove('hl');
+  hlOn = {};
+}
+
+var hlOn = {};
+function hlAt(i){
+  if(i < 0){ hlClear(); return; }
+  var n = G.L.n, r = (i / n) | 0, c = i % n;
+  if(hlOn.i === i) return;
+  hlClear();
+  hlOn = { i: i, rowEls: [], colEls: [] };
+  for(var k = 0; k < n; k++){
+    cells[r * n + k].classList.add('hx'); hlOn.rowEls.push(cells[r * n + k]);
+    cells[k * n + c].classList.add('hy'); hlOn.colEls.push(cells[k * n + c]);
+  }
+  rowEls[r].classList.add('hl'); hlOn.rEl = rowEls[r];
+  colEls[c].classList.add('hl'); hlOn.cEl = colEls[c];
+}
+
+/** 从 a 沿轴铺到 b（含两端）。a/b 已经保证在同一行或同一列。 */
+function paintSpan(a, b, v){
+  var n = G.L.n, i;
+  if(a === b){ setCell(a, v); return; }
+  if(((a / n) | 0) === ((b / n) | 0)){
+    var r = (a / n) | 0, c1 = a % n, c2 = b % n;
+    var lo = Math.min(c1, c2), hi = Math.max(c1, c2);
+    for(i = lo; i <= hi; i++) applyTo(r * n + i, v);
+  }else if((a % n) === (b % n)){
+    var col = a % n, r1 = (a / n) | 0, r2 = (b / n) | 0;
+    var lo2 = Math.min(r1, r2), hi2 = Math.max(r1, r2);
+    for(i = lo2; i <= hi2; i++) applyTo(i * n + col, v);
+  }
+}
+
+function onDown(e){
+  if(!G || G.finished) return;
+  var i = hitCell(e.clientX, e.clientY);
+  if(i < 0){ hlClear(); return; }
+  e.preventDefault();
+
+  if(!G.startedAt) G.startedAt = Date.now();
+
+  /* 起手判定：目标状态 = 当前模式的「反面」，这样在已涂格子上再划一遍 = 擦掉 */
+  var cur = G.cell[i];
+  var target;
+  if(mode === 'fill') target = cur === 1 ? 0 : 1;
+  else                target = cur === 2 ? 0 : 2;
+
+  snapshot();
+  drag = { axis:'', start:i, last:i, target:target, moved:false };
+  applyTo(i, target);
+  hlAt(i);
+  if($('board').setPointerCapture){
+    try{ $('board').setPointerCapture(e.pointerId); }catch(err){}
+  }
+}
+
+function applyTo(i, v){
+  if(v === 1 && G.L.ans[(i / G.L.n) | 0][i % G.L.n] === 0){
+    /* 填错：计数 + 闪红。视觉提示可以关，但计数照记（星级要用） */
+    G.errors++;
+    $('errV').textContent = G.errors;
+    if(opt.err){
+      var c = cells[i];
+      c.classList.remove('bad');
+      void c.offsetWidth;
+      c.classList.add('bad');
+      setTimeout(function(){ c.classList.remove('bad'); }, 520);
+      if(navigator.vibrate) try{ navigator.vibrate(18); }catch(e2){}
+    }
+    $('errV').classList.toggle('warn', G.errors > 0);
+  }
+  setCell(i, v);
+}
+
+function onMove(e){
+  if(!drag || !G || G.finished) return;
+  var i = hitCell(e.clientX, e.clientY);
+  if(i < 0) return;
+  if(i === drag.last) return;
+  e.preventDefault();
+
+  var n = G.L.n;
+  /* 方向锁：第一次跨格就定下是横着划还是竖着划，之后斜着歪了也照直线走。
+     这是「智能划线」，没有它手机上几乎画不出连续的一行。 */
+  if(!drag.axis){
+    if(((i / n) | 0) === ((drag.last / n) | 0)) drag.axis = 'h';
+    else if((i % n) === (drag.last % n)) drag.axis = 'v';
+    else return;   /* 斜跳过去的一格，忽略，等下一个 */
+  }
+  if(drag.axis === 'h' && ((i / n) | 0) !== ((drag.last / n) | 0)) return;
+  if(drag.axis === 'v' && (i % n) !== (drag.last % n)) return;
+
+  paintSpan(drag.last, i, drag.target);
+  drag.last = i;
+  drag.moved = true;
+  hlAt(i);
+}
+
+function onUp(){
+  if(!drag) return;
+  drag = null;
+  checkWin();
+}
+
+/* ---------------------------------------------------------------- 提示 */
+function useHint(){
+  if(!G || G.finished) return;
+  var n = G.L.n, ans = G.L.ans, cell = G.cell;
+  var pool = [], i, j;
+  for(i = 0; i < n; i++) for(j = 0; j < n; j++){
+    if(ans[i][j] === 1 && cell[i * n + j] !== 1) pool.push(i * n + j);
+  }
+  if(!pool.length) return;
+  if(G.hints >= 3) return;     /* 每关最多 3 次 */
+
+  var pick = pool[Math.floor(Math.random() * pool.length)];
+  snapshot();
+  G.hints++;
+  setCell(pick, 1);            /* 提示给的是答案格，不会算错误 */
+  var c = cells[pick];
+  c.classList.add('reveal');
+  setTimeout(function(){ c.classList.remove('reveal'); }, 520);
+
+  $('hintV').textContent = (3 - G.hints);
+  if(3 - G.hints <= 0) $('hintBtn2').disabled = true;
+  checkWin();
+}
+
+/* ---------------------------------------------------------------- 完成 */
+function checkWin(){
+  if(!G || G.finished) return;
+  if(!filledOk()) return;
+
+  G.finished = true;
+  stopTimer();
+  var used = G.startedAt ? (Date.now() - G.startedAt) : 0;
+
+  /* 揭画：按「行 + 列」的对角线顺序一格格点亮，像把画刷出来 */
+  var n = G.L.n;
+  var boardEl = $('board');
+  boardEl.classList.add('solved');
+  cells.forEach(function(c, i){
+    var r = (i / n) | 0, cc = i % n;
+    if(G.L.ans[r][cc] !== 1) return;      /* 空格保持深色，画才显出来 */
+    var d = r + cc;
+    c.classList.add('reveal');
+    c.style.animationDelay = (d * 26) + 'ms';
+    setTimeout(function(){
+      c.classList.add('done-look');
+      c.style.animationDelay = '';
+    }, d * 26 + 60);
+  });
+
+  var stars = 1;
+  if(G.hints === 0) stars++;
+  if(G.errors <= 2) stars++;
+
+  /* 存档：只保留更好的成绩 */
+  var key = String(G.li);
+  var old = save[key] || { stars:0, time:0 };
+  if(stars > old.stars || (stars === old.stars && (!old.time || used < old.time))){
+    save[key] = { stars:stars, time:used, errs:G.errors, hints:G.hints };
+    persist();
+  }
+
+  setTimeout(function(){
+    $('winTitle').textContent = G.L.name + '！';
+    $('winName').textContent = G.L.hint ? '这一幅是「' + G.L.hint + '」' : '';
+    $('wTime').textContent = fmt(used);
+    $('wErr').textContent = G.errors;
+    $('wHint').textContent = G.hints;
+    var st = $('winStars').children;
+    for(var k = 0; k < 3; k++){
+      st[k].classList.remove('on', 'pop');
+      if(k < stars){
+        (function(node, delay){
+          setTimeout(function(){
+            node.classList.add('on', 'pop');
+          }, 120 + delay * 160);
+        })(st[k], k);
+      }
+    }
+    $('nextBtn').textContent = G.li + 1 < LV.length ? '下一关' : '全部通关！回到选关';
+    $('win').hidden = false;
+  }, 520);
+}
+
+/* ---------------------------------------------------------------- 模式 */
+function setMode(m){
+  mode = m;
+  var btns = document.querySelectorAll('.pm');
+  for(var i = 0; i < btns.length; i++){
+    btns[i].classList.toggle('on', btns[i].dataset.mode === m);
+  }
+}
+
+/* ---------------------------------------------------------------- 菜单 */
+function renderMenu(){
+  var g = $('groups');
+  g.innerHTML = '';
+  var groups = {};
+  LV.forEach(function(L){
+    (groups[L.n] = groups[L.n] || []).push(L);
+  });
+  [5, 10, 15].forEach(function(n){
+    var arr = groups[n];
+    if(!arr) return;
+    var box = el('div', 'grp');
+    var t = el('div', 'grpT');
+    var bt = el('b'); bt.textContent = n + ' × ' + n;
+    var sp = el('span');
+    sp.textContent = n === 5 ? '入门 · 一眼能看出来' : (n === 10 ? '要动点脑筋' : '大图 · 慢慢推');
+    t.appendChild(bt); t.appendChild(sp);
+    box.appendChild(t);
+
+    var lvs = el('div', 'lvs');
+    arr.forEach(function(L){
+      var b = el('button', 'lv');
+      b.type = 'button';
+      b.dataset.i = L.idx;
+      var rec = save[String(L.idx)];
+      var done = rec && rec.stars > 0;
+      if(done) b.classList.add('cleared');
+
+      var no = el('span', 'no'); no.textContent = '第 ' + (L.idx + 1) + ' 关';
+      var nm = el('span', 'nm'); nm.textContent = L.name;
+      var st = el('span', 'st' + (done ? ' on' : ''));
+      st.textContent = done ? '★★★'.slice(0, rec.stars) + '☆☆☆'.slice(0, 3 - rec.stars) : '未通关';
+      b.appendChild(no); b.appendChild(nm); b.appendChild(st);
+      lvs.appendChild(b);
+    });
+    box.appendChild(lvs);
+    g.appendChild(box);
+  });
+}
+
+/* ---------------------------------------------------------------- 说明图示 */
+function drawDemo(){
+  /* 3×3 示意：涂出来是个「L」。左边 1 1 = 两段，上面 3 = 三连，第三个 0 = 整列空。
+     说明文字不放 SVG 里 —— 之前挤在网格下方，被子元素裁掉还压在格子上。 */
+  var n = 3, cell = 34, pad = 4, cw = n * cell;
+  var ox = 46, oy = 46;
+  var w = cw + ox + pad * 2, h = cw + oy + pad * 2;
+  var ans  = [[1,0,0],[1,0,0],[1,1,0]];
+  var rows = [[1],[1],[2]];
+  var cols = [[3],[1],[0]];
+
+  var s = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" aria-hidden="true">';
+  s += '<g font-family="sans-serif" font-size="12" fill="#c3cee0" font-weight="700" text-anchor="middle">';
+  for(var j = 0; j < n; j++){
+    s += '<text x="' + (ox + j * cell + cell / 2) + '" y="' + (oy - 12) + '">' + (cols[j][0] || 0) + '</text>';
+  }
+  for(var i = 0; i < n; i++){
+    s += '<text x="' + (ox - 16) + '" y="' + (oy + i * cell + cell / 2 + 4) + '">' + (rows[i][0] || 0) + '</text>';
+  }
+  s += '</g>';
+  for(var r = 0; r < n; r++){
+    for(var c = 0; c < n; c++){
+      var x = ox + c * cell, y = oy + r * cell;
+      var fill = ans[r][c] ? '#5b8cff' : '#141924';
+      s += '<rect x="' + x + '" y="' + y + '" width="' + cell + '" height="' + cell +
+           '" rx="2" fill="' + fill + '" stroke="#212a39"/>';
+    }
+  }
+  s += '</svg>';
+  $('demo').innerHTML = s;
+}
+
+/* ---------------------------------------------------------------- 事件绑定 */
+function bind(){
+  var board = $('board');
+  board.addEventListener('pointerdown', onDown, false);
+  board.addEventListener('pointermove', onMove, false);
+  board.addEventListener('pointerup', onUp, false);
+  board.addEventListener('pointercancel', onUp, false);
+  board.addEventListener('pointerleave', function(e){
+    /* 只在没按着的时候收起高亮；拖动中移出边界不该中断 */
+    if(!drag) hlAt(-1);
+  }, false);
+
+  /* 老浏览器没有 PointerEvent 时给一份 touch 兜底 —— 两套一起绑会一次走两步 */
+  if(!window.PointerEvent){
+    board.addEventListener('touchstart', function(e){
+      var t = e.touches[0];
+      onDown({ clientX:t.clientX, clientY:t.clientY, preventDefault:function(){ e.preventDefault(); }, pointerId:0 });
+    }, { passive:false });
+    board.addEventListener('touchmove', function(e){
+      var t = e.touches[0];
+      onMove({ clientX:t.clientX, clientY:t.clientY, preventDefault:function(){ e.preventDefault(); } });
+    }, { passive:false });
+    board.addEventListener('touchend', function(){ onUp(); }, false);
+  }
+
+  var pm = document.querySelectorAll('.pm');
+  for(var i = 0; i < pm.length; i++){
+    pm[i].addEventListener('click', function(){
+      setMode(this.dataset.mode);
+    });
+  }
+
+  $('undoBtn').addEventListener('click', function(){
+    if(G && !G.finished) undo();
+  });
+  $('hintBtn2').addEventListener('click', useHint);
+
+  $('restartBtn').addEventListener('click', function(){
+    if(!G) return;
+    var li = G.li;
+    stopTimer();
+    setTimeout(function(){ startLevel(li); }, 20);
+  });
+
+  $('backBtn').addEventListener('click', toMenu);
+  $('toMenuBtn').addEventListener('click', function(){ $('win').hidden = true; toMenu(); });
+  $('againBtn').addEventListener('click', function(){
+    $('win').hidden = true;
+    var li = G.li;
+    setTimeout(function(){ startLevel(li); }, 20);
+  });
+  $('nextBtn').addEventListener('click', function(){
+    $('win').hidden = true;
+    var next = G.li + 1;
+    if(next >= LV.length){ toMenu(); return; }
+    setTimeout(function(){ startLevel(next); }, 20);
+  });
+
+  $('helpBtn').addEventListener('click', function(){ $('help').hidden = false; });
+  var closers = $('help').querySelectorAll('[data-close]');
+  for(var k = 0; k < closers.length; k++){
+    closers[k].addEventListener('click', function(){ $('help').hidden = true; });
+  }
+
+  $('optFade').addEventListener('change', function(){
+    opt.fade = this.checked; persistOpt();
+    $('board').classList.toggle('fade', !!opt.fade);
+  });
+  $('optErr').addEventListener('change', function(){
+    opt.err = this.checked; persistOpt();
+  });
+
+  $('groups').addEventListener('click', function(e){
+    var b = e.target.closest ? e.target.closest('.lv') : null;
+    if(!b) return;
+    startLevel(parseInt(b.dataset.i, 10));
+  });
+
+  var rt = null;
+  window.addEventListener('resize', function(){
+    if(!G || $('play').hidden) return;
+    if(rt) clearTimeout(rt);
+    rt = setTimeout(layout, 120);
+  });
+
+  /* 键盘：方向键移动、空格涂、X 打叉 —— 桌面调试方便，也顺手 */
+  document.addEventListener('keydown', function(e){
+    if(!G || G.finished || $('play').hidden) return;
+    if(e.key === 'z' && (e.ctrlKey || e.metaKey)){ e.preventDefault(); undo(); }
+    if(e.key === 'x' || e.key === 'X'){ setMode(mode === 'cross' ? 'fill' : 'cross'); }
+    if(e.key === 'f' || e.key === 'F'){ setMode('fill'); }
+  });
+}
+
+/* ---------------------------------------------------------------- 回菜单 */
+function toMenu(){
+  stopTimer();
+  $('win').hidden = true;
+  $('play').hidden = true;
+  $('menu').hidden = false;
+  G = null;
+  drag = null;
+  renderMenu();
+}
+
+/* ---------------------------------------------------------------- 启动 */
+function boot(){
+  buildLevels();
+  renderMenu();
+  drawDemo();
+  $('optFade').checked = !!opt.fade;
+  $('optErr').checked = !!opt.err;
+  bind();
+  $('board').classList.toggle('fade', !!opt.fade);
+
+  /* 首次来的人直接看到说明，不用去找问号 */
+  var seen = false;
+  try{ seen = localStorage.getItem('gbox_nonogram_seen') === '1'; }catch(e){}
+  if(!seen){
+    $('help').hidden = false;
+    try{ localStorage.setItem('gbox_nonogram_seen', '1'); }catch(e){}
+  }
+}
+
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, false);
+else boot();
+
+/* 给自动化测试留一个把手（线上不依赖它） */
+window.__nono = {
+  LEVELS: function(){ return LV; },
+  G: function(){ return G; },
+  start: startLevel,
+  setCell: function(i, v){ if(G){ snapshot(); setCell(i, v); checkWin(); } },
+  fillAll: function(){
+    if(!G) return;
+    var n = G.L.n;
+    for(var i = 0; i < n; i++) for(var j = 0; j < n; j++){
+      if(G.L.ans[i][j] === 1) setCell(i * n + j, 1);
+    }
+    paintAll();
+    checkWin();
+  },
+  lineDone: function(k, i){ return lineDone(k, i); },
+  setMode: setMode,
+  undo: undo,
+  hint: useHint,
+  layout: function(){ return LAY; },
+  opt: function(){ return opt; }
+};
+})();
+</script>
+</body>
+</html>

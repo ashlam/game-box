@@ -1,5 +1,11 @@
 # 运行时日志（守护脚本每次运行都会写）
 ops/logs/
+
+# 截图用的临时副本 / chromium profile（每次跑 shot_*.py 都会重建）
+ops/_tmp/
+
+# 截图产物：本地核对用，不进库
+ops/shots/
 *.log
 
 # APK 构建中间产物
