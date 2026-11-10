@@ -364,7 +364,7 @@
       <li><b>0</b> → 这行整行是空的</li>
     </ul>
     <p><b>用手指直接划</b>就能连着一片涂完，划歪了也照样走直线；在已经涂色的格子上再划一遍，就是擦掉。格子小就<b>两指捏合</b>放大，放大后拖动画面挪位置（也可以切到底部的 <b>✋ 移</b> 单指挪，<b>⤢</b> 一键缩回）。</p>
-    <p>拿不准的地方用 <b>✕</b> 标成空格，省得反复数。整行填对了，那行数字会自己变暗。填错会闪红并计数；卡住了点右下角 <b>💡</b>。</p>
+    <p>拿不准的地方用 <b>✕</b> 标成空格，省得反复数（电脑上<b>按住右键</b>拖就是一整排叉）。整行填对了，那行数字会自己变暗。填错会闪红并计数；卡住了点右下角 <b>💡</b>。</p>
 
     <div style="margin-top:14px">
       <label class="opt"><input type="checkbox" id="optFade" checked> 填对的行列，数字自动变暗</label>
@@ -1172,11 +1172,14 @@ function onDown(e){
 
   if(!G.startedAt) G.startedAt = Date.now();
 
+  /* 鼠标右键 = 打叉（Pictopix 的约定），不用来回切模式。按住右键拖就是一整排叉。 */
+  var act = (e.button === 2) ? 'cross' : mode;
+
   /* 起手判定：目标状态 = 当前模式的「反面」，这样在已涂格子上再划一遍 = 擦掉 */
   var cur = G.cell[i];
   var target;
-  if(mode === 'fill') target = cur === 1 ? 0 : 1;
-  else                target = cur === 2 ? 0 : 2;
+  if(act === 'fill') target = cur === 1 ? 0 : 1;
+  else               target = cur === 2 ? 0 : 2;
 
   snapshot();
   drag = { axis:'', start:i, last:i, target:target, moved:false };
@@ -1692,6 +1695,11 @@ function bind(){
     e.preventDefault();
     zoomAt(VIEW.s * Math.exp(-e.deltaY * 0.0016), e.clientX, e.clientY);
   }, { passive:false });
+
+  /* 右键要留给「打叉」，别弹浏览器菜单 */
+  $('play').addEventListener('contextmenu', function(e){
+    if($('boardWrap').contains(e.target)) e.preventDefault();
+  });
 
   $('groups').addEventListener('click', function(e){
     var t = e.target;

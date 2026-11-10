@@ -727,6 +727,46 @@ section('11. 通关与存档');
        '画册的块标出「第几块 / 共几块」', String(sb.document.getElementById('lvSize').textContent));
   }
 
+  /* ============================== 17. 电脑右键打叉 ============================== */
+  section('17. 右键 = 打叉（桌面）');
+  {
+    const { sb, api } = makeVM({});
+    api.start(0);
+    const board = sb.document.getElementById('board');
+    const L = api.layout();
+    const at = (r, c) => ({
+      clientX: L.x + L.lw * L.s + (c + 0.5) * L.cell * L.s,
+      clientY: L.y + L.th * L.s + (r + 0.5) * L.cell * L.s,
+      pointerId: 1, button: 2, preventDefault(){},
+    });
+
+    ok(api.G().cell[0] === 0, '开手是空格');
+    board.fire('pointerdown', at(0, 0));
+    board.fire('pointerup', { pointerId: 1 });
+    ok(api.G().cell[0] === 2, '右键点一下 = 打叉（不是涂黑）', String(api.G().cell[0]));
+
+    board.fire('pointerdown', at(0, 0));
+    board.fire('pointerup', { pointerId: 1 });
+    ok(api.G().cell[0] === 0, '右键再点 = 擦掉叉');
+
+    /* 右键拖着划 = 一整排叉 */
+    board.fire('pointerdown', at(0, 0));
+    board.fire('pointermove', at(0, 1));
+    board.fire('pointermove', at(0, 3));
+    board.fire('pointerup', { pointerId: 1 });
+    const n = api.G().L.n;
+    ok([0, 1, 2, 3].every(c => api.G().cell[c] === 2), '按住右键横拖 → 连续打叉',
+       [0, 1, 2, 3].map(c => api.G().cell[c]).join(','));
+
+    /* 左键仍然是涂色，不受影响 */
+    board.fire('pointerdown', { ...at(1, 1), button: 0 });
+    board.fire('pointerup', { pointerId: 1 });
+    ok(api.G().cell[n + 1] === 1 || api.G().cell[n + 1] === 0,
+       '左键仍走「涂色 / 擦除」，没被右键逻辑带偏');
+
+    ok(n > 0, '棋盘尺寸正常');
+  }
+
   /* ============================== 汇总 ============================== */
   console.log('\n' + '─'.repeat(52));
   if(fail){
