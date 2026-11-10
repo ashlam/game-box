@@ -38,29 +38,84 @@
   .ttl span{display:block;font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
   /* ===== 菜单 ===== */
-  .lead{flex:0 0 auto;margin:2px 0 12px;font-size:12.5px;line-height:1.7;color:#b9c2d1}
+  .lead{flex:0 0 auto;margin:2px 0 10px;font-size:12.5px;line-height:1.65;color:#b9c2d1}
   .lead b{color:var(--txt)}
   #groups{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px}
-  .grp{margin-bottom:16px}
+  .grp{margin-bottom:18px}
   .grpT{display:flex;align-items:baseline;gap:8px;margin:0 2px 8px}
   .grpT b{font-size:13px;letter-spacing:.6px}
   .grpT span{font-size:11px;color:var(--dim)}
-  .lvs{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+  .grpT em{margin-left:auto;font-style:normal;font-size:11px;color:var(--dim);
+    font-variant-numeric:tabular-nums}
+
+  /* 关卡卡：主视觉是「图案缩略图」。没通关只露一张按尺寸分的空网格 ——
+     名字和图案都得等玩家自己涂出来，选关页一个字都不剧透。 */
+  .lvs{display:grid;grid-template-columns:repeat(auto-fill,minmax(82px,1fr));gap:8px}
   .lv{
-    position:relative;display:flex;flex-direction:column;gap:2px;text-align:left;
+    position:relative;display:block;padding:0;overflow:hidden;text-align:left;
     background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);
-    border-radius:13px;padding:10px 10px 9px;color:var(--txt);font:inherit;cursor:pointer;
+    border-radius:13px;color:var(--txt);font:inherit;cursor:pointer;
     transition:transform .1s ease,border-color .1s ease;
   }
-  .lv:active{transform:scale(.97);border-color:var(--acc)}
-  .lv .no{font-size:10.5px;color:var(--dim);font-variant-numeric:tabular-nums}
-  .lv .nm{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .lv .st{font-size:10px;color:#3f4a5e;letter-spacing:1px;margin-top:1px}
-  .lv .st.on{color:var(--hot)}
-  .lv.cleared{border-color:rgba(91,140,255,.4)}
-  .lv.cleared:after{
-    content:"";position:absolute;top:8px;right:8px;width:6px;height:6px;border-radius:50%;
-    background:var(--acc2);box-shadow:0 0 6px rgba(56,211,159,.8)
+  .lv:active{transform:scale(.96);border-color:var(--acc)}
+  /* button 内部是匿名盒子，aspect-ratio 在那儿不生效，缩略图会被压扁。
+     用 padding-top:100%（相对宽度算）撑正方形，哪个浏览器都稳。 */
+  .lv .th{
+    position:relative;display:block;height:0;padding-top:100%;overflow:hidden;
+    background-color:#0d1017;
+    background-image:
+      linear-gradient(to right,#1c2331 1px,transparent 1px),
+      linear-gradient(to bottom,#1c2331 1px,transparent 1px);
+    background-size:calc(100% / var(--n,10)) calc(100% / var(--n,10));
+  }
+  .lv .th svg{position:absolute;left:0;top:0;display:block;width:100%;height:100%}
+  .lv .no{position:absolute;left:5px;top:3px;font-size:9.5px;color:#6b788e;
+    font-variant-numeric:tabular-nums;letter-spacing:.3px}
+  .lv.cleared{border-color:rgba(91,140,255,.34)}
+  .lv.cleared .th{background-image:none}
+  .lv .cap{display:flex;align-items:center;gap:4px;padding:5px 7px 6px;min-height:23px}
+  .lv .cap b{font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;flex:1 1 auto;min-width:0;color:var(--acc2)}
+  .lv .cap span{font-size:9.5px;letter-spacing:.5px;color:var(--hot);flex:0 0 auto}
+  .lv .cap em{font-style:normal;font-size:10px;color:#454f63}
+
+  /* ===== 画册：几块拼成一整张 =====
+     未拼完时每块只露序号（不剧透），拼完缝隙消失、整张亮起来。 */
+  .coll{
+    margin:0 0 13px;padding:9px 9px 7px;border-radius:15px;
+    background:linear-gradient(180deg,#171c26,#12161e);border:1px solid var(--line);
+  }
+  .collHead{display:flex;align-items:baseline;gap:8px;margin:0 2px 7px}
+  .collHead b{font-size:13px;letter-spacing:.4px}
+  .collHead span{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .collHead i{margin-left:auto;font-style:normal;font-size:10.5px;color:#4c5769}
+  .canvas{
+    position:relative;display:grid;gap:3px;width:100%;max-width:238px;margin:0 auto;
+    grid-template-columns:repeat(var(--gc,2),1fr);
+    background:#090c12;border-radius:9px;padding:3px;border:1px solid #232b39;
+    transition:gap .4s ease,padding .4s ease,box-shadow .4s ease,border-color .4s ease;
+  }
+  .canvas .pc{
+    position:relative;display:grid;place-items:center;padding:0;overflow:hidden;
+    border:1px dashed #2b3444;border-radius:4px;background:#0d1017;
+    font:inherit;font-size:11px;color:#495467;font-variant-numeric:tabular-nums;cursor:pointer;
+  }
+  .canvas .pc svg{display:block;width:100%;height:100%}
+  .canvas .pc.on{border-style:solid;border-color:transparent}
+  .canvas .pc:active{filter:brightness(1.25)}
+  .canvas.done{gap:0;padding:0;border-color:transparent;
+    box-shadow:0 0 30px rgba(143,214,255,.16)}
+  .canvas.done .pc{border-radius:0}
+  /* 拼完再盖一层整图：4 个 svg 并排总有半像素抗锯齿缝，整张画会看出格子线。
+     这层不接收事件，点还是落到下面的块上。 */
+  .canvas .fullArt{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+  .canvas .fullArt svg{display:block;width:100%;height:100%}
+  .collFoot{display:none;align-items:center;justify-content:center;gap:6px;
+    margin:9px 2px 0;font-size:11px;color:var(--acc2)}
+  .coll.done .collFoot{display:flex}
+  .collFoot button{
+    font:inherit;font-size:11px;padding:4px 10px;border-radius:8px;cursor:pointer;
+    background:transparent;border:1px solid rgba(56,211,159,.4);color:var(--acc2);
   }
 
   /* ===== 游戏页数据条 ===== */
@@ -75,15 +130,22 @@
      整个棋盘是一个 CSS Grid：第 1 行是「左上角空位 + n 个列提示」，
      之后每行是「1 个行提示 + n 个格子」。这样提示和格子天然像素对齐，
      不需要任何手工算宽度。--lw / --th 由 JS 按「最多几个数字」算出来。 */
-  #boardWrap{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;overflow:auto}
+  /* 视口负责裁剪，棋盘自己带 transform 缩放平移 ——
+     这样「放大后能拖」和「手指落在哪一格」用的是同一套矩阵，不会错位。 */
+  /* 棋盘是绝对定位的，撑不住 wrap 的高度 —— 小屏 / 横屏时 wrap 可能塌成 0，
+     layout() 就会早退、棋盘退回 CSS 默认尺寸（整盘错位）。留个兜底高度。 */
+  #boardWrap{position:relative;flex:1 1 auto;min-height:120px;overflow:hidden;touch-action:none}
   #board{
-    --cell:22px; --n:5; --lw:60px; --th:60px;
-    flex:0 0 auto;display:grid;touch-action:none;
+    --cell:22px; --n:5; --lw:60px; --th:60px; --b1:1px; --b5:2px;
+    position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform;
+    display:grid;touch-action:none;
     grid-template-columns: var(--lw) repeat(var(--n), var(--cell));
     grid-template-rows: var(--th) repeat(var(--n), var(--cell));
     background:#0d1017;border-radius:8px;padding:0;
     box-shadow:0 12px 30px rgba(0,0,0,.5);
   }
+  /* 放大后格线跟着变粗会糊成一片 → 线宽按 1/scale 反向补偿，永远是发丝线 */
+  #board.zoomed{border-radius:4px}
   .corner{grid-column:1;grid-row:1}
   .cclue,.rclue{font-variant-numeric:tabular-nums;font-weight:700;color:#bcc8da;
     font-size:calc(var(--cell) * .48);line-height:1;letter-spacing:-.02em}
@@ -99,12 +161,12 @@
   .cclue.hl,.rclue.hl{color:#fff;text-shadow:0 0 8px rgba(91,140,255,.9)}
 
   .c{
-    border-right:1px solid #212a39;border-bottom:1px solid #212a39;
+    border-right:var(--b1) solid #212a39;border-bottom:var(--b1) solid #212a39;
     position:relative;display:grid;place-items:center;
     background:#141924;
   }
-  .c.c5{border-right:2px solid #3b465c}
-  .c.r5{border-bottom:2px solid #3b465c}
+  .c.c5{border-right:var(--b5) solid #3b465c}
+  .c.r5{border-bottom:var(--b5) solid #3b465c}
   /* 十字高亮：手指/鼠标停在某一格，同行同列淡淡亮一下，方便数格子 */
   .c.hx{background:#1a2130}
   .c.hy{background:#1a2130}
@@ -136,15 +198,31 @@
     to{transform:scale(1);opacity:1}
   }
 
+  /* ===== 缩放控件（浮在棋盘右下角） ===== */
+  .zc{position:absolute;right:5px;bottom:5px;z-index:6;display:flex;flex-direction:column;
+    align-items:center;gap:5px}
+  .zc button{
+    width:33px;height:33px;display:grid;place-items:center;padding:0;font:inherit;
+    font-size:16px;line-height:1;border-radius:10px;cursor:pointer;
+    background:rgba(22,26,35,.86);border:1px solid rgba(70,82,102,.7);color:#aab5c6;
+    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  }
+  .zc button:active{background:rgba(40,47,62,.95);color:#fff}
+  .zc button:disabled{opacity:.28}
+  .zc .lvl{font-size:9.5px;color:#8b95a7;font-variant-numeric:tabular-nums;line-height:1;
+    text-shadow:0 1px 3px rgba(0,0,0,.9)}
+
   /* ===== 底部操作 ===== */
   .pad{flex:0 0 auto;display:flex;gap:8px;align-items:center;margin-top:9px}
   .seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:13px;padding:3px;gap:3px}
   .pm{
-    font:inherit;font-size:13px;padding:9px 15px;border:0;border-radius:10px;
-    background:transparent;color:var(--dim);line-height:1;display:flex;align-items:center;gap:5px;
+    font:inherit;font-size:12.5px;padding:9px 11px;border:0;border-radius:10px;
+    background:transparent;color:var(--dim);line-height:1;display:flex;align-items:center;gap:4px;
+    white-space:nowrap;
   }
   .pm.on{background:var(--acc);color:#fff;font-weight:700}
   .pm.on[data-mode="cross"]{background:#5a6480}
+  .pm.on[data-mode="pan"]{background:#4f5c78}
   .sp{flex:1}
   .pb{
     font:inherit;font-size:16px;width:44px;height:44px;display:grid;place-items:center;
@@ -201,6 +279,11 @@
   .winRow b{display:block;font-size:15px;font-variant-numeric:tabular-nums}
   .winRow span{display:block;font-size:10px;color:var(--dim)}
 
+  /* 整幅大图 */
+  #art .panel{padding:16px 14px 14px}
+  #artSvg{background:#090c12;border-radius:10px;overflow:hidden;line-height:0;width:100%}
+  #artSvg svg{display:block;width:100%;height:auto}
+
   /* ===== 横屏：棋盘放不下就让它滚，提示转竖屏 ===== */
   @media (orientation:landscape) and (max-height:520px){
     .rotateme{display:none !important}
@@ -221,9 +304,7 @@
     </div>
 
     <div class="lead">
-      每行左边的数字说：<b>这一类有几段连续的黑格</b>，按顺序排。
-      比如 <b>2 1</b> 就是「先 2 连、空一下、再 1 个」。列也一样，从上面看。
-      两边一起推，就能确定哪些格子一定是黑的 —— <b>不用猜</b>。
+      左边 / 上边的数字 = 这一段<b>连续涂几格</b>，两边对着推就能定下答案，<b>不用猜</b>。
     </div>
 
     <div id="groups"></div>
@@ -233,7 +314,7 @@
   <section id="play" class="screen" hidden>
     <div class="top">
       <button class="back" id="backBtn" type="button" aria-label="返回">←</button>
-      <div class="ttl"><b id="lvTitle">十字</b><span id="lvSize">5 × 5</span></div>
+      <div class="ttl"><b id="lvTitle">第 1 关</b><span id="lvSize">5 × 5</span></div>
       <button class="ic" id="restartBtn" type="button" aria-label="重来">↻</button>
     </div>
 
@@ -243,12 +324,21 @@
       <div class="h"><b id="hintV">3</b><span>剩余提示</span></div>
     </div>
 
-    <div id="boardWrap"><div id="board"></div></div>
+    <div id="boardWrap">
+      <div id="board"></div>
+      <div class="zc">
+        <span class="lvl" id="zLvl">1.0×</span>
+        <button id="zIn" type="button" aria-label="放大">＋</button>
+        <button id="zOut" type="button" aria-label="缩小">−</button>
+        <button id="zFit" type="button" aria-label="适应屏幕">⤢</button>
+      </div>
+    </div>
 
     <div class="pad">
       <div class="seg">
-        <button class="pm on" data-mode="fill" type="button">✏️ 填色</button>
-        <button class="pm" data-mode="cross" type="button">✕ 打叉</button>
+        <button class="pm on" data-mode="fill" type="button">✏️ 涂</button>
+        <button class="pm" data-mode="cross" type="button">✕ 空</button>
+        <button class="pm" data-mode="pan" type="button">✋ 移</button>
       </div>
       <span class="sp"></span>
       <button class="pb" id="undoBtn" type="button" aria-label="撤销">↶</button>
@@ -273,7 +363,7 @@
       <li><b>2 1</b> → 先 2 连，中间至少空一格，再来 1 个</li>
       <li><b>0</b> → 这行整行是空的</li>
     </ul>
-    <p><b>用手指直接划</b>就能连着一片涂完；划歪了也没关系，它会沿直线走。在已经涂色的格子上再划一遍，就是擦掉。</p>
+    <p><b>用手指直接划</b>就能连着一片涂完，划歪了也照样走直线；在已经涂色的格子上再划一遍，就是擦掉。格子小就<b>两指捏合</b>放大，放大后拖动画面挪位置（也可以切到底部的 <b>✋ 移</b> 单指挪，<b>⤢</b> 一键缩回）。</p>
     <p>拿不准的地方用 <b>✕</b> 标成空格，省得反复数。整行填对了，那行数字会自己变暗。填错会闪红并计数；卡住了点右下角 <b>💡</b>。</p>
 
     <div style="margin-top:14px">
@@ -297,9 +387,21 @@
       <div><b id="wErr">0</b><span>填错</span></div>
       <div><b id="wHint">0</b><span>用提示</span></div>
     </div>
+    <p class="sub2" id="winColl" hidden></p>
     <button class="btn" id="nextBtn" type="button">下一关</button>
     <button class="btn ghost" id="againBtn" type="button">再玩一次</button>
     <button class="btn ghost" id="toMenuBtn" type="button">回到选关</button>
+  </div>
+</div>
+
+<!-- ================= 整幅大图 ================= -->
+<div class="sheet" id="art" hidden>
+  <div class="veil" data-close="art"></div>
+  <div class="panel">
+    <h2 id="artTitle">整幅</h2>
+    <p class="sub2" id="artSub"></p>
+    <div id="artSvg"></div>
+    <button class="btn" type="button" data-close="art">收起来</button>
   </div>
 </div>
 
@@ -509,7 +611,51 @@ var LEVELS = [
     '....##.........',
     '....##.........',
     '...............'
-  ]}
+  ]},
+
+];
+
+/* 画册：一张大图 + 切割方式，运行时自动切成若干块关卡。
+   —— 这样接缝一定是对的（同一张图切出来），不用手抄四份图案。
+   以后开超大图只要改 art 和 cols / rows，块数自己长出来。
+   parts 按「行优先」给每块起名、配色；通关后才显示，所以名字可以直呼其名。 */
+var COLLS = [
+  {
+    id:'sea', title:'海边的一天', cols:2, rows:2,
+    sub:'4 块拼成一张 20 × 20 的明信片',
+    color:'#8fd6ff',
+    /* 整张图一个色：图案会跨块（帆和船身分在左右两块），
+       一块一个颜色的话接缝处会突然变色，看着像两幅画拼的。
+       想给某块单独上色就写 color，不写就跟画册同色。 */
+    parts:[
+      { name:'太阳', hint:'天刚亮' },
+      { name:'云朵', hint:'飘过去了' },
+      { name:'浪花', hint:'一层一层' },
+      { name:'小船', hint:'要出海了' }
+    ],
+    art:[
+      '....#..............#',
+      '.................###',
+      '...###.........#####',
+      '..#####.......######',
+      '#.#####..#.....#####',
+      '..#####..........###',
+      '...###.....##.......',
+      '..........###...#...',
+      '.........#####.#.#..',
+      '....#...#####.......',
+      '.......######.......',
+      '......#######.......',
+      '.....########.......',
+      '####################',
+      '.........########...',
+      '.##..###...#####....',
+      '.#######.#..........',
+      '##.##.####..........',
+      '##.######.#.........',
+      '.#####.####.........'
+    ]
+  }
 ];
 
 /* ---------------------------------------------------------------- 存档 */
@@ -558,14 +704,19 @@ function clueOf(vals){
 /* ---------------------------------------------------------------- 构建关卡 */
 var LV = [];        /* 预处理过的关卡 */
 function buildLevels(){
-  LV = LEVELS.map(function(L, idx){
-    var n = L.n, ans = [], rows = [], cols = [], j, i;
+  LV = [];
+
+  /* 把一份 art（# / . 的字符串数组）算成可玩的关卡：图案 + 行列线索 */
+  function mk(art, n, meta){
+    var ans = [], rows = [], cols = [], i, j, k;
     for(i = 0; i < n; i++){
-      if(L.art[i].length !== n){
-        throw new Error('关卡「' + L.name + '」第 ' + (i+1) + ' 行长度 ' + L.art[i].length + '，应为 ' + n);
+      if(typeof art[i] !== 'string' || art[i].length !== n){
+        throw new Error('「' + meta.name + '」第 ' + (i+1) + ' 行长度不对：' +
+                        (art[i] ? art[i].length : '缺失') + '，应为 ' + n);
       }
+      if(/[^#.]/.test(art[i])) throw new Error('「' + meta.name + '」第 ' + (i+1) + ' 行有非法字符');
       var r = [];
-      for(j = 0; j < n; j++) r.push(L.art[i].charAt(j) === '#' ? 1 : 0);
+      for(j = 0; j < n; j++) r.push(art[i].charAt(j) === '#' ? 1 : 0);
       ans.push(r);
       rows.push(clueOf(r));
     }
@@ -575,28 +726,57 @@ function buildLevels(){
       cols.push(clueOf(c));
     }
     var mr = 1, mc = 1;
-    rows.forEach(function(a){ if(a.length > mr) mr = a.length; });
-    cols.forEach(function(a){ if(a.length > mc) mc = a.length; });
+    rows.forEach(function(x){ if(x.length > mr) mr = x.length; });
+    cols.forEach(function(x){ if(x.length > mc) mc = x.length; });
+    var total = 0;
+    ans.forEach(function(x){ x.forEach(function(v){ if(v) total++; }); });
     return {
-      idx: idx, n: n, name: L.name, hint: L.hint || '', color: L.color || '#5b8cff',
-      ans: ans, rows: rows, cols: cols, mr: mr, mc: mc, total: 0
+      idx: LV.length, n: n, ans: ans, rows: rows, cols: cols,
+      mr: mr, mc: mc, total: total, art: art,
+      name: meta.name, hint: meta.hint || '', color: meta.color || '#5b8cff',
+      coll: meta.coll || '', px: meta.px || 0, py: meta.py || 0
     };
+  }
+
+  /* 1) 单幅关卡 */
+  LEVELS.forEach(function(L){
+    LV.push(mk(L.art, L.n, L));
   });
-  /* 每关要涂多少格（算进度、也用来判断完成） */
-  LV.forEach(function(L){
-    var t = 0;
-    L.ans.forEach(function(r){ r.forEach(function(v){ if(v) t++; }); });
-    L.total = t;
+
+  /* 2) 画册：一张大图按 cols × rows 切块，每块都是一关。
+        接缝不会错（同一张图切的），以后加超大图只要改 art 和 cols / rows。 */
+  COLLS.forEach(function(C){
+    var n = C.cols ? C.art[0].length / C.cols : 0;
+    if(!n || n !== Math.floor(n)) throw new Error('画册「' + C.title + '」的宽度切不成 ' + C.cols + ' 份');
+    if(C.art.length !== C.rows * n) throw new Error('画册「' + C.title + '」的高度切不成 ' + C.rows + ' 份');
+    for(var py = 0; py < C.rows; py++){
+      for(var px = 0; px < C.cols; px++){
+        var rows2 = [];
+        for(var r = 0; r < n; r++) rows2.push(C.art[py * n + r].substr(px * n, n));
+        var P = (C.parts && C.parts[py * C.cols + px]) || {};
+        LV.push(mk(rows2, n, {
+          name: P.name || ('第 ' + (py * C.cols + px + 1) + ' 块'),
+          hint: P.hint || '', color: P.color || C.color,
+          coll: C.id, px: px, py: py
+        }));
+      }
+    }
   });
 }
 
 /* ---------------------------------------------------------------- 游戏状态 */
 var G = null;            /* 当前局 */
-var LAY = { x:0, y:0, cell:22, lw:0, th:0 };  /* 棋盘在屏幕上的几何，供坐标→格子换算 */
+var LAY = { x:0, y:0, cell:22, lw:0, th:0, s:1 };  /* 棋盘几何，供坐标→格子换算 */
 var cells = [];          /* 格子 DOM，按 index 排 */
 var rowEls = [], colEls = [];
 var mode = 'fill';
 var timer = null;
+
+/* 视图（缩放 / 平移）。棋盘用 CSS transform 缩放，命中判定再按同一份
+   s / tx / ty 反算回去 —— 一份几何两处用，放大后手指落点不会错位。 */
+var VIEW = { s:1, tx:0, ty:0 };
+var FIT  = { bw:0, bh:0, vw:0, vh:0, cell:22 };
+var ZMAX = 3;
 
 /* ---------------------------------------------------------------- 渲染棋盘
    第 1 行是「左上角空位 + n 个列提示」，之后每行是「1 个行提示 + n 个格子」。
@@ -657,29 +837,90 @@ function layout(){
   var wrap = $('boardWrap');
   var n = G.L.n, mr = G.L.mr, mc = G.L.mc;
 
-  var W = wrap.clientWidth  - 2;
-  var H = wrap.clientHeight - 2;
+  var vw = wrap.clientWidth, vh = wrap.clientHeight;
+  var W = vw - 2;
+  var H = vh - 2;
   if(W <= 0 || H <= 0) return;
 
-  /* 线索区宽度 ≈ 数字个数 × 0.66 × cell，跟 cell 成正比 → 直接解不等式，
-     不用反复试探。0.66 是单个数字宽度的经验值（含间距）。 */
+  /* 线索区宽度 ≈ 数字个数 × 0.70 × cell，跟 cell 成正比 → 直接解不等式，
+     不用反复试探。0.70 是单个数字宽度的经验值（含间距）。 */
   var KW = 0.70;
   var cw = (W - 8) / (n + mr * KW);
   var ch = (H - 8) / (n + mc * 0.62);
   var cell = Math.floor(Math.min(cw, ch));
   cell = clamp(cell, 13, 64);
 
-  board.style.setProperty('--cell', cell + 'px');
   var lw = Math.round(6 + mr * cell * KW);
   var th = Math.round(6 + mc * cell * 0.62);
+
+  board.style.setProperty('--cell', cell + 'px');
   board.style.setProperty('--lw', lw + 'px');
   board.style.setProperty('--th', th + 'px');
-
   board.style.gridTemplateColumns = lw + 'px repeat(' + n + ', ' + cell + 'px)';
   board.style.gridTemplateRows = th + 'px repeat(' + n + ', ' + cell + 'px)';
 
-  var rect = board.getBoundingClientRect();
-  LAY = { x: rect.left, y: rect.top, cell: cell, lw: lw, th: th, n: n };
+  LAY.cell = cell; LAY.lw = lw; LAY.th = th; LAY.n = n;
+  FIT = { bw: lw + n * cell, bh: th + n * cell, vw: vw, vh: vh, cell: cell };
+  /* 最多放大到「一格约 72px」；小棋盘本身格子就大，倍数自然就小 */
+  ZMAX = clamp(72 / cell, 2, 8);
+  if(VIEW.s > ZMAX) VIEW.s = ZMAX;
+  clampView();
+  applyView();
+}
+
+/* 把 VIEW 写进 transform，并同步一份 LAY 给命中判定用 */
+function applyView(){
+  var board = $('board');
+  var wrap  = $('boardWrap');
+  var s = VIEW.s;
+
+  board.style.setProperty('transform',
+    'translate3d(' + VIEW.tx.toFixed(2) + 'px,' + VIEW.ty.toFixed(2) + 'px,0) scale(' + s.toFixed(4) + ')');
+  /* 格线反向补偿：放大 3 倍后 1px 的线会糊成 3px 粗，整屏都是黑框 */
+  board.style.setProperty('--b1', Math.max(0.62, 1 / s).toFixed(3) + 'px');
+  board.style.setProperty('--b5', Math.max(0.95, 2 / s).toFixed(3) + 'px');
+  board.classList.toggle('zoomed', s > 1.02);
+
+  var wr = wrap.getBoundingClientRect();
+  LAY.x = wr.left + VIEW.tx;
+  LAY.y = wr.top  + VIEW.ty;
+  LAY.s = s;
+
+  $('zLvl').textContent = s.toFixed(1) + '×';
+  $('zIn').disabled  = s >= ZMAX - 0.001;
+  $('zOut').disabled = s <= 1.001;
+}
+
+/* 棋盘小于视口就居中，大于视口就不许拖出边界 */
+function clampView(){
+  var bw = FIT.bw * VIEW.s, bh = FIT.bh * VIEW.s;
+  VIEW.tx = (bw <= FIT.vw) ? (FIT.vw - bw) / 2 : clamp(VIEW.tx, FIT.vw - bw, 0);
+  VIEW.ty = (bh <= FIT.vh) ? (FIT.vh - bh) / 2 : clamp(VIEW.ty, FIT.vh - bh, 0);
+}
+
+/** 以屏幕坐标 (cx,cy) 为不动点缩放 */
+function zoomAt(ns, cx, cy){
+  ns = clamp(ns, 1, ZMAX);
+  var wr = $('boardWrap').getBoundingClientRect();
+  var px = cx - wr.left, py = cy - wr.top;
+  var k = ns / VIEW.s;
+  VIEW.tx = px - (px - VIEW.tx) * k;
+  VIEW.ty = py - (py - VIEW.ty) * k;
+  VIEW.s = ns;
+  clampView();
+  applyView();
+}
+
+/** 以视口中心缩放（给按钮用） */
+function zoomBy(f){
+  var wr = $('boardWrap').getBoundingClientRect();
+  zoomAt(VIEW.s * f, wr.left + wr.width / 2, wr.top + wr.height / 2);
+}
+
+function resetView(){
+  VIEW.s = 1; VIEW.tx = 0; VIEW.ty = 0;
+  clampView();
+  applyView();
 }
 
 /* ---------------------------------------------------------------- 画面同步 */
@@ -791,8 +1032,15 @@ function startLevel(idx){
   };
   $('menu').hidden = true;
   $('play').hidden = false;
-  $('lvTitle').textContent = L.name + (L.hint ? ' · ' + L.hint : '');
-  $('lvSize').textContent = L.n + ' × ' + L.n + ' · ' + L.total + ' 格要涂';
+  /* 标题只说第几关：图案是什么得自己涂出来，标题剧透就没意思了 */
+  $('lvTitle').textContent = '第 ' + (idx + 1) + ' 关';
+  var szTag = L.n + ' × ' + L.n + ' · ' + L.total + ' 格要涂';
+  if(L.coll){
+    var C = collById(L.coll);
+    if(C) szTag = L.n + ' × ' + L.n + ' · 拼图第 ' + (L.py * C.cols + L.px + 1) +
+                  ' / ' + (C.cols * C.rows) + ' 块';
+  }
+  $('lvSize').textContent = szTag;
   $('timeV').textContent = '0:00';
   $('errV').textContent = '0';
   $('errV').classList.remove('warn');
@@ -800,6 +1048,8 @@ function startLevel(idx){
   $('undoBtn').disabled = true;
   setMode('fill');
   drag = null;
+  ptrs = {}; pinch0 = null; pan0 = null; lockPaint = false;
+  VIEW.s = 1; VIEW.tx = 0; VIEW.ty = 0;
   renderBoard();
   /* 布局依赖 flex 高度，等一帧再量一次（旋屏 / 键盘也会走到这） */
   requestAnimationFrame(layout);
@@ -808,11 +1058,34 @@ function startLevel(idx){
 }
 
 /* ---------------------------------------------------------------- 交互 */
-var drag = null;    /* {axis:'', start, last, target, moved} */
+var drag = null;    /* 涂色拖拽 {axis:'', start, last, target, moved} */
+
+/* 手势：单指涂色，双指缩放/平移，✋ 模式下单指平移。
+   多指的时候必须把「刚才不小心涂的那一下」撤掉，否则两指一捏就多了一格黑。 */
+var ptrs = {};      /* pointerId -> {x,y} */
+var pinch0 = null;  /* 双指起始状态 */
+var pan0 = null;    /* ✋ 单指平移起始状态 */
+var lockPaint = false;  /* 这次触摸已经变过双指 → 抬指时不许顺手涂 */
+
+function ptrCount(){
+  var k = 0;
+  for(var id in ptrs) if(ptrs.hasOwnProperty(id)) k++;
+  return k;
+}
+function ptrList(){
+  var a = [];
+  for(var id in ptrs) if(ptrs.hasOwnProperty(id)) a.push(ptrs[id]);
+  return a;
+}
+function dist(a, b){
+  var dx = a.x - b.x, dy = a.y - b.y;
+  return Math.sqrt(dx * dx + dy * dy) || 1;
+}
 
 function hitCell(clientX, clientY){
-  var x = clientX - LAY.x - LAY.lw;
-  var y = clientY - LAY.y - LAY.th;
+  var s = LAY.s || 1;
+  var x = (clientX - LAY.x) / s - LAY.lw;
+  var y = (clientY - LAY.y) / s - LAY.th;
   if(x < 0 || y < 0) return -1;
   var c = Math.floor(x / LAY.cell);
   var r = Math.floor(y / LAY.cell);
@@ -861,6 +1134,38 @@ function paintSpan(a, b, v){
 
 function onDown(e){
   if(!G || G.finished) return;
+  var id = (e.pointerId === undefined) ? 1 : e.pointerId;
+  ptrs[id] = { x:e.clientX, y:e.clientY };
+
+  /* 第二根手指落下 = 想缩放。刚才那一下落笔必须撤回，
+     否则两指一捏就凭空多出一格黑 —— 玩家只会觉得「这游戏乱涂」。 */
+  if(ptrCount() === 2){
+    if(drag && G.hist.length){
+      G.cell = G.hist.pop();
+      paintAll();
+      $('undoBtn').disabled = !G.hist.length;
+    }
+    drag = null; pan0 = null; lockPaint = true;
+    var two = ptrList();
+    pinch0 = {
+      d: dist(two[0], two[1]), s: VIEW.s,
+      t: { x:VIEW.tx, y:VIEW.ty },
+      mid: { x:(two[0].x + two[1].x) / 2, y:(two[0].y + two[1].y) / 2 }
+    };
+    hlClear();
+    e.preventDefault();
+    return;
+  }
+  if(ptrCount() > 2 || lockPaint) return;
+
+  /* ✋ 模式：单指平移。放大之后想挪视角，不用去捏 */
+  if(mode === 'pan'){
+    pan0 = { x:e.clientX, y:e.clientY, tx:VIEW.tx, ty:VIEW.ty };
+    hlClear();
+    e.preventDefault();
+    return;
+  }
+
   var i = hitCell(e.clientX, e.clientY);
   if(i < 0){ hlClear(); return; }
   e.preventDefault();
@@ -901,7 +1206,39 @@ function applyTo(i, v){
 }
 
 function onMove(e){
-  if(!drag || !G || G.finished) return;
+  if(!G || G.finished) return;
+  var id = (e.pointerId === undefined) ? 1 : e.pointerId;
+  if(ptrs[id]){ ptrs[id].x = e.clientX; ptrs[id].y = e.clientY; }
+
+  /* 双指：缩放 + 跟着两只手的中心平移（捏合时顺手挪视角，符合直觉） */
+  if(pinch0 && ptrCount() >= 2){
+    var two = ptrList();
+    var d = dist(two[0], two[1]);
+    var s2 = clamp(pinch0.s * (d / pinch0.d), 1, ZMAX);
+    var mid = { x:(two[0].x + two[1].x) / 2, y:(two[0].y + two[1].y) / 2 };
+    var wr = $('boardWrap').getBoundingClientRect();
+    var px = pinch0.mid.x - wr.left, py = pinch0.mid.y - wr.top;
+    var k = s2 / pinch0.s;
+    VIEW.s = s2;
+    /* 让「起始两指中点下的那一格」始终待在当前中点下 */
+    VIEW.tx = (mid.x - wr.left) - (px - pinch0.t.x) * k;
+    VIEW.ty = (mid.y - wr.top)  - (py - pinch0.t.y) * k;
+    clampView();
+    applyView();
+    e.preventDefault();
+    return;
+  }
+
+  if(pan0){
+    VIEW.tx = pan0.tx + (e.clientX - pan0.x);
+    VIEW.ty = pan0.ty + (e.clientY - pan0.y);
+    clampView();
+    applyView();
+    e.preventDefault();
+    return;
+  }
+
+  if(!drag) return;
   var i = hitCell(e.clientX, e.clientY);
   if(i < 0) return;
   if(i === drag.last) return;
@@ -924,10 +1261,15 @@ function onMove(e){
   hlAt(i);
 }
 
-function onUp(){
-  if(!drag) return;
-  drag = null;
-  checkWin();
+function onUp(e){
+  var id = (e && e.pointerId !== undefined) ? e.pointerId : 1;
+  delete ptrs[id];
+
+  if(pinch0 && ptrCount() < 2) pinch0 = null;
+  if(pan0 && ptrCount() === 0) pan0 = null;
+  /* 双指手势结束后，剩下那根手指不许顺手涂一格 —— 等它抬起来才算完 */
+  if(drag && ptrCount() === 0){ drag = null; checkWin(); }
+  if(ptrCount() === 0) lockPaint = false;
 }
 
 /* ---------------------------------------------------------------- 提示 */
@@ -960,6 +1302,7 @@ function checkWin(){
   if(!filledOk()) return;
 
   G.finished = true;
+  var myG = G;
   stopTimer();
   var used = G.startedAt ? (Date.now() - G.startedAt) : 0;
 
@@ -967,6 +1310,8 @@ function checkWin(){
   var n = G.L.n;
   var boardEl = $('board');
   boardEl.classList.add('solved');
+  /* 放大着玩的人这时候最想看整幅 —— 自动缩回适应屏幕 */
+  resetView();
   cells.forEach(function(c, i){
     var r = (i / n) | 0, cc = i % n;
     if(G.L.ans[r][cc] !== 1) return;      /* 空格保持深色，画才显出来 */
@@ -992,8 +1337,19 @@ function checkWin(){
   }
 
   setTimeout(function(){
-    $('winTitle').textContent = G.L.name + '！';
-    $('winName').textContent = G.L.hint ? '这一幅是「' + G.L.hint + '」' : '';
+    /* 玩家可能在这 0.5 秒里点了「回到选关」或重开一关 —— G 已经换了，
+       这时候再弹结算就是错的，而且会读到 null */
+    if(G !== myG) return;
+    $('winTitle').textContent = '画出来了！';
+    $('winName').textContent = '「' + myG.L.name + '」' + (myG.L.hint ? ' · ' + myG.L.hint : '');
+    var C = myG.L.coll ? collById(myG.L.coll) : null;
+    var wc = $('winColl');
+    if(C && collDone(C)){
+      wc.hidden = false;
+      wc.textContent = '「' + C.title + '」整张图也拼好了 —— 回选关看一眼';
+    }else{
+      wc.hidden = true;
+    }
     $('wTime').textContent = fmt(used);
     $('wErr').textContent = G.errors;
     $('wHint').textContent = G.hints;
@@ -1008,7 +1364,7 @@ function checkWin(){
         })(st[k], k);
       }
     }
-    $('nextBtn').textContent = G.li + 1 < LV.length ? '下一关' : '全部通关！回到选关';
+    $('nextBtn').textContent = myG.li + 1 < LV.length ? '下一关' : '全部通关！回到选关';
     $('win').hidden = false;
   }, 520);
 }
@@ -1022,41 +1378,179 @@ function setMode(m){
   }
 }
 
+/* ---------------------------------------------------------------- 缩略图
+   图案用一条 path 画：每行连续的 # 合成一个矩形，比逐格 <rect> 小得多，
+   缩到 80px 也不糊。preserveAspectRatio=none 让拼图各块严丝合缝。 */
+function artPath(art, n, ox, oy){
+  var d = '', r, c, s;
+  for(r = 0; r < n; r++){
+    var row = art[r];
+    c = 0;
+    while(c < n){
+      if(row.charAt(c) !== '#'){ c++; continue; }
+      s = c;
+      while(c < n && row.charAt(c) === '#') c++;
+      d += 'M' + (ox + s) + ' ' + (oy + r) + 'h' + (c - s) + 'v1h-' + (c - s) + 'z';
+    }
+  }
+  return d;
+}
+function artSVG(art, n, color){
+  return '<svg width="' + n + '" height="' + n + '" viewBox="0 0 ' + n + ' ' + n + '" ' +
+    'preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true">' +
+    '<path d="' + artPath(art, n, 0, 0) + '" fill="' + color + '"/></svg>';
+}
+/** 整张画册：每块一个 path、各用自己的颜色，拼成一幅彩色的画 */
+function collSVG(C, pieces, n){
+  var w = C.cols * n, h = C.rows * n, s = '';
+  pieces.forEach(function(L){
+    s += '<path d="' + artPath(L.art, n, L.px * n, L.py * n) + '" fill="' + L.color + '"/>';
+  });
+  return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" ' +
+    'preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true">' + s + '</svg>';
+}
+
+function cleared(L){
+  var r = save[String(L.idx)];
+  return !!(r && r.stars > 0);
+}
+function collById(id){
+  for(var i = 0; i < COLLS.length; i++) if(COLLS[i].id === id) return COLLS[i];
+  return null;
+}
+function piecesOf(C){
+  var arr = LV.filter(function(L){ return L.coll === C.id; });
+  arr.sort(function(a, b){ return (a.py * C.cols + a.px) - (b.py * C.cols + b.px); });
+  return arr;
+}
+function collDone(C){
+  var arr = piecesOf(C);
+  if(!arr.length) return false;
+  return arr.every(cleared);
+}
+
+/** 一张关卡卡：主视觉是缩略图，名字只在通关后出现 */
+function levelCard(L){
+  var b = el('button', 'lv');
+  b.type = 'button';
+  b.dataset.i = L.idx;
+  var done = cleared(L);
+
+  var th = el('span', 'th');
+  th.style.setProperty('--n', L.n);
+  if(done){
+    b.classList.add('cleared');
+    th.innerHTML = artSVG(L.art, L.n, L.color);
+  }
+  var no = el('span', 'no');
+  no.textContent = String(L.idx + 1);
+  th.appendChild(no);
+  b.appendChild(th);
+
+  var cap = el('span', 'cap' + (done ? ' on' : ''));
+  if(done){
+    var nm = el('b'); nm.textContent = L.name;
+    var rec = save[String(L.idx)] || { stars:0 };
+    var st = el('span'); st.textContent = '★★★'.slice(0, rec.stars);
+    cap.appendChild(nm); cap.appendChild(st);
+  }else{
+    var em = el('em'); em.textContent = '未通关';
+    cap.appendChild(em);
+  }
+  b.appendChild(cap);
+  return b;
+}
+
+/** 画册：没拼完只露块序号，拼完整张图连起来、外圈亮起来 */
+function renderColls(host){
+  COLLS.forEach(function(C){
+    var pieces = piecesOf(C);
+    if(!pieces.length) return;
+    var got = 0;
+    pieces.forEach(function(L){ if(cleared(L)) got++; });
+    var all = got === pieces.length;
+    var n = pieces[0].n;
+
+    var box = el('div', 'coll' + (all ? ' done' : ''));
+    var head = el('div', 'collHead');
+    var bt = el('b'); bt.textContent = all ? C.title : '待揭晓';
+    var sp = el('span'); sp.textContent = got + ' / ' + pieces.length + ' 块';
+    var szn = el('i'); szn.textContent = (C.cols * n) + ' × ' + (C.rows * n);
+    head.appendChild(bt); head.appendChild(sp); head.appendChild(szn);
+    box.appendChild(head);
+
+    var cv = el('div', 'canvas' + (all ? ' done' : ''));
+    cv.style.setProperty('--gc', C.cols);
+    cv.style.aspectRatio = C.cols + ' / ' + C.rows;
+    pieces.forEach(function(L){
+      var done = cleared(L);
+      var pc = el('button', 'pc' + (done ? ' on' : ''));
+      pc.type = 'button';
+      pc.dataset.i = L.idx;
+      if(done) pc.innerHTML = artSVG(L.art, L.n, L.color);
+      else pc.textContent = String(L.idx + 1);
+      cv.appendChild(pc);
+    });
+    if(all){
+      var full = el('div', 'fullArt');
+      full.innerHTML = collSVG(C, pieces, n);
+      cv.appendChild(full);
+    }
+    box.appendChild(cv);
+
+    var foot = el('div', 'collFoot');
+    var fb = el('button');
+    fb.type = 'button';
+    fb.dataset.art = C.id;
+    fb.textContent = '看整幅 →';
+    foot.appendChild(fb);
+    box.appendChild(foot);
+
+    host.appendChild(box);
+  });
+}
+
+function openArt(C){
+  if(!C) return;
+  var pieces = piecesOf(C);
+  if(!pieces.length) return;
+  var n = pieces[0].n;
+  $('artTitle').textContent = C.title;
+  $('artSub').textContent = C.sub || ((C.cols * n) + ' × ' + (C.rows * n) + ' · ' + pieces.length + ' 块拼成');
+  $('artSvg').innerHTML = collSVG(C, pieces, n);
+  $('art').hidden = false;
+}
+
 /* ---------------------------------------------------------------- 菜单 */
 function renderMenu(){
   var g = $('groups');
   g.innerHTML = '';
+
+  /* 画册排最前：多块拼成一张大图，是这里最有盼头的东西 */
+  renderColls(g);
+
+  /* 单幅按尺寸分组；拼图的块已经在画册里，这里不重复列 */
   var groups = {};
   LV.forEach(function(L){
+    if(L.coll) return;
     (groups[L.n] = groups[L.n] || []).push(L);
   });
-  [5, 10, 15].forEach(function(n){
+  Object.keys(groups).map(Number).sort(function(a, b){ return a - b; }).forEach(function(n){
     var arr = groups[n];
-    if(!arr) return;
     var box = el('div', 'grp');
     var t = el('div', 'grpT');
     var bt = el('b'); bt.textContent = n + ' × ' + n;
     var sp = el('span');
-    sp.textContent = n === 5 ? '入门 · 一眼能看出来' : (n === 10 ? '要动点脑筋' : '大图 · 慢慢推');
-    t.appendChild(bt); t.appendChild(sp);
+    sp.textContent = n <= 5 ? '入门 · 一眼能看出来' : (n <= 10 ? '要动点脑筋' : '大图 · 慢慢推');
+    var em = el('em');
+    var okc = 0;
+    arr.forEach(function(L){ if(cleared(L)) okc++; });
+    em.textContent = okc + ' / ' + arr.length;
+    t.appendChild(bt); t.appendChild(sp); t.appendChild(em);
     box.appendChild(t);
 
     var lvs = el('div', 'lvs');
-    arr.forEach(function(L){
-      var b = el('button', 'lv');
-      b.type = 'button';
-      b.dataset.i = L.idx;
-      var rec = save[String(L.idx)];
-      var done = rec && rec.stars > 0;
-      if(done) b.classList.add('cleared');
-
-      var no = el('span', 'no'); no.textContent = '第 ' + (L.idx + 1) + ' 关';
-      var nm = el('span', 'nm'); nm.textContent = L.name;
-      var st = el('span', 'st' + (done ? ' on' : ''));
-      st.textContent = done ? '★★★'.slice(0, rec.stars) + '☆☆☆'.slice(0, 3 - rec.stars) : '未通关';
-      b.appendChild(no); b.appendChild(nm); b.appendChild(st);
-      lvs.appendChild(b);
-    });
+    arr.forEach(function(L){ lvs.appendChild(levelCard(L)); });
     box.appendChild(lvs);
     g.appendChild(box);
   });
@@ -1108,15 +1602,32 @@ function bind(){
 
   /* 老浏览器没有 PointerEvent 时给一份 touch 兜底 —— 两套一起绑会一次走两步 */
   if(!window.PointerEvent){
+    var fake = function(t, id, e){
+      return { clientX:t.clientX, clientY:t.clientY, pointerId:id,
+               preventDefault:function(){ e.preventDefault(); } };
+    };
     board.addEventListener('touchstart', function(e){
-      var t = e.touches[0];
-      onDown({ clientX:t.clientX, clientY:t.clientY, preventDefault:function(){ e.preventDefault(); }, pointerId:0 });
+      if(e.touches.length >= 2){
+        onDown(fake(e.touches[0], 1, e));
+        onDown(fake(e.touches[1], 2, e));
+        e.preventDefault();
+        return;
+      }
+      onDown(fake(e.touches[0], 1, e));
     }, { passive:false });
     board.addEventListener('touchmove', function(e){
-      var t = e.touches[0];
-      onMove({ clientX:t.clientX, clientY:t.clientY, preventDefault:function(){ e.preventDefault(); } });
+      if(e.touches.length >= 2){
+        onMove(fake(e.touches[0], 1, e));
+        onMove(fake(e.touches[1], 2, e));
+        e.preventDefault();
+        return;
+      }
+      onMove(fake(e.touches[0], 1, e));
     }, { passive:false });
-    board.addEventListener('touchend', function(){ onUp(); }, false);
+    board.addEventListener('touchend', function(e){
+      if(!e.touches.length) onUp({ pointerId:1 });
+      else if(e.touches.length === 1) onUp({ pointerId:2 });
+    }, false);
   }
 
   var pm = document.querySelectorAll('.pm');
@@ -1153,10 +1664,15 @@ function bind(){
   });
 
   $('helpBtn').addEventListener('click', function(){ $('help').hidden = false; });
-  var closers = $('help').querySelectorAll('[data-close]');
-  for(var k = 0; k < closers.length; k++){
-    closers[k].addEventListener('click', function(){ $('help').hidden = true; });
-  }
+  /* 两个弹层共用一套「点空白 / 点按钮关闭」 */
+  ['help', 'art'].forEach(function(sid){
+    var closers = $(sid).querySelectorAll('[data-close]');
+    for(var kk = 0; kk < closers.length; kk++){
+      (function(node){
+        node.addEventListener('click', function(){ $(sid).hidden = true; });
+      })(closers[kk]);
+    }
+  });
 
   $('optFade').addEventListener('change', function(){
     opt.fade = this.checked; persistOpt();
@@ -1166,9 +1682,23 @@ function bind(){
     opt.err = this.checked; persistOpt();
   });
 
+  /* 缩放：按钮 + 桌面滚轮（手机上主要靠双指） */
+  $('zIn').addEventListener('click', function(){ zoomBy(1.45); });
+  $('zOut').addEventListener('click', function(){ zoomBy(1 / 1.45); });
+  $('zFit').addEventListener('click', resetView);
+  $('boardWrap').addEventListener('wheel', function(e){
+    if(!G || G.finished || $('play').hidden) return;
+    if(!e.deltaY) return;
+    e.preventDefault();
+    zoomAt(VIEW.s * Math.exp(-e.deltaY * 0.0016), e.clientX, e.clientY);
+  }, { passive:false });
+
   $('groups').addEventListener('click', function(e){
-    var b = e.target.closest ? e.target.closest('.lv') : null;
-    if(!b) return;
+    var t = e.target;
+    var a = t.closest ? t.closest('[data-art]') : null;
+    if(a){ openArt(collById(a.dataset.art)); return; }
+    var b = t.closest ? t.closest('.lv, .pc') : null;
+    if(!b || b.dataset.i === undefined) return;
     startLevel(parseInt(b.dataset.i, 10));
   });
 
@@ -1241,7 +1771,20 @@ window.__nono = {
   undo: undo,
   hint: useHint,
   layout: function(){ return LAY; },
-  opt: function(){ return opt; }
+  opt: function(){ return opt; },
+  /* 缩放 / 视图 */
+  view: function(){ return VIEW; },
+  fit: function(){ return FIT; },
+  zmax: function(){ return ZMAX; },
+  zoomTo: zoomAt,
+  zoomBy: zoomBy,
+  reset: resetView,
+  /* 画册 */
+  colls: function(){ return COLLS; },
+  cleared: cleared,
+  collDone: collDone,
+  pieces: function(id){ var C = collById(id); return C ? piecesOf(C) : []; },
+  openArt: openArt
 };
 })();
 </script>

@@ -23,11 +23,15 @@ const path = require('path');
 
 const HTML = path.join(__dirname, '..', 'web', 'nonogram', 'index.html');
 
-/* ------------------------------------------------------------ 抽取关卡 */
-function extractLevels(src){
-  const key = 'var LEVELS = [';
+/* ------------------------------------------------------------ 抽取关卡
+ * 关卡有两种来源：
+ *   1) LEVELS —— 单幅关，直接就是一份 art
+ *   2) COLLS  —— 画册：一张大图 + cols/rows，运行时（页面里 buildLevels）
+ *                按块切开。这里必须切得一模一样，否则校验的就不是线上那份。
+ */
+function extractArray(src, key){
   const at = src.indexOf(key);
-  if(at < 0) throw new Error('没找到 `var LEVELS = [`');
+  if(at < 0) throw new Error('没找到 `' + key + '`');
   let i = at + key.length - 1;   // 指向 '['
   let depth = 0, inStr = false, quote = '', esc = false;
   for(; i < src.length; i++){
@@ -45,9 +49,34 @@ function extractLevels(src){
       if(depth === 0) break;
     }
   }
-  if(depth !== 0) throw new Error('LEVELS 数组没闭合');
+  if(depth !== 0) throw new Error(key + ' 数组没闭合');
   const text = src.slice(at + key.length - 1, i + 1);
   return Function('"use strict";return (' + text + ');')();
+}
+
+function extractLevels(src){
+  const levels = extractArray(src, 'var LEVELS = [');
+  let colls = [];
+  try{ colls = extractArray(src, 'var COLLS = ['); }catch(e){ colls = []; }
+
+  for(const C of colls){
+    const n = C.art[0].length / C.cols;
+    if(n !== Math.floor(n)) throw new Error('画册「' + C.title + '」宽度切不成 ' + C.cols + ' 份');
+    if(C.art.length !== C.rows * n) throw new Error('画册「' + C.title + '」高度切不成 ' + C.rows + ' 份');
+    for(let py = 0; py < C.rows; py++){
+      for(let px = 0; px < C.cols; px++){
+        const art = [];
+        for(let r = 0; r < n; r++) art.push(C.art[py * n + r].slice(px * n, px * n + n));
+        const P = (C.parts && C.parts[py * C.cols + px]) || {};
+        levels.push({
+          n, name: P.name || ('第 ' + (py * C.cols + px + 1) + ' 块'),
+          hint: P.hint || '', color: P.color || C.color || '#5b8cff',
+          coll: C.id, px, py, art
+        });
+      }
+    }
+  }
+  return levels;
 }
 
 /* ------------------------------------------------------------ 线索 */

@@ -16,6 +16,7 @@
 """
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -30,8 +31,37 @@ W, H = 390, 844
 COMMON = "document.getElementById('help').hidden = true;\n"
 
 CASES = {
-    # ---- 选关页：15 个关卡的排布、星级显示 ----
+    # ---- 选关页：一关都没通（卡片只有按尺寸分的空网格，不剧透） ----
     'menu': COMMON,
+
+    # ---- 选关页：通了几关 + 画册拼到一半，卡片变缩略图 ----
+    'menu2': COMMON + """
+[0, 2, 5, 8, 15, 17].forEach(function(i){ __nono.start(i); __nono.fillAll(); });
+document.getElementById('backBtn').click();
+setTimeout(function(){ document.getElementById('win').hidden = true; }, 1500);
+""",
+
+    # ---- 画册四块全拼完：缝隙消失，整张 20×20 连成一张画 ----
+    'coll': COMMON + """
+[0, 5, 15, 16, 17, 18].forEach(function(i){ __nono.start(i); __nono.fillAll(); });
+document.getElementById('backBtn').click();
+setTimeout(function(){ document.getElementById('win').hidden = true; }, 1500);
+""",
+
+    # ---- 整幅大图弹层 ----
+    'art': COMMON + """
+[15, 16, 17, 18].forEach(function(i){ __nono.start(i); __nono.fillAll(); });
+document.getElementById('backBtn').click();
+__nono.openArt(__nono.colls()[0]);
+setTimeout(function(){ document.getElementById('win').hidden = true; }, 1500);
+""",
+
+    # ---- 放大 + 平移后的棋盘（手机两指捏合的效果） ----
+    'zoom': COMMON + """
+__nono.start(13);
+/* 缩放中心靠左：这样放大后行列线索还在视野里，能看出「放大≠瞎涂」 */
+setTimeout(function(){ __nono.zoomTo(2.4, 40, 380); }, 120);
+""",
 
     # ---- 5×5 空盘：最小尺寸下字够不够大 ----
     'play5': COMMON + """
@@ -101,8 +131,12 @@ def build(case):
         "<style>*{transition:none!important;animation:none!important}"
         # Chrome 在 Windows 上有最小窗口宽度（约 500），--window-size=390 会被撑成 484，
         # 于是「手机布局」全按 484 算。锁死 body 宽度才能真正复现 390 宽的手机。
-        "html{background:#0f1115}"
+        # 弹层是 position:fixed，会按「窗口」而不是 body 定位（窗口比手机宽），
+        # 截出来就偏了半截。改成 absolute + 让 html 定位，弹层才会落在 390 的手机框里。
+        "html{background:#0f1115;width:390px;margin:0 auto;position:relative}"
         "body{width:390px;margin:0 auto}"
+        ".sheet{position:absolute}"
+        ".sheet .veil{position:absolute;inset:0}"
         "</style>\n"
         "<script>\nwindow.addEventListener('load', function(){\n"
         "  setTimeout(function(){\n"
@@ -123,10 +157,20 @@ def shot(case):
     url = 'file:///' + path.replace(os.sep, '/')
     if not os.path.isdir(TMP):
         os.makedirs(TMP)
+    # 每次跑都清掉这个场景的 profile：Chrome 会缓存 file:// 页面，
+    # 不清就会截到上一次改之前的旧页面（这个坑很隐蔽：图片完全没变）
+    shutil.rmtree(os.path.join(TMP, 'cprof_' + case), ignore_errors=True)
+
+    # 每次跑都清掉这个场景的 profile：Chrome 会缓存 file:// 页面，
+    # 不清就会截到上一次改之前的旧页面（这个坑很隐蔽：图片完全没变）
+    shutil.rmtree(os.path.join(TMP, 'cprof_' + case), ignore_errors=True)
+
     cmd = [
         CH, '--headless=new', '--disable-gpu', '--hide-scrollbars',
         '--no-sandbox', '--no-first-run', '--no-default-browser-check',
-        '--user-data-dir=' + os.path.join(TMP, 'cprof'),
+        # 每个场景一个独立 profile：共用会把上一场的 localStorage 存档带进来，
+        # 「一关没通」的选关页就截成了通关状态
+        '--user-data-dir=' + os.path.join(TMP, 'cprof_' + case),
         '--window-size=%d,%d' % (W + 120, H),
         '--virtual-time-budget=6000',
         '--screenshot=' + png.replace(os.sep, '/'),

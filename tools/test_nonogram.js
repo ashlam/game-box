@@ -204,15 +204,15 @@ function makeVM(store){
 /* ============================== 1. 关卡数据 ============================== */
 section('1. 关卡数据');
 
-const levelsSrc = script.slice(script.indexOf('var LEVELS = ['), script.indexOf('var SAVE_KEY'));
-const LEVELS = Function('"use strict";return (' +
-  levelsSrc.slice(levelsSrc.indexOf('['), levelsSrc.lastIndexOf(']') + 1) + ');')();
+/* 括号配对抽数组：LEVELS 后面还跟着 COLLS，靠 lastIndexOf(']') 会截错 */
+const LEVELS = require('./solve_nonogram.js').extractLevels(script);
 
-ok(Array.isArray(LEVELS) && LEVELS.length === 15, '一共 15 关', '实际 ' + LEVELS.length);
+ok(Array.isArray(LEVELS) && LEVELS.length === 19, '一共 19 关', '实际 ' + LEVELS.length);
 ok(LEVELS.every(L => [5, 10, 15].indexOf(L.n) >= 0), '尺寸只有 5 / 10 / 15 三种');
 ok(LEVELS.filter(L => L.n === 5).length === 4, '5×5 有 4 关');
-ok(LEVELS.filter(L => L.n === 10).length === 7, '10×10 有 7 关');
+ok(LEVELS.filter(L => L.n === 10 && !L.coll).length === 7, '10×10 单幅有 7 关');
 ok(LEVELS.filter(L => L.n === 15).length === 4, '15×15 有 4 关');
+ok(LEVELS.filter(L => L.coll).length === 4, '画册块有 4 关');
 ok(LEVELS.every(L => typeof L.name === 'string' && L.name.length > 0), '每关都有名字');
 ok(LEVELS.every(L => /^#[0-9a-f]{6}$/i.test(L.color || '')), '每关都有主题色');
 ok(LEVELS.every(L => Array.isArray(L.art) && L.art.length === L.n), '每关 art 行数 = n');
@@ -579,6 +579,152 @@ section('11. 通关与存档');
     ok(/href="\/"/.test(html), '返回键指回首页 /');
     ok(html.indexOf('fonts.googleapis') < 0, '没有在线字体');
     ok(!/\bfetch\s*\(|XMLHttpRequest/.test(html), '不发任何网络请求');
+  }
+
+  /* ============================== 14. 缩放 / 平移 ============================== */
+  section('14. 缩放 / 平移');
+  {
+    const { sb, api } = makeVM({});
+    api.start(0);
+    const board = sb.document.getElementById('board');
+    let L = api.layout();
+    ok(L.s === 1, '开局是 1 倍（先整屏装下，不强制放大）');
+
+    /* 坐标必须按当前缩放换算：放大后一格在屏幕上的大小是 cell × s */
+    const center = (r, c) => ({
+      clientX: L.x + (L.lw + (c + 0.5) * L.cell) * L.s,
+      clientY: L.y + (L.th + (r + 0.5) * L.cell) * L.s,
+      pointerId: 1, preventDefault(){},
+    });
+
+    api.zoomTo(2, L.x + 100, L.y + 100);
+    L = api.layout();
+    ok(Math.abs(api.view().s - 2) < 1e-6, '放大到 2 倍');
+
+    board.fire('pointerdown', center(0, 2));
+    board.fire('pointerup', { pointerId: 1 });
+    ok(api.G().cell[2] === 1, '放大后点下去仍落在正确的格子上');
+
+    board.fire('pointerdown', center(0, 2));
+    board.fire('pointerup', { pointerId: 1 });
+    ok(api.G().cell[2] === 0, '放大后连「再点一次=擦掉」也还对');
+
+    ok(api.view().tx <= 0.001 && api.view().ty <= 0.001, '放大后棋盘不会被拖出视口边界');
+
+    /* ✋ 单指平移 */
+    api.setMode('pan');
+    const t0 = api.view().tx;
+    board.fire('pointerdown', { clientX: 200, clientY: 300, pointerId: 1, preventDefault(){} });
+    board.fire('pointermove', { clientX: 150, clientY: 300, pointerId: 1, preventDefault(){} });
+    board.fire('pointerup', { pointerId: 1 });
+    ok(api.view().tx < t0, '✋ 模式拖动 → 视角跟着走');
+    ok(api.G().cell[2] === 0, '平移的时候不会顺手涂到格子');
+
+    /* 双指：第二根手指落下时，第一根误涂的那格必须撤回 */
+    api.setMode('fill');
+    api.reset();
+    L = api.layout();
+    const p1 = center(0, 0);
+    board.fire('pointerdown', p1);
+    ok(api.G().cell[0] === 1, '第一指先落在空格上（会涂）');
+    board.fire('pointerdown', { clientX: p1.clientX + 120, clientY: p1.clientY, pointerId: 2, preventDefault(){} });
+    ok(api.G().cell[0] === 0, '第二指落下 → 刚才误涂的那格被撤回');
+
+    board.fire('pointermove', { clientX: p1.clientX - 60, clientY: p1.clientY, pointerId: 1, preventDefault(){} });
+    board.fire('pointermove', { clientX: p1.clientX + 180, clientY: p1.clientY, pointerId: 2, preventDefault(){} });
+    ok(api.view().s > 1.2, '两指拉开 → 放大', String(api.view().s));
+
+    board.fire('pointerup', { pointerId: 1 });
+    ok(api.G().cell[0] === 0, '抬起一根手指后不会突然补上一格');
+    board.fire('pointerup', { pointerId: 2 });
+
+    api.reset();
+    ok(api.view().s === 1, '⤢ 一键缩回整屏');
+
+    ok(api.zmax() >= 2, '最大放大倍数至少 2 倍', String(api.zmax()));
+  }
+
+  /* ============================== 15. 缩略图 / 画册 ============================== */
+  section('15. 缩略图与画册');
+  {
+    const store = {};
+    const { sb, api } = makeVM(store);
+    const menu = () => sb.document.getElementById('groups');
+    const cards = () => menu().querySelectorAll('.lv');
+
+    ok(cards().length === 15, '单幅卡片 15 张（拼图块不混进来）', String(cards().length));
+    ok(cards().every(c => !/<svg/.test(c.children[0].innerHTML)),
+       '没通关的卡片只有空网格，不显示图案');
+
+    /* 选关页不许出现关卡名 —— 名字本身就是答案 */
+    const walk = (n, out) => {
+      if(n.textContent) out.push(String(n.textContent));
+      (n.children || []).forEach(c => walk(c, out));
+      return out;
+    };
+    const texts = walk(menu(), []).join(' ');
+    ok(!/十字|小鸭|房子|蘑菇|大爱心|太阳|云朵|浪花|小船/.test(texts),
+       '选关页一个关卡名都没有（名字留到通关后揭晓）');
+
+    const cols = api.colls();
+    ok(cols.length === 1 && cols[0].cols === 2 && cols[0].rows === 2, '有一组 2×2 的画册');
+    const ps = api.pieces('sea');
+    ok(ps.length === 4, '画册有 4 块');
+    ok(ps.map(p => p.px + ',' + p.py).join(' ') === '0,0 1,0 0,1 1,1',
+       '块位按行优先铺开', ps.map(p => p.px + ',' + p.py).join(' '));
+    ok(api.collDone(cols[0]) === false, '没拼完时 collDone 为假');
+
+    const cv = menu().querySelector('.canvas');
+    ok(cv.children.length === 4, '画布上有 4 个块位');
+    ok(cv.children[0].textContent === '16', '未拼完的块只露关卡序号', cv.children[0].textContent);
+    ok(menu().querySelector('.coll').classList.contains('done') === false, '没拼完不加 done');
+
+    /* 通关第 1 关 → 卡片变成缩略图，并露出名字 */
+    api.start(0);
+    api.fillAll();
+    await sleep(60);
+    sb.document.getElementById('backBtn').fire('click');
+    const c1 = cards()[0];
+    ok(/<svg/.test(c1.children[0].innerHTML), '通关后卡片显示图案缩略图');
+    ok(c1.children[0].innerHTML.indexOf('<path') > 0, '缩略图是一条 path（不是几百个 rect）');
+    ok(c1.children[1].children[0].textContent === '十字', '通关后才露出关卡名',
+       String(c1.children[1].children[0].textContent));
+    ok(cards()[1].children[0].innerHTML.indexOf('<svg') < 0, '没通关的邻居仍然不露');
+
+    /* 把画册四块都通关 → 整张图拼起来 */
+    const pieces = api.pieces('sea');
+    for(const p of pieces){
+      api.start(p.idx);
+      api.fillAll();
+    }
+    await sleep(60);
+    sb.document.getElementById('backBtn').fire('click');
+    ok(api.collDone(cols[0]) === true, '四块都通关后 collDone 为真');
+    const cv2 = menu().querySelector('.canvas');
+    ok(cv2.classList.contains('done'), '画布加上 done（缝隙消失）');
+    const pcs = cv2.children.filter(c => c.classList.contains('pc'));
+    ok(pcs.length === 4 && pcs.every(c => c.classList.contains('on')), '每个块位都换成图案');
+    ok(cv2.children.some(c => c.classList.contains('fullArt')), '拼完再盖一层整图（消除半像素缝）');
+    ok(menu().querySelector('.coll').classList.contains('done'), '画册卡片标记完成');
+
+    api.openArt(cols[0]);
+    ok(sb.document.getElementById('art').hidden === false, '能打开整幅大图');
+    const svg = sb.document.getElementById('artSvg').innerHTML;
+    ok(/viewBox="0 0 20 20"/.test(svg), '整幅按 20 × 20 拼（4 块 × 10 格）', svg.slice(0, 60));
+  }
+
+  /* ============================== 16. 不剧透 ============================== */
+  section('16. 标题不剧透');
+  {
+    const { sb, api } = makeVM({});
+    api.start(0);
+    ok(sb.document.getElementById('lvTitle').textContent === '第 1 关',
+       '游戏里只说「第几关」', String(sb.document.getElementById('lvTitle').textContent));
+    ok(/5 × 5/.test(sb.document.getElementById('lvSize').textContent), '副标题给尺寸与格数');
+
+    api.start(api.pieces('sea')[0].idx);
+    ok(/拼图第 1 \/ 4 块/.test(sb.document.getElementById('lvSize').textContent),
+       '画册的块标出「第几块 / 共几块」', String(sb.document.getElementById('lvSize').textContent));
   }
 
   /* ============================== 汇总 ============================== */
