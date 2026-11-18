@@ -79,7 +79,10 @@ section('1) 每张卡片都完整');
      服务器就回「链接不完整」；本地双击打开时绝对路径 /hanoi/ 又会跳到磁盘根。
      两处都靠运行时改链接来兜，缺一处就又「点进去啥也玩不了」。 */
   ok(/location\.protocol === 'file:'/.test(html), '★ 首页认 file://（本地双击也能点进游戏）');
-  ok(/h \+ q/.test(html), '★ 首页把 ?sharecode= 拼进卡片链接（线上不再丢参数）');
+  ok(/h \+ 'index\.html' \+ q/.test(html), '★ 首页把 ?sharecode= 拼进卡片链接（线上不再丢参数）');
+  ok(/!\/\[\?&\]sharecode=\/\.test\(q\)/.test(html),
+     '★ 没分享码时（本地预览服务器）退化成 pairs/index.html，不吃 Not Found');
+  ok(/dir \+ 'index\.html'/.test(html), '本地预览用显式文件名而非 /pairs/ 目录地址');
   ok(/charAt\(0\) !== '\/'/.test(html), '静态 href 原样保留（离线版同步脚本照旧工作）');
 
   const dirs = fs.readdirSync(WEB, { withFileTypes: true })
@@ -89,7 +92,9 @@ section('1) 每张卡片都完整');
     const f = path.join(WEB, n, 'index.html');
     if(!fs.existsSync(f)) return false;
     const src = fs.readFileSync(f, 'utf8');
-    return !(/location\.protocol === 'file:'/.test(src) && src.includes("'../index.html'"));
+    return !(/location\.protocol === 'file:'/.test(src)
+             && src.includes("'../index.html'")
+             && /!\/\[\?&\]sharecode=\/\.test\(q\)/.test(src));
   });
   ok(noFix.length === 0, '★ ' + dirs.length + ' 个游戏页的返回键都做了同样修正',
      noFix.join(','));

@@ -2113,11 +2113,14 @@
 /* ★ 返回首页也带上 ?sharecode=（线上缺了会掉进「链接不完整」页）；
    本地 file:// 打开时换成相对路径，否则 / 会跳到磁盘根。 */
 (function(){
-  var q = location.search, isFile = (location.protocol === 'file:');
+  var q = location.search;
+  var isFile = (location.protocol === 'file:');
+  /* 本地预览服务器和 file:// 都没有分享码，走相对文件路径才不会 404 */
+  var local = isFile || !/[?&]sharecode=/.test(q);
   var as = document.getElementsByTagName('a');
   for(var i = 0; i < as.length; i++){
     if(as[i].getAttribute('href') !== '/') continue;
-    as[i].setAttribute('href', isFile ? '../index.html' : '/' + q);
+    as[i].setAttribute('href', local ? '../index.html' : '/index.html' + q);
   }
 })();
 </script>
