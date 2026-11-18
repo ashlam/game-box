@@ -321,8 +321,18 @@ section('6) 胜利与记录');
   ok(s.done === true, '判定为完成');
   ok(s.moves === 7, '走了 7 步（= 理论最少）');
   ok(s.stars === 3, '一步没多走 → 3 星');
-  await sleep(600);
-  ok(win.__hnOver() === true, '结算面板弹出来了');
+  /* ★ 通关先播特效，面板要等一会儿才弹（用户要求「等盘完全放好」） */
+  ok(win.__hnOver() === false, '刚通关时不弹面板 —— 先让人看特效');
+  const disksNow = els.board.children.filter(c => c.className === 'disk');
+  const byK = k => disksNow.find(d => String(d.dataset.k) === String(k));
+  const cel = els.board.children.filter(c => c.className === 'glow' || c.className === 'wonMsg');
+  ok(cel.length === 2, '棋盘上多了金光 + 「搬完啦」大字（实际 ' + cel.length + ' 个）');
+  ok(/搬完啦/.test((cel[1] || {}).textContent || ''), '大字写的是搬完啦');
+  ok(byK(3).style.animationDelay === '0.00s', '最底下那颗盘先亮（金光自下而上）');
+  ok(byK(1).style.animationDelay === '0.12s', '最上面那颗最后亮：' + byK(1).style.animationDelay);
+
+  await sleep(1500);
+  ok(win.__hnOver() === true, '特效用完，结算面板弹出来');
   ok(els.overStars.children.length === 3, '面板上是 3 颗星');
   ok(/理论最少步数/.test(els.overNote.innerHTML), '面板说明：这是理论最少步数');
 
@@ -459,6 +469,7 @@ section('12) 结算面板不会变成「一屏黑」');
   ok(/align-items:flex-start/.test(overCss), '面板过高时从顶部排，不会被居中顶出屏幕');
   ok(/\.panel\{[^}]*margin:auto/.test(html), '装得下就居中，装不下就滚动');
   ok(/setTimeout\(showOver/.test(html), 'win() 里先排面板定时器，再做存档 / 音效 / 撒花');
+  ok(!/@keyframes wonGlow\{[^}]*filter/.test(html), '通关特效只用 paint 属性，不碰 filter（filter 会开合成层，弱 GPU 上整屏黑）');
 
   /* 出口：搬完之后点棋盘，能把没弹出来的面板叫回来 */
   const sb2 = makeVM({}, { now: 500000 });

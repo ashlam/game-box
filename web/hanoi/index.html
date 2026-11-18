@@ -114,11 +114,31 @@
     0%,100%{margin-left:0}
     20%{margin-left:-5px}40%{margin-left:5px}60%{margin-left:-3px}80%{margin-left:3px}
   }
-  /* 通关：整摞盘金光呼吸两下 */
-  #board.won .disk{animation:wonGlow .9s ease-in-out 2}
+  /* ===== 通关表演（先看特效，再弹结算面板） =====
+     ★ 只用 paint 属性（box-shadow / opacity / left / bottom），不用 filter：
+       filter 会给每个盘开一层合成层，弱 GPU / 软件渲染下容易整屏黑一下 —— 踩过。 */
+  #board.won .disk{animation:wonGlow .62s ease-in-out 3}
   @keyframes wonGlow{
-    0%,100%{filter:none}
-    50%{filter:brightness(1.45) saturate(1.15)}
+    0%,100%{box-shadow:0 2px 4px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.45),
+                       inset 0 -2px 0 rgba(0,0,0,.28)}
+    45%{box-shadow:0 0 0 2px rgba(255,212,94,.9),0 0 26px 8px rgba(255,212,94,.5),
+                 inset 0 1px 0 rgba(255,255,255,.6)}
+  }
+  /* 目标柱后面的一团金光 */
+  .glow{position:absolute;z-index:5;pointer-events:none;border-radius:50%;opacity:0;
+        background:radial-gradient(circle,rgba(255,212,94,.55) 0%,rgba(255,212,94,.16) 46%,rgba(255,212,94,0) 72%);
+        animation:glowIn 1.5s ease-out forwards}
+  @keyframes glowIn{0%{opacity:0}22%{opacity:1}100%{opacity:0}}
+  /* 「搬完啦！」大字：淡入、往上飘一点、淡出 */
+  .wonMsg{position:absolute;left:0;right:0;z-index:10;pointer-events:none;text-align:center;
+          font-size:25px;font-weight:800;letter-spacing:4px;color:#ffe28a;
+          text-shadow:0 0 18px rgba(255,212,94,.75),0 2px 0 rgba(0,0,0,.45);
+          opacity:0;animation:msgIn 1.5s ease-out forwards}
+  @keyframes msgIn{
+    0%{opacity:0;bottom:58%}
+    16%{opacity:1;bottom:63%}
+    72%{opacity:1;bottom:65%}
+    100%{opacity:0;bottom:71%}
   }
 
   /* ===== 底部操作 ===== */
@@ -641,6 +661,7 @@
     clearHold();
     $('over').classList.remove('on');
     overSeen = false;
+    killCel();
     boardEl.classList.remove('won');
 
     if(n && n !== N){
@@ -895,20 +916,58 @@
     }, 220);
   }
 
+  /* 通关表演：金光自下而上扫过整摞盘 + 目标柱后面一团光 + 「搬完啦！」大字。
+     全部是 paint 属性，不用 filter / transform（弱 GPU 上会掉帧甚至黑屏）。 */
+  var celNodes = [];
+  function celebrate(){
+    /* 金光从底下那颗开始，一层层往上亮 */
+    for(var k = 1; k <= N; k++){
+      var d = disks[k];
+      if(d) d.style.animationDelay = ((N - k) * 0.06).toFixed(2) + 's';
+    }
+
+    var gw = Math.round(SLOT * 2.2), gh = Math.round(BH * 0.92);
+    var g = document.createElement('div');
+    g.className = 'glow';
+    g.style.width = gw + 'px';
+    g.style.height = gh + 'px';
+    g.style.left = Math.round(pegX(2) - gw / 2) + 'px';
+    g.style.bottom = Math.round(stackY(0) - gh * 0.15) + 'px';
+    boardEl.appendChild(g);
+
+    var m = document.createElement('div');
+    m.className = 'wonMsg';
+    m.textContent = '搬完啦！';
+    boardEl.appendChild(m);
+
+    celNodes = [g, m];
+    /* 特效只活 2 秒：留着会挡住下一局的盘 */
+    setTimeout(killCel, 2100);
+  }
+  function killCel(){
+    for(var i = 0; i < celNodes.length; i++){
+      var n = celNodes[i];
+      if(n && n.parentNode) n.parentNode.removeChild(n);
+    }
+    celNodes = [];
+  }
+
   function win(){
     done = true;
     stopClock();
-    /* ★ 先把面板的定时器排上，再去做存档 / 音效 / 撒花 ——
-       后面任何一步出错，玩家也不至于被卡在「一片黑、点不动」里出不来。 */
-    setTimeout(showOver, 550);
+    /* ★ 最后一颗盘已经落稳（afterMove 是落盘动画结束后才调的），
+       先播完特效再弹面板；先把定时器排上，后面哪一步出错也不会把玩家锁死。 */
+    setTimeout(showOver, 1600);
 
     var st = starsFor(N, moves);
     var rec = assisted ? null : saveRecord();
     if(rec) st = rec.stars;
 
+    try{ celebrate(); }catch(e){}
     boardEl.classList.add('won');
     try{ sndWin(); }catch(e){}
     try{ confetti(); }catch(e){}
+    setTimeout(function(){ try{ confetti(); }catch(e){} }, 820);   // 第二波，别一下全撒完
     if(assisted) toast('演示走完啦 · 这局不计成绩', 2400);
     paintBar();
 
