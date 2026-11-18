@@ -153,29 +153,28 @@
   .bar button.dim{color:#5d6779}
 
   /* ===== 弹层（结算 / 开局目标） =====
-     ★ 三条铁律，条条都是被「一屏黑、点不动」逼出来的：
-       ① 遮罩只到 34%，是「压暗」不是「盖住」—— 就算卡片这一层没画出来，
-          玩家仍然看得见自己摆的塔，不会以为游戏死了；
-       ② 卡片不挂任何入场动画：动画会把卡片提升成独立合成层，某些 WebView /
-          预览面板里这一层会画不出来，只剩底下一层遮罩 ← 黑屏的真凶；
-       ③ 遮罩 pointer-events:none，只有卡片吃点击 —— 卡片万一失手，
-          玩家照样能点棋盘（点一下就能把面板叫回来），永远不会「什么都点不动」。 */
-  .over{position:fixed;inset:0;display:none;z-index:20;
+     ★ 和 freecell / klondike 用的是同一套写法 —— 那两个游戏的结算卡片在手机上
+       从来没出过问题，照抄就是最稳的做法。别在这里加「改良」，加一样坏一样：
+       我自己加过的三样（卡片 max-height:calc(100vh-36px) + 自己滚动、
+       遮罩 pointer-events:none、卡片不挂动画）全部撤掉了 —— 第一样会在某些
+       WebView 里把卡片高度算成 0（于是只剩一层遮罩 = 「一屏黑、点不动」）。
+     入场动画只动 transform 不动 opacity：万一动画停在第一帧，卡片也只是
+     稍微靠下、稍微小一点，人还看得见，绝不会变成透明的空遮罩。 */
+  .over{position:fixed;inset:0;display:none;z-index:400;
         align-items:center;justify-content:center;padding:18px;
-        background:rgba(6,9,14,.34);pointer-events:none}
+        background:rgba(8,12,18,.62);overflow-y:auto;-webkit-overflow-scrolling:touch}
   .over.on{display:flex}
-  /* 结算不压暗：玩家刚把塔摆完，这一眼得看得清清楚楚（只留一层几乎看不见的雾） */
-  #over{background:rgba(6,9,14,.12)}
-  /* 结算不压暗：玩家刚把塔摆完，这一眼得看得清清楚楚（只留一层几乎看不见的雾） */
-  #over{background:rgba(6,9,14,.12)}
+  /* 开局目标图淡一点：这时候棋盘还没动过，不需要压那么暗 */
+  #intro{background:rgba(8,12,18,.46)}
   .panel{
-    position:relative;z-index:1;pointer-events:auto;
-    margin:auto;width:100%;max-width:330px;text-align:center;
-    max-height:calc(100vh - 36px);overflow-y:auto;      /* 面板自己滚，不靠遮罩滚 */
+    margin:auto;flex:0 0 auto;          /* flex 里 margin:auto = 居中；装不下时变 0，可以滚 */
+    width:100%;max-width:330px;text-align:center;
     background:linear-gradient(180deg,#1d2534,#161c26);
     border:1px solid var(--line);border-radius:20px;padding:20px 18px 14px;
-    box-shadow:0 16px 44px rgba(0,0,0,.55);
+    box-shadow:0 22px 60px rgba(0,0,0,.6);
+    animation:panelIn .24s cubic-bezier(.2,1.3,.5,1);
   }
+  @keyframes panelIn{from{transform:translateY(12px) scale(.97)}to{transform:none}}
   .panel h2{margin:0 0 3px;font-size:20px;letter-spacing:1px}
   .panel .sub2{font-size:12px;color:var(--dim);margin-bottom:10px}
   .stars{font-size:30px;letter-spacing:4px;color:var(--hot);line-height:1.1;margin-bottom:12px;
@@ -225,7 +224,7 @@
          transform:translate(-50%,10px);
          background:#20262fee;border:1px solid var(--line);padding:10px 16px;border-radius:11px;
          font-size:13px;opacity:0;transition:opacity .2s ease,transform .2s ease;pointer-events:none;
-         z-index:30;max-width:86vw;text-align:center;line-height:1.5}
+         z-index:500;max-width:86vw;text-align:center;line-height:1.5}   /* 要压过 .over(400)，否则面板一弹提示就被盖住 */
   #toast.on{opacity:1;transform:translate(-50%,0)}
 </style>
 </head>
@@ -616,6 +615,7 @@
     box.appendChild(goalBoard(N, 'right'));
     $('introSub').textContent = N + ' 个盘 · 最少 ' + optOf(N) + ' 步';
     $('intro').classList.add('on');
+    fixCard($('intro'));
   }
 
   function hideIntro(){ $('intro').classList.remove('on'); }
@@ -916,13 +916,35 @@
     return { stars: st, recM: recM, recT: recT, b: b };
   }
 
+  /* 卡片出现后量一次高度。正常是 300~400px；要是量出来不到 80px，
+     说明这个环境把 flex 卡片的高度算崩了（踩过：卡片上挂 max-height
+     时高度被算成 0，于是只剩一层遮罩 = 「一屏黑、点不动」）。
+     这时候把动画、高度约束全部拆掉，让卡片按内容自然撑开 —— 一定要让
+     玩家看见卡片，哪怕它掉在页面顶端。 */
+  function fixCard(ov){
+    setTimeout(function(){
+      var pn = ov.querySelector('.panel');
+      if(!pn) return;
+      var h = 0;
+      try{ h = pn.getBoundingClientRect().height; }catch(e){}
+      if(h < 80){
+        pn.style.animation = 'none';
+        pn.style.height = 'auto';
+        pn.style.maxHeight = 'none';
+        pn.style.overflow = 'visible';
+      }
+    }, 80);
+  }
+
   /* 弹出结算面板。
      ★ 第一道守卫：没真搬完就绝不弹。任何写错的路径（旧定时器 / 动画回调 /
        面板自己没关干净）都不可能把遮罩盖在一局没结束的棋上。 */
   function showOver(){
     if(!done) return;
     overSeen = true;
-    $('over').classList.add('on');
+    var ov = $('over');
+    ov.classList.add('on');
+    fixCard(ov);
   }
   function hideOver(){
     $('over').classList.remove('on');
@@ -1264,8 +1286,8 @@
 
   $('introGo').addEventListener('click', hideIntro, false);
   /* 点哪儿都能开始：小孩乱点一下就该能玩，不必非点到按钮。
-     遮罩是 pointer-events:none（见 CSS 注释），点不点得到它都无所谓，
-     所以监听挂在 document 上，点页面任何位置都算「我知道了」。 */
+     监听挂在 document 上 —— 点按钮、点卡片、点卡片外面那圈遮罩，
+     事件都会冒到 document，所以点页面任何位置都算「我知道了」。 */
   document.addEventListener('click', function(){
     if(!$('intro').classList.contains('on')) return;
     /* 刚弹出来这 400ms 内不认这一下：它是「再来一局」/「重来」那一下冒上来的，

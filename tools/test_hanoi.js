@@ -461,18 +461,24 @@ section('11) 盘数 3~8');
 /* ================= 12) 结算面板不会变成「黑屏」 ================= */
 section('12) 结算面板不会变成「一屏黑」');
 {
-  /* 真实故障（用户报了两次）：遮罩盖满、卡片没画出来 →
-     一屏黑、什么都点不动。四条硬约束，缺一条就会复发。 */
+  /* 真实故障（用户报了三次）：遮罩在、卡片看不见 → 一屏黑、点不动。
+     ★ 真正的根因是唯一一处「别的游戏没有、只有汉诺塔有」的写法：给卡片挂了
+       max-height:calc(100vh - 36px) + overflow-y:auto。某些 WebView 里 vh
+       算不准，卡片高度被压到 0，于是只剩一层遮罩。已全部撤掉，改回和
+       freecell / klondike 一模一样的写法 —— 那两个游戏的卡片经受过真机考验。 */
   const overCss = (html.match(/\.over\{position:fixed[^}]*\}/) || [''])[0];   // 别匹配到 .stat b.over
   const panelCss = (html.match(/\.panel\{\s*\n?[^}]*\}/) || [''])[0];
   const alpha = (overCss.match(/rgba\([^)]*?,\s*([\d.]+)\s*\)/) || [])[1];
-  ok(alpha && parseFloat(alpha) <= 0.5, '遮罩只压暗到 34%（实测 ' + alpha + '），不是 82% 的黑幕');
-  ok(/pointer-events:none/.test(overCss), '★ 遮罩不吃点击（卡片万一没画出来，玩家还能点棋盘）');
-  ok(/pointer-events:auto/.test(panelCss), '★ 只有卡片吃点击');
-  ok(!/animation:/.test(panelCss), '★ 卡片不挂入场动画（动画会把它提升成合成层，某些 WebView 里画不出来）');
-  ok(/z-index:1/.test(panelCss), '卡片明确排在遮罩之上');
-  ok(/\.panel\{[^}]*margin:auto/.test(html), '装得下就居中，装不下就滚动');
-  ok(/max-height:calc\(100vh/.test(panelCss), '面板自己有高度上限，小窗里内部滚动');
+  ok(alpha && parseFloat(alpha) <= 0.7, '遮罩只压暗到 62%（实测 ' + alpha + '）');
+  ok(!/max-height:calc/.test(panelCss), '★ 卡片不许挂 max-height:calc(100vh…) —— 这条会把卡片高度算成 0（黑屏根因）');
+  ok(!/overflow-y/.test(panelCss), '★ 卡片不自己做滚动容器（滚交给遮罩）');
+  ok(/overflow-y:auto/.test(overCss), '遮罩可滚：小窗里面板比屏幕高也能滚到按钮');
+  ok(/animation:panelIn/.test(panelCss), '卡片有入场动画（和其他游戏一致）');
+  ok(/@keyframes panelIn\{from\{transform/.test(html) && !/@keyframes panelIn\{[^}]*opacity/.test(html),
+     '★ 入场动画只动 transform、不动 opacity（动画失手时卡片仍在，不会变成透明空遮罩）');
+  ok(/style\.animation = 'none'/.test(html) && /style\.height = 'auto'/.test(html), '★ fixCard() 兜底：卡片被量成 0 高时拆掉动画和高度约束');
+  ok(/fixCard\(ov\)/.test(html) && /fixCard\(\$\('intro'\)\)/.test(html), '结算和目标图都走同一套兜底');
+  ok(/\.panel\{[^}]*margin:auto/.test(html), 'flex 里 margin:auto：装得下居中，装不下可滚到顶');
   ok(/if\(!done\) return;/.test(html), '★ showOver() 第一道守卫：没真搬完绝不弹面板');
   ok(/if\(g === gameId\) showOver\(\)/.test(html), '面板定时器认局号（上一局的定时器不许盖到新局上）');
   ok(/if\(g !== gameId\) return;/.test(html), '落盘动画链认局号（旧局的回调不许动新局）');
