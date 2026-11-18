@@ -846,5 +846,17 @@
   window.__gsConst = function(){ return { SWIPE_MIN: SWIPE_MIN, N_KEY: N_KEY, BEST_KEY: BEST_KEY, SND_KEY: SND_KEY }; };
 })();
 </script>
+<script>
+/* ★ 返回首页也带上 ?sharecode=（线上缺了会掉进「链接不完整」页）；
+   本地 file:// 打开时换成相对路径，否则 / 会跳到磁盘根。 */
+(function(){
+  var q = location.search, isFile = (location.protocol === 'file:');
+  var as = document.getElementsByTagName('a');
+  for(var i = 0; i < as.length; i++){
+    if(as[i].getAttribute('href') !== '/') continue;
+    as[i].setAttribute('href', isFile ? '../index.html' : '/' + q);
+  }
+})();
+</script>
 </body>
 </html>

@@ -497,5 +497,21 @@
   paint();
 })();
 </script>
+<script>
+/* ★ 站内跳转要带上分享链接里的 ?sharecode= —— 线上服务器靠它认应用，
+   缺了就是「链接不完整」页；而本地双击打开（file://）时又必须换成相对路径，
+   否则 /hanoi/ 会被浏览器当成磁盘根，跳到一个不存在的目录。
+   两种环境在这里一次性掰对。静态 href 保持原样，离线版同步脚本照旧工作。 */
+(function(){
+  var q = location.search, isFile = (location.protocol === 'file:');
+  var as = document.querySelectorAll('a.card[href]');
+  for(var i = 0; i < as.length; i++){
+    var h = as[i].getAttribute('href');
+    if(h.charAt(0) !== '/') continue;          /* 静态 href 不变时的守卫 */
+    var dir = h.replace(/^\//, '');            /* "hanoi/" */
+    as[i].setAttribute('href', isFile ? dir + 'index.html' : h + q);
+  }
+})();
+</script>
 </body>
 </html>

@@ -74,6 +74,25 @@ section('1) 每张卡片都完整');
   ok(badName.length === 0, '每张卡都有名称', badName.map(c => c.href).join(','));
   const badDesc = cards.filter(c => !c.desc);
   ok(badDesc.length === 0, '每张卡都有描述', badDesc.map(c => c.name).join(','));
+
+  /* ★ 真实故障：线上分享链接必须带 ?sharecode=，从首页点进游戏时被丢了，
+     服务器就回「链接不完整」；本地双击打开时绝对路径 /hanoi/ 又会跳到磁盘根。
+     两处都靠运行时改链接来兜，缺一处就又「点进去啥也玩不了」。 */
+  ok(/location\.protocol === 'file:'/.test(html), '★ 首页认 file://（本地双击也能点进游戏）');
+  ok(/h \+ q/.test(html), '★ 首页把 ?sharecode= 拼进卡片链接（线上不再丢参数）');
+  ok(/charAt\(0\) !== '\/'/.test(html), '静态 href 原样保留（离线版同步脚本照旧工作）');
+
+  const dirs = fs.readdirSync(WEB, { withFileTypes: true })
+                 .filter(d => d.isDirectory())
+                 .map(d => d.name);
+  const noFix = dirs.filter(n => {
+    const f = path.join(WEB, n, 'index.html');
+    if(!fs.existsSync(f)) return false;
+    const src = fs.readFileSync(f, 'utf8');
+    return !(/location\.protocol === 'file:'/.test(src) && src.includes("'../index.html'"));
+  });
+  ok(noFix.length === 0, '★ ' + dirs.length + ' 个游戏页的返回键都做了同样修正',
+     noFix.join(','));
 }
 
 /* ================= 2) ★ 图标不能重复 ================= */
