@@ -67,7 +67,9 @@ SCENE = r'''
   var S3 = [[0,2],[0,1],[2,1],[0,2],[1,0],[1,2],[0,2]];
 
   function run(){
-    if (S === 'half') {
+    if (S === 'intro') {
+      window.__hnNew(4);
+    } else if (S === 'half') {
       window.__hnNew(5);
       step([[0,2],[0,1],[2,1],[0,2],[1,0],[1,2],[0,2]]);
     } else if (S === 'hold') {
@@ -93,6 +95,8 @@ SCENE = r'''
       window.__hnNew(5);
       step([[0,1],[0,2],[1,2],[0,1]]);
     }
+    /* 开局目标图每局都会弹（newGame 里），除了 intro 场景其余都关掉 */
+    if (S !== 'intro') window.__hnHideIntro();
   }
   /* 等 boot（newGame + 60ms 后的第二次 layout）跑完再改场景 */
   setTimeout(run, 150);
@@ -124,7 +128,7 @@ SCENE = r'''
 out = out.replace('</body>', SCENE, 1)
 open(SHOT_HTML, 'w', encoding='utf-8').write(out)
 
-SCENES = [a for a in sys.argv[1:] if not a.startswith('--')] or ['init', 'half', 'hold', 'bad', 'hint', 'eight', 'win', 'undo']
+SCENES = [a for a in sys.argv[1:] if not a.startswith('--')] or ['intro', 'init', 'half', 'hold', 'bad', 'hint', 'eight', 'win', 'undo']
 os.makedirs(OUT, exist_ok=True)
 
 for s in SCENES:

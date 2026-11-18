@@ -169,6 +169,23 @@
   .panel button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
   .panel button:active{filter:brightness(.94)}
 
+  /* ===== 开局目标图（起始 → 摆完） ===== */
+  /* 小孩不认字也能看懂：两块小棋盘，左边一摞、右边一摞，中间一个箭头。
+     盘的颜色、大小、层数和真棋盘完全同源（都从 N 和 COLORS 算），不另画一套。 */
+  .goals{display:flex;align-items:flex-end;justify-content:center;gap:2px;margin:2px 0 10px}
+  .gcol{display:flex;flex-direction:column;align-items:center;gap:5px}
+  .gboard{position:relative;width:108px;height:76px}
+  .gpole{position:absolute;bottom:6px;width:5px;height:64px;margin-left:-2.5px;border-radius:3px 3px 0 0;
+         background:linear-gradient(90deg,#3c2a18,#8c6a48 50%,#3c2a18)}
+  .gdeck{position:absolute;left:2px;right:2px;bottom:0;height:6px;border-radius:3px;
+         background:linear-gradient(180deg,#7a5636,#33230f)}
+  .gdisk{position:absolute;border-radius:2px;
+         box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 1px 1px rgba(0,0,0,.35)}
+  .gcap{font-size:10.5px;color:var(--dim);letter-spacing:2px}
+  .gcol.goal .gcap{color:#e0c072}
+  .gcol.goal .gdeck{border:1px solid rgba(255,212,94,.6)}
+  .garrow{align-self:center;font-size:17px;color:#7f8aa0;margin:0 4px;line-height:1}
+
   /* ===== 撒花 / 提示条 ===== */
   #confetti{position:fixed;inset:0;pointer-events:none;z-index:15;overflow:hidden}
   .cf{position:absolute;top:0;width:9px;height:13px;border-radius:2px;opacity:0;
@@ -217,6 +234,15 @@
   <button type="button" id="btnNew">🔄 重来</button>
   <button type="button" id="btnSound" aria-label="音效开关">🔊</button>
 </div>
+
+<div class="over" id="intro"><div class="panel">
+  <h2>本局目标</h2>
+  <div class="sub2" id="introSub">4 个盘 · 最少 15 步</div>
+  <div class="goals" id="goals"></div>
+  <div class="rule">把<b>左边</b>这一摞全搬到<b>右边</b>那根柱子上。<br>
+    一次只搬最上面一个，<b>大盘不能压在小盘上</b>。</div>
+  <button class="pri" type="button" id="introGo">开始搬</button>
+</div></div>
 
 <div class="over" id="over"><div class="panel">
   <h2>搬完啦！</h2>
@@ -490,6 +516,78 @@
   }
 
   /* ============================================================
+     开局目标图：起始 → 摆完
+     —— 小块棋盘，盘的颜色 / 宽窄 / 层数和真棋盘同源（都由 N、COLORS 算），
+        不另画一套图案，孩子不用在两套画法之间做翻译。
+     ============================================================ */
+  var GB_SLOT = 36, GB_CX = 18;      // 小棋盘：柱间距 / 第一根柱中心
+
+  /** 造一块小棋盘：把 n 个盘摞在 side 那一侧的柱子上 */
+  function goalBoard(n, side){
+    var col = document.createElement('div');
+    col.className = 'gcol' + (side === 'right' ? ' goal' : '');
+
+    var b = document.createElement('div');
+    b.className = 'gboard';
+
+    var deck = document.createElement('i');
+    deck.className = 'gdeck';
+    b.appendChild(deck);
+
+    for(var p = 0; p < 3; p++){
+      var pole = document.createElement('i');
+      pole.className = 'gpole';
+      pole.style.left = (GB_CX + p * GB_SLOT) + 'px';
+      b.appendChild(pole);
+    }
+
+    /* 层高：8 个盘也得塞进 76px 高的小棋盘 */
+    var rowH = Math.max(5, Math.min(9, Math.floor(58 / n)));
+    var maxW = 34, minW = 14;
+    var cx = GB_CX + (side === 'right' ? 2 : 0) * GB_SLOT;
+
+    for(var k = 1; k <= n; k++){
+      var w = (n <= 1) ? maxW : Math.round(minW + (maxW - minW) * (k - 1) / (n - 1));
+      var d = document.createElement('i');
+      d.className = 'gdisk';
+      d.style.width = w + 'px';
+      d.style.height = Math.max(3, rowH - 1) + 'px';
+      d.style.marginLeft = (-w / 2) + 'px';
+      d.style.left = cx + 'px';
+      /* ★ 大盘在下面：k = n 是最大的盘，摆在最底下一层。
+         1 号（最小）在最上面 —— 和真棋盘完全一样，别画成倒金字塔。 */
+      d.style.bottom = (6 + (n - k) * rowH) + 'px';
+      d.style.background = COLORS[(k - 1) % COLORS.length];
+      b.appendChild(d);
+    }
+
+    var cap = document.createElement('span');
+    cap.className = 'gcap';
+    cap.textContent = (side === 'right') ? '摆完' : '起始';
+
+    col.appendChild(b);
+    col.appendChild(cap);
+    return col;
+  }
+
+  function showIntro(){
+    var box = $('goals');
+    box.innerHTML = '';
+    box.appendChild(goalBoard(N, 'left'));
+
+    var ar = document.createElement('div');
+    ar.className = 'garrow';
+    ar.textContent = '➜';
+    box.appendChild(ar);
+
+    box.appendChild(goalBoard(N, 'right'));
+    $('introSub').textContent = N + ' 个盘 · 最少 ' + optOf(N) + ' 步';
+    $('intro').classList.add('on');
+  }
+
+  function hideIntro(){ $('intro').classList.remove('on'); }
+
+  /* ============================================================
      建盘 / 新局
      ============================================================ */
   function build(){
@@ -561,6 +659,8 @@
     hud();
     paintSizes();
     paintBar();
+    /* 每局开头先给一眼目标：起始长什么样 → 摆完长什么样 */
+    showIntro();
   }
 
   /* ============================================================
@@ -1048,6 +1148,8 @@
 
   /* 桌面键盘：1/2/3 选柱，和点击完全同一套逻辑 */
   document.addEventListener('keydown', function(e){
+    /* 目标图还开着：随便按个键就当「看过了」，别吃掉这一次按键 */
+    if($('intro').classList.contains('on')){ hideIntro(); return; }
     if(demoOn || busy) return;
     if(done){ if(!overSeen && (e.key === 'Enter' || e.key === ' ')) showOver(); return; }
     var k = e.key;
@@ -1083,6 +1185,12 @@
     try{ localStorage.setItem(SND_KEY, soundOn ? '1' : '0'); }catch(e){}
     paintBar();
     if(soundOn) sndPick();
+  }, false);
+
+  $('introGo').addEventListener('click', hideIntro, false);
+  /* 点面板外面那圈黑也能关：小孩乱点一下就能开始，不必非点到按钮 */
+  $('intro').addEventListener('click', function(e){
+    if(e.target === $('intro')) hideIntro();
   }, false);
 
   $('overAgain').addEventListener('click', function(){ newGame(N); }, false);
@@ -1141,6 +1249,9 @@
   window.__hnLayout = layout;
   window.__hnToast = function(){ return $('toast').textContent; };
   window.__hnOver = function(){ return $('over').classList.contains('on'); };
+  window.__hnIntro = function(){ return $('intro').classList.contains('on'); };
+  window.__hnShowIntro = showIntro;
+  window.__hnHideIntro = hideIntro;
 })();
 </script>
 </body>

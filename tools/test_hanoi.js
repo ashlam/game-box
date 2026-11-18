@@ -472,8 +472,45 @@ section('12) 结算面板不会变成「一屏黑」');
   ok(w2.__hnOver() === true, '★ 这一下点棋盘就把面板叫回来了 —— 不会卡在黑屏里出不来');
 }
 
-/* ================= 13) 自包含 ================= */
-section('13) 单文件自包含');
+/* ================= 13) 开局目标图 ================= */
+section('13) 开局目标图（起始 → 摆完）');
+{
+  win.__hnNew(4);
+  ok(win.__hnIntro() === true, '每局开头先弹目标图');
+  const goals = els.goals.children;
+  ok(goals.length === 3, '两块小棋盘 + 中间一个箭头（实际 ' + goals.length + ' 个）');
+  ok(goals[1].classList.contains('garrow'), '中间那个是箭头');
+
+  const disksOf = col => col.children[0].children.filter(c => c.classList.contains('gdisk'));
+  const L = disksOf(goals[0]), R = disksOf(goals[2]);
+  const w = d => parseInt(d.style.width, 10);
+  const b = d => parseInt(d.style.bottom, 10);
+
+  ok(L.length === 4 && R.length === 4, '起始 / 摆完两边各 4 个盘');
+  ok(w(L[0]) < w(L[3]), '★ 小盘在上、大盘在下（宽度 ' + w(L[0]) + ' → ' + w(L[3]) + '）');
+  ok(b(L[0]) > b(L[3]), '★ 大盘的 bottom 更小 = 更靠底层');
+  ok(w(L[0]) === w(R[0]) && w(L[3]) === w(R[3]), '两边的同号盘一样宽（孩子能对着比）');
+  ok(L[0].style.left === '18px', '起始的盘摞在最左柱（' + L[0].style.left + '）');
+  ok(R[0].style.left === '90px', '摆完的盘摞在最右柱（' + R[0].style.left + '）');
+  ok(L[0].style.background && L[0].style.background === R[0].style.background, '同号盘颜色一致');
+
+  els.introGo.fire('click');
+  ok(win.__hnIntro() === false, '点「开始搬」就关掉');
+
+  win.__hnNew(8);
+  ok(win.__hnIntro() === true, '换盘数后重新弹');
+  ok(disksOf(els.goals.children[0]).length === 8, '目标图跟着变成 8 个盘');
+  ok(/8 个盘 · 最少 255 步/.test(els.introSub.textContent), '副标题写清盘数和最少步数：' + els.introSub.textContent);
+
+  /* 8 个盘也不能溢出小棋盘（gboard 高 76，垫层从 bottom:6 起） */
+  const tall = disksOf(els.goals.children[0]);
+  const top = Math.max(...tall.map(d => parseInt(d.style.bottom, 10) + parseInt(d.style.height, 10)));
+  ok(top <= 76, '8 个盘全塞进 76px 的小棋盘（顶到 ' + top + 'px）');
+  win.__hnHideIntro();
+}
+
+/* ================= 14) 自包含 ================= */
+section('14) 单文件自包含');
 {
   ok(!/<script[^>]+src=/i.test(html), '没有外部脚本');
   ok(!/<link[^>]+href=/i.test(html), '没有外部样式表');
