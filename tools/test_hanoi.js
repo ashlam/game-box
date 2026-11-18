@@ -448,8 +448,32 @@ section('11) 盘数 3~8');
   ok(store.ghanoi_n === '8', '选过的盘数存进了 localStorage（' + store.ghanoi_n + '）');
 }
 
-/* ================= 12) 自包含 ================= */
-section('12) 单文件自包含');
+/* ================= 12) 结算面板不会变成「黑屏」 ================= */
+section('12) 结算面板不会变成「一屏黑」');
+{
+  /* 真实故障：面板入场动画从 opacity:0 开始，某些 WebView 停在第 0 帧 →
+     遮罩铺满、面板透明，玩家看到「一片黑、点不动」。动画一律不许碰 opacity。 */
+  ok(!/@keyframes panelIn\{[^}]*opacity/.test(html), '入场动画只动 transform，不动 opacity');
+  const overCss = (html.match(/\.over\{position:fixed[^}]*\}/) || [''])[0];   // 别匹配到 .stat b.over
+  ok(/overflow-y:auto/.test(overCss), '遮罩可以滚（横屏时面板比屏幕高也够得到按钮）');
+  ok(/align-items:flex-start/.test(overCss), '面板过高时从顶部排，不会被居中顶出屏幕');
+  ok(/\.panel\{[^}]*margin:auto/.test(html), '装得下就居中，装不下就滚动');
+  ok(/setTimeout\(showOver/.test(html), 'win() 里先排面板定时器，再做存档 / 音效 / 撒花');
+
+  /* 出口：搬完之后点棋盘，能把没弹出来的面板叫回来 */
+  const sb2 = makeVM({}, { now: 500000 });
+  const w2 = sb2.window, e2 = sb2.__els;
+  w2.__hnNew(3);
+  for(const [a, b] of w2.__hnSolve(2)){ w2.__hnTap(a); w2.__hnTap(b); }
+  await sleep(320);                       // 等 doMove 动画链走完 → done
+  ok(w2.__hn() .done === true, '3 个盘搬完（新实例）');
+  ok(w2.__hnOver() === false, '面板还没到时间，此刻还没弹');
+  e2.board.fire('touchstart', { cancelable: false, touches: [{ clientX: 65, clientY: 300 }] });
+  ok(w2.__hnOver() === true, '★ 这一下点棋盘就把面板叫回来了 —— 不会卡在黑屏里出不来');
+}
+
+/* ================= 13) 自包含 ================= */
+section('13) 单文件自包含');
 {
   ok(!/<script[^>]+src=/i.test(html), '没有外部脚本');
   ok(!/<link[^>]+href=/i.test(html), '没有外部样式表');

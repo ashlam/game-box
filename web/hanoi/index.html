@@ -133,16 +133,22 @@
   .bar button.dim{color:#5d6779}
 
   /* ===== 结算 ===== */
+  /* 遮罩可以滚：手机横过来时面板比屏幕高，要能滚到按钮，而不是被裁掉 */
   .over{position:fixed;inset:0;background:rgba(8,12,18,.82);display:none;
-        align-items:center;justify-content:center;padding:22px;z-index:20}
+        align-items:flex-start;justify-content:center;padding:22px;z-index:20;
+        overflow-y:auto;-webkit-overflow-scrolling:touch}
   .over.on{display:flex}
   .panel{
+    margin:auto;                    /* 装得下就居中，装不下就从头排、可滚动 */
     width:100%;max-width:330px;text-align:center;
     background:linear-gradient(180deg,#1d2534,#161c26);
     border:1px solid var(--line);border-radius:20px;padding:20px 18px 14px;
     box-shadow:0 22px 60px rgba(0,0,0,.6);animation:panelIn .26s cubic-bezier(.2,1.3,.5,1);
   }
-  @keyframes panelIn{from{transform:translateY(14px) scale(.96);opacity:0}to{transform:none;opacity:1}}
+  /* ★ 入场动画只动 transform，绝不动 opacity。
+     面板是从 display:none 切过来的，若动画在某些 WebView 里停在第 0 帧（opacity:0 那一帧），
+     玩家看到的就是「整屏黑遮罩 + 什么都点不动」—— 这坑踩过一次。 */
+  @keyframes panelIn{from{transform:translateY(14px) scale(.96)}to{transform:none}}
   .panel h2{margin:0 0 3px;font-size:20px;letter-spacing:1px}
   .panel .sub2{font-size:12px;color:var(--dim);margin-bottom:10px}
   .stars{font-size:30px;letter-spacing:4px;color:var(--hot);line-height:1.1;margin-bottom:12px;
@@ -280,6 +286,7 @@
   var moves = 0;
   var t0 = 0, elapsed = 0;    // t0 = 第一次有效移动的时刻（0 = 还没开始）
   var tickId = 0, done = false, busy = false, assisted = false;
+  var overSeen = false;       // 结算面板露过面没有（露过之后玩家自己关掉，就别再自动弹）
   var history = [];           // 撤销栈：[{from,to,disk}]
   var disks = {};             // 盘号 → DOM
   var towers = [];            // 3 个槽位 DOM
@@ -535,6 +542,7 @@
     stopClock();
     clearHold();
     $('over').classList.remove('on');
+    overSeen = false;
     boardEl.classList.remove('won');
 
     if(n && n !== N){
@@ -769,16 +777,38 @@
     return { stars: st, recM: recM, recT: recT, b: b };
   }
 
+  /* 弹出结算面板。
+     兜底：万一入场动画在某些环境下卡在第 0 帧（面板透明、遮罩却在），
+     200ms 后自己量一次透明度，真卡住就撤掉动画、直接显示。 */
+  function showOver(){
+    var ov = $('over'), pn = ov.querySelector('.panel');
+    overSeen = true;
+    ov.classList.add('on');
+    if(!pn) return;
+    setTimeout(function(){
+      var op = 1;
+      try{ op = parseFloat(getComputedStyle(pn).opacity); }catch(e){}
+      if(!(op >= 0.5)){
+        pn.style.animation = 'none';
+        pn.style.opacity = '1';
+      }
+    }, 220);
+  }
+
   function win(){
     done = true;
     stopClock();
+    /* ★ 先把面板的定时器排上，再去做存档 / 音效 / 撒花 ——
+       后面任何一步出错，玩家也不至于被卡在「一片黑、点不动」里出不来。 */
+    setTimeout(showOver, 550);
+
     var st = starsFor(N, moves);
     var rec = assisted ? null : saveRecord();
     if(rec) st = rec.stars;
 
     boardEl.classList.add('won');
-    sndWin();
-    confetti();
+    try{ sndWin(); }catch(e){}
+    try{ confetti(); }catch(e){}
     if(assisted) toast('演示走完啦 · 这局不计成绩', 2400);
     paintBar();
 
@@ -813,7 +843,6 @@
     $('rowTime').classList.toggle('rec', !!(rec && rec.recT && !assisted));
 
     paintSizes();
-    setTimeout(function(){ $('over').classList.add('on'); }, 700);
   }
 
   /* ============================================================
@@ -938,7 +967,10 @@
   }
 
   function onDown(e){
-    if(demoOn || done || busy) return;
+    if(demoOn || busy) return;
+    /* 已经搬完了：点棋盘 = 把结算面板叫回来。
+       这是「面板万一没弹出来」时的唯一出路，不能只是干等着。 */
+    if(done){ if(!overSeen) showOver(); return; }
     if(held){
       /* 手上已有盘 → 这一击就是「放下」 */
       picked = false;
@@ -1016,7 +1048,8 @@
 
   /* 桌面键盘：1/2/3 选柱，和点击完全同一套逻辑 */
   document.addEventListener('keydown', function(e){
-    if(demoOn || done || busy) return;
+    if(demoOn || busy) return;
+    if(done){ if(!overSeen && (e.key === 'Enter' || e.key === ' ')) showOver(); return; }
     var k = e.key;
     if(k === '1' || k === '2' || k === '3'){
       var p = parseInt(k, 10) - 1;
