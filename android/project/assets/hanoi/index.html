@@ -152,23 +152,30 @@
   .bar button.on{border-color:var(--acc);background:rgba(91,140,255,.20);color:#d5e3ff}
   .bar button.dim{color:#5d6779}
 
-  /* ===== 结算 ===== */
-  /* 遮罩可以滚：手机横过来时面板比屏幕高，要能滚到按钮，而不是被裁掉 */
-  .over{position:fixed;inset:0;background:rgba(8,12,18,.82);display:none;
-        align-items:flex-start;justify-content:center;padding:22px;z-index:20;
-        overflow-y:auto;-webkit-overflow-scrolling:touch}
+  /* ===== 弹层（结算 / 开局目标） =====
+     ★ 三条铁律，条条都是被「一屏黑、点不动」逼出来的：
+       ① 遮罩只到 34%，是「压暗」不是「盖住」—— 就算卡片这一层没画出来，
+          玩家仍然看得见自己摆的塔，不会以为游戏死了；
+       ② 卡片不挂任何入场动画：动画会把卡片提升成独立合成层，某些 WebView /
+          预览面板里这一层会画不出来，只剩底下一层遮罩 ← 黑屏的真凶；
+       ③ 遮罩 pointer-events:none，只有卡片吃点击 —— 卡片万一失手，
+          玩家照样能点棋盘（点一下就能把面板叫回来），永远不会「什么都点不动」。 */
+  .over{position:fixed;inset:0;display:none;z-index:20;
+        align-items:center;justify-content:center;padding:18px;
+        background:rgba(6,9,14,.34);pointer-events:none}
   .over.on{display:flex}
+  /* 结算不压暗：玩家刚把塔摆完，这一眼得看得清清楚楚（只留一层几乎看不见的雾） */
+  #over{background:rgba(6,9,14,.12)}
+  /* 结算不压暗：玩家刚把塔摆完，这一眼得看得清清楚楚（只留一层几乎看不见的雾） */
+  #over{background:rgba(6,9,14,.12)}
   .panel{
-    margin:auto;                    /* 装得下就居中，装不下就从头排、可滚动 */
-    width:100%;max-width:330px;text-align:center;
+    position:relative;z-index:1;pointer-events:auto;
+    margin:auto;width:100%;max-width:330px;text-align:center;
+    max-height:calc(100vh - 36px);overflow-y:auto;      /* 面板自己滚，不靠遮罩滚 */
     background:linear-gradient(180deg,#1d2534,#161c26);
     border:1px solid var(--line);border-radius:20px;padding:20px 18px 14px;
-    box-shadow:0 22px 60px rgba(0,0,0,.6);animation:panelIn .26s cubic-bezier(.2,1.3,.5,1);
+    box-shadow:0 16px 44px rgba(0,0,0,.55);
   }
-  /* ★ 入场动画只动 transform，绝不动 opacity。
-     面板是从 display:none 切过来的，若动画在某些 WebView 里停在第 0 帧（opacity:0 那一帧），
-     玩家看到的就是「整屏黑遮罩 + 什么都点不动」—— 这坑踩过一次。 */
-  @keyframes panelIn{from{transform:translateY(14px) scale(.96)}to{transform:none}}
   .panel h2{margin:0 0 3px;font-size:20px;letter-spacing:1px}
   .panel .sub2{font-size:12px;color:var(--dim);margin-bottom:10px}
   .stars{font-size:30px;letter-spacing:4px;color:var(--hot);line-height:1.1;margin-bottom:12px;
@@ -332,6 +339,10 @@
   var moves = 0;
   var t0 = 0, elapsed = 0;    // t0 = 第一次有效移动的时刻（0 = 还没开始）
   var tickId = 0, done = false, busy = false, assisted = false;
+  /* ★ 局号：每次 newGame 加一。所有延迟回调（落盘动画、面板定时器）都先核对它，
+     不然上一局排下的回调会跑进新局里 —— 轻则 busy 卡死点不动，重则遮罩盖在一局
+     没下完的棋上（用户就是这么被坑的）。 */
+  var gameId = 0;
   var overSeen = false;       // 结算面板露过面没有（露过之后玩家自己关掉，就别再自动弹）
   var history = [];           // 撤销栈：[{from,to,disk}]
   var disks = {};             // 盘号 → DOM
@@ -590,7 +601,9 @@
     return col;
   }
 
+  var introAt = 0;
   function showIntro(){
+    introAt = Date.now();
     var box = $('goals');
     box.innerHTML = '';
     box.appendChild(goalBoard(N, 'left'));
@@ -656,6 +669,7 @@
   }
 
   function newGame(n){
+    gameId++;
     stopDemo();
     stopClock();
     clearHold();
@@ -768,15 +782,19 @@
 
     var el = disks[k];
     var dur = o.dur || [70, 110, 70];
+    var g = gameId;                 // 这一手属于哪一局
     busy = true;
     if(el){
       el.classList.add('flying');
       setDiskPos(el, pegX(from), liftY(), dur[0]);
       setTimeout(function(){
+        if(g !== gameId) return;
         setDiskPos(el, pegX(to), liftY(), dur[1]);
         setTimeout(function(){
+          if(g !== gameId) return;
           setDiskPos(el, pegX(to), stackY(layer), dur[2]);
           setTimeout(function(){
+            if(g !== gameId) return;
             el.classList.remove('flying');
             busy = false;
             if(o.cb) o.cb();
@@ -899,21 +917,15 @@
   }
 
   /* 弹出结算面板。
-     兜底：万一入场动画在某些环境下卡在第 0 帧（面板透明、遮罩却在），
-     200ms 后自己量一次透明度，真卡住就撤掉动画、直接显示。 */
+     ★ 第一道守卫：没真搬完就绝不弹。任何写错的路径（旧定时器 / 动画回调 /
+       面板自己没关干净）都不可能把遮罩盖在一局没结束的棋上。 */
   function showOver(){
-    var ov = $('over'), pn = ov.querySelector('.panel');
+    if(!done) return;
     overSeen = true;
-    ov.classList.add('on');
-    if(!pn) return;
-    setTimeout(function(){
-      var op = 1;
-      try{ op = parseFloat(getComputedStyle(pn).opacity); }catch(e){}
-      if(!(op >= 0.5)){
-        pn.style.animation = 'none';
-        pn.style.opacity = '1';
-      }
-    }, 220);
+    $('over').classList.add('on');
+  }
+  function hideOver(){
+    $('over').classList.remove('on');
   }
 
   /* 通关表演：金光自下而上扫过整摞盘 + 目标柱后面一团光 + 「搬完啦！」大字。
@@ -956,8 +968,10 @@
     done = true;
     stopClock();
     /* ★ 最后一颗盘已经落稳（afterMove 是落盘动画结束后才调的），
-       先播完特效再弹面板；先把定时器排上，后面哪一步出错也不会把玩家锁死。 */
-    setTimeout(showOver, 1600);
+       先播完特效再弹面板；定时器认局号：这 1.6 秒里点了「再来一局」，
+       旧定时器就不许再把面板盖到新局上。 */
+    var g = gameId;
+    setTimeout(function(){ if(g === gameId) showOver(); }, 1600);
 
     var st = starsFor(N, moves);
     var rec = assisted ? null : saveRecord();
@@ -1127,6 +1141,8 @@
 
   function onDown(e){
     if(demoOn || busy) return;
+    /* 开局目标图还开着：这一下只是「我看过了」，别顺手抓起一个盘 */
+    if($('intro').classList.contains('on')){ hideIntro(); return; }
     /* 已经搬完了：点棋盘 = 把结算面板叫回来。
        这是「面板万一没弹出来」时的唯一出路，不能只是干等着。 */
     if(done){ if(!overSeen) showOver(); return; }
@@ -1247,16 +1263,52 @@
   }, false);
 
   $('introGo').addEventListener('click', hideIntro, false);
-  /* 点面板外面那圈黑也能关：小孩乱点一下就能开始，不必非点到按钮 */
-  $('intro').addEventListener('click', function(e){
-    if(e.target === $('intro')) hideIntro();
+  /* 点哪儿都能开始：小孩乱点一下就该能玩，不必非点到按钮。
+     遮罩是 pointer-events:none（见 CSS 注释），点不点得到它都无所谓，
+     所以监听挂在 document 上，点页面任何位置都算「我知道了」。 */
+  document.addEventListener('click', function(){
+    if(!$('intro').classList.contains('on')) return;
+    /* 刚弹出来这 400ms 内不认这一下：它是「再来一局」/「重来」那一下冒上来的，
+       不然新局的目标图会一闪就没。 */
+    if(Date.now() - introAt < 400) return;
+    hideIntro();
   }, false);
 
   $('overAgain').addEventListener('click', function(){ newGame(N); }, false);
-  $('overClose').addEventListener('click', function(){ $('over').classList.remove('on'); }, false);
+  $('overClose').addEventListener('click', hideOver, false);
 
   window.addEventListener('resize', function(){ layout(); }, false);
   window.addEventListener('orientationchange', function(){ setTimeout(layout, 120); }, false);
+
+  /* ============================================================
+     ★ 看门狗：每秒核一次「逻辑状态」和「画面」对不对得上
+     踩过的坑：差一步却盖上了结算遮罩、busy 卡在 true 点不动。
+     玩家永远不该被锁在一个点不动的画面里 —— 不一致就当场掰回来。
+     ============================================================ */
+  function solved(){ return pegs[2].length === N; }
+  function watchdog(){
+    /* ① 没搬完却被标成「已完成」→ 撤掉这个假胜利（遮罩、特效一起撤） */
+    if(done && !solved()){
+      done = false;
+      overSeen = false;
+      boardEl.classList.remove('won');
+      hideOver();
+      killCel();
+      paintBar();
+      toast('还没搬完呢 · 接着搬', 2000);
+    }
+    /* ② 结算面板只在 done 时存在 */
+    if(!done && $('over').classList.contains('on')) hideOver();
+    /* ③ 动画标志卡住：没有任何盘在飞，却还 busy → 放开输入 */
+    if(busy){
+      var flying = false;
+      for(var k = 1; k <= N; k++){
+        if(disks[k] && disks[k].classList.contains('flying')) flying = true;
+      }
+      if(!flying) busy = false;
+    }
+  }
+  setInterval(watchdog, 900);
 
   /* ============================================================
      启动

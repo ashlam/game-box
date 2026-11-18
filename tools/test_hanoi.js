@@ -461,26 +461,54 @@ section('11) 盘数 3~8');
 /* ================= 12) 结算面板不会变成「黑屏」 ================= */
 section('12) 结算面板不会变成「一屏黑」');
 {
-  /* 真实故障：面板入场动画从 opacity:0 开始，某些 WebView 停在第 0 帧 →
-     遮罩铺满、面板透明，玩家看到「一片黑、点不动」。动画一律不许碰 opacity。 */
-  ok(!/@keyframes panelIn\{[^}]*opacity/.test(html), '入场动画只动 transform，不动 opacity');
+  /* 真实故障（用户报了两次）：遮罩盖满、卡片没画出来 →
+     一屏黑、什么都点不动。四条硬约束，缺一条就会复发。 */
   const overCss = (html.match(/\.over\{position:fixed[^}]*\}/) || [''])[0];   // 别匹配到 .stat b.over
-  ok(/overflow-y:auto/.test(overCss), '遮罩可以滚（横屏时面板比屏幕高也够得到按钮）');
-  ok(/align-items:flex-start/.test(overCss), '面板过高时从顶部排，不会被居中顶出屏幕');
+  const panelCss = (html.match(/\.panel\{\s*\n?[^}]*\}/) || [''])[0];
+  const alpha = (overCss.match(/rgba\([^)]*?,\s*([\d.]+)\s*\)/) || [])[1];
+  ok(alpha && parseFloat(alpha) <= 0.5, '遮罩只压暗到 34%（实测 ' + alpha + '），不是 82% 的黑幕');
+  ok(/pointer-events:none/.test(overCss), '★ 遮罩不吃点击（卡片万一没画出来，玩家还能点棋盘）');
+  ok(/pointer-events:auto/.test(panelCss), '★ 只有卡片吃点击');
+  ok(!/animation:/.test(panelCss), '★ 卡片不挂入场动画（动画会把它提升成合成层，某些 WebView 里画不出来）');
+  ok(/z-index:1/.test(panelCss), '卡片明确排在遮罩之上');
   ok(/\.panel\{[^}]*margin:auto/.test(html), '装得下就居中，装不下就滚动');
-  ok(/setTimeout\(showOver/.test(html), 'win() 里先排面板定时器，再做存档 / 音效 / 撒花');
+  ok(/max-height:calc\(100vh/.test(panelCss), '面板自己有高度上限，小窗里内部滚动');
+  ok(/if\(!done\) return;/.test(html), '★ showOver() 第一道守卫：没真搬完绝不弹面板');
+  ok(/if\(g === gameId\) showOver\(\)/.test(html), '面板定时器认局号（上一局的定时器不许盖到新局上）');
+  ok(/if\(g !== gameId\) return;/.test(html), '落盘动画链认局号（旧局的回调不许动新局）');
   ok(!/@keyframes wonGlow\{[^}]*filter/.test(html), '通关特效只用 paint 属性，不碰 filter（filter 会开合成层，弱 GPU 上整屏黑）');
+
+  /* ★ 看门狗：三种「点不动」的不一致都要自愈 */
+  ok(/setInterval\(watchdog/.test(html), '装了看门狗（每 900ms 核一次状态）');
+  ok(/if\(done && !solved\(\)\)/.test(html), '看门狗会把「没搬完却标成已完成」掰回来');
 
   /* 出口：搬完之后点棋盘，能把没弹出来的面板叫回来 */
   const sb2 = makeVM({}, { now: 500000 });
   const w2 = sb2.window, e2 = sb2.__els;
   w2.__hnNew(3);
+  /* 开局目标图开着时，点棋盘只关图 —— 不能顺手抓起一个盘（小孩会懵） */
+  e2.board.fire('touchstart', { cancelable: false, touches: [{ clientX: 65, clientY: 300 }] });
+  ok(w2.__hnIntro() === false, '目标图开着时点棋盘 = 先关图');
+  ok(w2.__hn().held === null, '那一下不会顺手抓起一个盘');
   for(const [a, b] of w2.__hnSolve(2)){ w2.__hnTap(a); w2.__hnTap(b); }
   await sleep(320);                       // 等 doMove 动画链走完 → done
   ok(w2.__hn() .done === true, '3 个盘搬完（新实例）');
   ok(w2.__hnOver() === false, '面板还没到时间，此刻还没弹');
   e2.board.fire('touchstart', { cancelable: false, touches: [{ clientX: 65, clientY: 300 }] });
   ok(w2.__hnOver() === true, '★ 这一下点棋盘就把面板叫回来了 —— 不会卡在黑屏里出不来');
+
+
+  /* ★ 上一局排下的面板定时器，不许盖到新局上（用户「差一步却黑屏」的另一种可能） */
+  const sb3 = makeVM({}, { now: 900000 });
+  const w3 = sb3.window;
+  w3.__hnNew(3); w3.__hnHideIntro();
+  for(const [a, b] of w3.__hnSolve(2)){ w3.__hnTap(a); w3.__hnTap(b); }
+  await sleep(320);
+  ok(w3.__hn().done === true, '先真赢一局');
+  w3.__hnNew(3);                       // 1.6 秒内按「再来一局」
+  await sleep(1700);
+  ok(w3.__hnOver() === false, '★ 新局没被上一局的面板定时器盖上（旧定时器认局号作废）');
+  ok(w3.__hn().moves === 0 && w3.__hn().done === false, '新局干净：0 步、未完成');
 }
 
 /* ================= 13) 开局目标图 ================= */
